@@ -7,6 +7,8 @@ import {
   rebuildMatches,
 } from "@jobflow/pipeline";
 import { getAdapter } from "@jobflow/adapters";
+import { createProvider, rerankMatch, tailorResume, answerQuestion } from "@jobflow/llm";
+import { buildFillPlan, renderDryRun, type ApplicantData } from "@jobflow/autofill";
 import { DEFAULT_TENANT, SEED_COMPANIES, defaultProfile, seedEvidence } from "./seed-data.js";
 import { renderMatchCard } from "./card.js";
 
@@ -73,6 +75,53 @@ async function demo(): Promise<void> {
   hr();
   log(`\nRegistry now holds ${(await repo.listCompanies()).length} companies, ` +
       `${(await repo.listActivePostings()).length} active postings.\n`);
+
+  // ── 6. recommendations: LLM re-rank narrative on the top match ──
+  const top = matches[0];
+  if (top) {
+    const llm = createProvider(); // echo by default → runs offline
+    const evidence = await repo.listEvidence(DEFAULT_TENANT);
+    hr();
+    log(`\x1b[1m  RE-RANK NARRATIVE\x1b[0m  (LLM: ${llm.name}) — top match`);
+    hr();
+    const narrative = await rerankMatch(llm, profile, evidence, {
+      posting: top.posting,
+      priorNotes: { stackNote: top.stackNote, levelNote: top.levelNote, redFlags: top.redFlags },
+    });
+    log(`  why fit:  ${narrative.whyFit}`);
+    log(`  gap:      ${narrative.gap}`);
+    if (narrative.redFlags.length) log(`  red flags: ${narrative.redFlags.join("; ")}`);
+
+    // ── 7. prep: evidence-grounded resume tailoring + an answer ──
+    hr();
+    log(`\x1b[1m  TAILORING\x1b[0m  (evidence-grounded, honest-voice) — top match`);
+    hr();
+    const variants = await tailorResume(llm, profile, evidence, top.posting);
+    log(`  ATS keyword coverage: ${(variants.atsKeywordCoverage * 100).toFixed(0)}%` +
+        (variants.missingKeywords.length ? ` · surface: ${variants.missingKeywords.slice(0, 5).join(", ")}` : ""));
+    log(`  yc/startup bullets:`);
+    variants.yc_startup.slice(0, 3).forEach((b) => log(`    • ${b}`));
+    const ans = await answerQuestion(llm, profile, evidence, top.posting, "Why do you want to work here?");
+    log(`  answer ("Why here?"): ${ans.slice(0, 200)}…`);
+
+    // ── 8. autofill DRY RUN (never submits, §7.1) ──
+    hr();
+    log(`\x1b[1m  AUTOFILL — DRY RUN\x1b[0m  (flag-guarded; never submits)`);
+    hr();
+    const applicant: ApplicantData = {
+      firstName: "Jagrit",
+      lastName: "—",
+      email: "jagritvats6@gmail.com",
+      github: "github.com/jagritvats",
+      linkedin: "linkedin.com/in/jagritvats",
+      resumePath: "~/resumes/tailored.pdf",
+      answers: { "why do you want to work here": ans },
+    };
+    const atsType = top.posting.atsType === "unknown" ? "greenhouse" : top.posting.atsType;
+    const plan = buildFillPlan(atsType, top.posting.applyUrl ?? "(no apply url)", applicant);
+    log(renderDryRun(plan).split("\n").map((l) => `  ${l}`).join("\n"));
+  }
+  log("");
 }
 
 async function main(): Promise<void> {

@@ -1,7 +1,7 @@
-import type { RawPosting } from "@jobflow/core";
+import type { Company, RawPosting } from "@jobflow/core";
 import { normalizePosting, type NormalizedPosting } from "@jobflow/core";
 import { getAdapter, type FetchTarget, type SourceAdapter } from "@jobflow/adapters";
-import type { Company, NewPosting, Repository } from "@jobflow/db";
+import type { NewPosting, Repository } from "@jobflow/db";
 import { localEmbedder, type Embedder } from "./embedder.js";
 
 export interface IngestStats {
