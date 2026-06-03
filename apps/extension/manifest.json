@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "JobFlow Capture",
+  "version": "0.1.0",
+  "description": "Capture postings + show match score inline on pages you're already viewing. Read-only, local, no background crawling (§7.1).",
+  "permissions": ["activeTab", "storage", "scripting"],
+  "host_permissions": [
+    "https://*.greenhouse.io/*",
+    "https://*.lever.co/*",
+    "https://*.ashbyhq.com/*",
+    "https://*.linkedin.com/*",
+    "https://*.naukri.com/*",
+    "https://*.glassdoor.com/*",
+    "https://*.ambitionbox.com/*"
+  ],
+  "background": { "service_worker": "service-worker.js", "type": "module" },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.greenhouse.io/*",
+        "https://*.lever.co/*",
+        "https://*.ashbyhq.com/*",
+        "https://*.linkedin.com/jobs/*",
+        "https://*.naukri.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": { "default_title": "JobFlow", "default_popup": "popup.html" }
+}
