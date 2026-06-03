@@ -8,3 +8,12 @@ export { WorkableAdapter } from "./ats/workable.js";
 export { RemotiveAdapter } from "./aggregators/remotive.js";
 export { ArbeitnowAdapter } from "./aggregators/arbeitnow.js";
 export { HnWhoIsHiringAdapter } from "./hn/whoishiring.js";
+// Tier 3 — local agent only; deliberately NOT in the cloud `ADAPTERS` registry.
+export {
+  NaukriAdapter,
+  LinkedInAdapter,
+  AmbitionBoxEnricher,
+  GlassdoorEnricher,
+  Tier3DisabledError,
+  type Tier3Context,
+} from "./tier3/index.js";

@@ -1,0 +1,23 @@
+{
+  "name": "@jobflow/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/orchestrator.ts",
+    "poll": "tsx src/orchestrator.ts poll",
+    "discover": "tsx src/orchestrator.ts discover",
+    "rank": "tsx src/orchestrator.ts rank",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@jobflow/adapters": "workspace:*",
+    "@jobflow/core": "workspace:*",
+    "@jobflow/db": "workspace:*",
+    "@jobflow/llm": "workspace:*",
+    "@jobflow/pipeline": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
+  }
+}

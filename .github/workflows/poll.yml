@@ -1,0 +1,40 @@
+name: jobflow-poll
+
+# Cloud cron (Tier 1-2 only). Discovers + polls ATS boards + aggregators, then
+# re-ranks. Free GitHub Actions minutes; no infra (§8, §9, §12-Q1).
+# Tier 3 (Naukri/Glassdoor/AmbitionBox/LinkedIn) NEVER runs here — local agent only.
+
+on:
+  schedule:
+    - cron: "0 */6 * * *" # every 6h
+  workflow_dispatch: {}
+
+concurrency:
+  group: jobflow-poll
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'echo' }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+      ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+      ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r build
+      - name: discover + poll + rank
+        run: pnpm --filter @jobflow/worker start
