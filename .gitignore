@@ -1,0 +1,23 @@
+node_modules/
+dist/
+.next/
+out/
+build/
+*.tsbuildinfo
+coverage/
+
+# env / secrets
+.env
+.env.local
+.env.*.local
+*.session.json
+
+# local agent state
+.jobflow/
+playwright-report/
+test-results/
+.cache/
+
+# os
+.DS_Store
+Thumbs.db

@@ -1,0 +1,28 @@
+{
+  "name": "jobflow",
+  "version": "0.1.0",
+  "private": true,
+  "description": "JobFlow — all-in-one job discovery, prep, and assisted-application platform (full TypeScript).",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "ingest": "pnpm --filter @jobflow/cli ingest",
+    "match": "pnpm --filter @jobflow/cli match",
+    "demo": "pnpm --filter @jobflow/cli demo",
+    "web": "pnpm --filter @jobflow/web dev",
+    "db:migrate": "pnpm --filter @jobflow/db migrate"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

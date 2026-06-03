@@ -1,0 +1,21 @@
+{
+  "name": "@jobflow/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "demo": "tsx src/index.ts demo",
+    "ingest": "tsx src/index.ts ingest",
+    "match": "tsx src/index.ts match",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@jobflow/adapters": "workspace:*",
+    "@jobflow/core": "workspace:*",
+    "@jobflow/db": "workspace:*",
+    "@jobflow/pipeline": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
+  }
+}
