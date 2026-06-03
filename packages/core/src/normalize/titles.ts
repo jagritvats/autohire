@@ -16,6 +16,13 @@ const SENIORITY_PATTERNS: Array<[RegExp, LevelBand]> = [
   [/\b(engineering manager|\bem\b|people manager|manager)\b/i, "manager"],
 ];
 
+/**
+ * Non-engineering roles whose titles still contain "engineer"/"developer"
+ * (Developer Marketing, Developer Relations, Sales Engineer, Solutions Engineer…).
+ * Checked FIRST so they don't masquerade as backend roles and pollute the ranking.
+ */
+const NON_ENG_TITLE = /\b(marketing|relations|advocat|evangelist|recruit|talent|sales|account (executive|manager)|customer success|support engineer|solutions? engineer|sales engineer|pre[- ]?sales|partnerships?|community|content|designer|writer|finance|legal|people|hr\b|operations? (manager|lead)|program manager)\b/i;
+
 const ARCHETYPE_PATTERNS: Array<[RegExp, RoleArchetype]> = [
   [/\b(sre|site reliability)\b/i, "sre"],
   [/\b(devops|platform|infrastructure|infra|cloud engineer|kubernetes)\b/i, "infra_devops"],
@@ -64,12 +71,14 @@ export function parseTitle(rawTitle: string): TitleParse {
     }
   }
 
-  // 2. archetype
+  // 2. archetype — non-eng guard wins first (DevRel/Sales Eng aren't backend roles)
   let roleArchetype: RoleArchetype = "other";
-  for (const [re, arch] of ARCHETYPE_PATTERNS) {
-    if (re.test(title)) {
-      roleArchetype = arch;
-      break;
+  if (!NON_ENG_TITLE.test(title)) {
+    for (const [re, arch] of ARCHETYPE_PATTERNS) {
+      if (re.test(title)) {
+        roleArchetype = arch;
+        break;
+      }
     }
   }
 

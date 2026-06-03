@@ -210,8 +210,11 @@ function scoreLocation(
   const labelScore = matchLocationLabel(loc, weights);
 
   if (loc.mode === "remote") {
+    // geo restriction MULTIPLIES the pref score so a us_only "remote" is down-weighted
+    // hard, not surfaced as a clean remote match (§11.3).
     const geo = GEO_PENALTY[loc.remoteGeo];
-    const score = clamp(0.6 * labelScore + 0.4 * geo + (loc.remoteGeo === "india_ok" || loc.remoteGeo === "worldwide" ? 0.15 : 0));
+    const openBonus = loc.remoteGeo === "india_ok" || loc.remoteGeo === "worldwide" ? 0.1 : 0;
+    const score = clamp(labelScore * geo + openBonus);
     let flag: string | null = null;
     let note = `Remote (${loc.remoteGeo}).`;
     if (loc.remoteGeo === "us_only") {
