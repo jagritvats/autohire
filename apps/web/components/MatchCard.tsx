@@ -19,10 +19,12 @@ export function MatchCard({
 }) {
   const band = card.score >= 78 ? "s-hi" : card.score >= 60 ? "s-mid" : "s-lo";
   const geoBad = card.location.remoteGeo === "us_only" || card.location.remoteGeo === "eu_only";
+  const locUncertain = card.location.confidence < 0.5;
   const locText =
     card.location.mode === "remote"
       ? `Remote · ${card.location.remoteGeo.replace("_", "-")}`
       : `${cap(card.location.mode)}${card.location.label ? ` · ${card.location.label}` : ""}`;
+  const exp = expLabel(card.experience);
 
   return (
     <article className="card" style={{ animationDelay: `${Math.min(index * 28, 600)}ms` }}>
@@ -40,6 +42,11 @@ export function MatchCard({
           <span className="dot">·</span>
           <span className="loc">
             {geoBad ? <span className="geo-bad">{locText}</span> : locText}
+            {locUncertain && (
+              <span className="loc-uncertain" title="Parsed location is low-confidence — verify before applying">
+                {" "}· verify?
+              </span>
+            )}
           </span>
           {card.applied && <span className="applied-badge">✓ in CRM</span>}
         </div>
@@ -55,6 +62,7 @@ export function MatchCard({
             <span className="tag">{card.source}</span>
           )}
           {TIER3.has(card.source) && <span className="tag tier3">tier-3 · local</span>}
+          {exp && <span className="tag exp" title="Years of experience the JD asks for (parsed)">{exp}</span>}
           {card.comp && (
             <span className="tag comp" title={`source: ${card.comp.source}`}>
               {isEstimate(card.comp.source) ? "~" : ""}
@@ -150,6 +158,15 @@ export function MatchCard({
 
 function cap(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+/** "~2–3 yrs" style label for the parsed YoE band (§11.2); null when unstated. */
+function expLabel(e: { min: number | null; max: number | null }): string | null {
+  const { min, max } = e;
+  if (min == null && max == null) return null;
+  if (min != null && max != null)
+    return min === max ? `~${min} yr${min === 1 ? "" : "s"}` : `~${min}–${max} yrs`;
+  if (min != null) return `~${min}+ yrs`;
+  return `≤${max} yrs`;
 }
 function isLangNote(note: string) {
   return /primary language/i.test(note);

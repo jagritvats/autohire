@@ -6,15 +6,17 @@ import type {
   AtsType,
   ExecutionTier,
 } from "../schema/enums.js";
-import type { ParsedLocation, Requirement, SalaryBand } from "../schema/entities.js";
+import type { ExperienceRange, ParsedLocation, Requirement, SalaryBand } from "../schema/entities.js";
 import { normCompany, parseTitle, slugify } from "./titles.js";
 import { extractSkills, parseRequirements } from "./skills.js";
 import { parseLocation } from "./location.js";
+import { parseExperience } from "./experience.js";
 import { extractSalaryFromText } from "./salary.js";
 
 export * from "./titles.js";
 export * from "./skills.js";
 export * from "./location.js";
+export * from "./experience.js";
 export * from "./salary.js";
 
 /**
@@ -40,6 +42,7 @@ export interface NormalizedPosting {
   requirements: Requirement[];
   location: ParsedLocation;
   salary: SalaryBand;
+  experience: ExperienceRange;
   applyUrl: string | null;
   dedupKey: string;
 }
@@ -50,6 +53,8 @@ export function normalizePosting(raw: RawPosting): NormalizedPosting {
   const skills = extractSkills(`${raw.title} ${jd}`);
   const requirements = parseRequirements(jd);
   const location = parseLocation(raw.locationRaw, jd);
+  // deterministic YoE parse over title + JD (§11.2) — no per-job LLM.
+  const experience = parseExperience(`${raw.title}\n${jd}`);
 
   // salary cascade step 1 — direct from JD/explicit field; else null band to fill later
   const salary: SalaryBand =
@@ -76,6 +81,7 @@ export function normalizePosting(raw: RawPosting): NormalizedPosting {
     requirements,
     location,
     salary,
+    experience,
     applyUrl: raw.applyUrl,
     dedupKey: canonicalKey(companyNameNorm, title.titleNorm, location),
   };

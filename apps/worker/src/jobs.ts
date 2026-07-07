@@ -10,6 +10,7 @@ import {
   ingestFromAdapter,
   rebuildMatches,
   enrichTopMatches,
+  recheckPostings,
   type SeedCompany,
   type Embedder,
 } from "@jobflow/pipeline";
@@ -67,6 +68,29 @@ export async function handleJob(repo: Repository, job: Job, ctx: JobCtx): Promis
       const limit = (job.payload.limit as number | undefined) ?? 40;
       const r = await enrichTopMatches(repo, { tenantId: DEFAULT_TENANT, limit });
       return { companiesEnriched: r.companiesEnriched, postingsEstimated: r.postingsEstimated, adzuna: r.adzunaUsed };
+    }
+    case "recheck": {
+      // Re-verify postings by re-polling their boards (§3): refetch → bump lastSeen →
+      // markStale for any that disappeared. Explicit ids > a company's postings > all active.
+      const postingIds = job.payload.postingIds as string[] | undefined;
+      const companyId = job.payload.companyId as string | undefined;
+      let ids: string[] = Array.isArray(postingIds) ? postingIds : [];
+      if (ids.length === 0 && companyId) {
+        ids = (await repo.listPostingsByCompany(companyId)).map((p) => p.id);
+      }
+      if (ids.length === 0) {
+        ids = (await repo.listActivePostings()).map((p) => p.id);
+      }
+      const stats = await recheckPostings(repo, ids, { embedder: ctx.embedder });
+      return { ...stats };
+    }
+    case "purge": {
+      // Bulk soft-delete (markStale) / hard-delete postings older than a threshold.
+      const olderThanDays = job.payload.olderThanDays as number;
+      const field = job.payload.field as "lastSeen" | "firstSeen" | undefined;
+      const hard = job.payload.hard as boolean | undefined;
+      const n = await repo.purgeOldPostings({ olderThanDays, field, hard });
+      return { purged: n };
     }
     default:
       throw new Error(`Unhandled cloud job type: ${job.type}`);

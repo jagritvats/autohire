@@ -5,6 +5,7 @@ import type {
   Company,
   ConnectedContext,
   Evidence,
+  ExperienceRange,
   Generation,
   GenerationKind,
   Job,
@@ -151,18 +152,21 @@ export class PgRepository implements Repository {
       `insert into posting (
          company_id, company_name, ats_type, ats_job_id, source, tier, title, title_norm,
          role_archetype, level_band, jd_text, jd_skills, requirements,
-         loc_mode, loc_city, loc_country, loc_tz, remote_geo, sponsorship,
+         loc_mode, loc_city, loc_country, loc_tz, remote_geo, sponsorship, location_confidence,
          salary_min, salary_max, currency, salary_source, salary_confidence,
+         experience_min, experience_max,
          apply_url, jd_embedding, dedup_key)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30)
        on conflict (ats_type, ats_job_id) do update set
          title = excluded.title, title_norm = excluded.title_norm,
          role_archetype = excluded.role_archetype, level_band = excluded.level_band,
          jd_text = excluded.jd_text, jd_skills = excluded.jd_skills, requirements = excluded.requirements,
          loc_mode = excluded.loc_mode, loc_city = excluded.loc_city, loc_country = excluded.loc_country,
          loc_tz = excluded.loc_tz, remote_geo = excluded.remote_geo, sponsorship = excluded.sponsorship,
+         location_confidence = excluded.location_confidence,
          salary_min = excluded.salary_min, salary_max = excluded.salary_max, currency = excluded.currency,
          salary_source = excluded.salary_source, salary_confidence = excluded.salary_confidence,
+         experience_min = excluded.experience_min, experience_max = excluded.experience_max,
          apply_url = excluded.apply_url, jd_embedding = excluded.jd_embedding,
          last_seen = now(), is_active = true,
          -- re-seen: clear staleness; a manual invalidated decision persists (§3)
@@ -172,8 +176,9 @@ export class PgRepository implements Repository {
       [
         p.companyId, p.companyName, p.atsType, p.atsJobId, p.source, p.tier, p.title, p.titleNorm,
         p.roleArchetype, p.levelBand, p.jdText, p.jdSkills, JSON.stringify(p.requirements),
-        p.location.mode, p.location.city, p.location.country, p.location.timezone, p.location.remoteGeo, p.location.sponsorship,
+        p.location.mode, p.location.city, p.location.country, p.location.timezone, p.location.remoteGeo, p.location.sponsorship, p.location.confidence,
         p.salary.min, p.salary.max, p.salary.currency, p.salary.source, p.salary.confidence,
+        p.experience.min, p.experience.max,
         p.applyUrl, p.jdEmbedding ? JSON.stringify(p.jdEmbedding) : null, p.dedupKey,
       ],
     );
@@ -640,16 +645,18 @@ function rowToPosting(r: pg.QueryResultRow): Posting {
   const location: ParsedLocation = {
     mode: r.loc_mode, city: r.loc_city, country: r.loc_country, timezone: r.loc_tz,
     remoteGeo: r.remote_geo, sponsorship: r.sponsorship,
+    confidence: num(r.location_confidence) ?? 0.5, // pre-migration rows → neutral
   };
   const salary: SalaryBand = {
     min: num(r.salary_min), max: num(r.salary_max), currency: r.currency,
     source: r.salary_source, confidence: r.salary_confidence,
   };
+  const experience: ExperienceRange = { min: num(r.experience_min), max: num(r.experience_max) };
   return {
     id: r.id, companyId: r.company_id, companyName: r.company_name, atsType: r.ats_type, atsJobId: r.ats_job_id,
     source: r.source, tier: r.tier, title: r.title, titleNorm: r.title_norm, roleArchetype: r.role_archetype,
     levelBand: r.level_band, jdText: r.jd_text, jdSkills: r.jd_skills ?? [], requirements: parseJson(r.requirements, []),
-    location, salary, applyUrl: r.apply_url, jdEmbedding: parseJson(r.jd_embedding, null),
+    location, salary, experience, applyUrl: r.apply_url, jdEmbedding: parseJson(r.jd_embedding, null),
     firstSeen: r.first_seen, lastSeen: r.last_seen, isActive: r.is_active, repostCount: r.repost_count,
     status: r.status ?? "active", invalidReason: r.invalid_reason ?? null, invalidatedAt: r.invalidated_at ?? null,
     canonicalId: r.canonical_id, dedupKey: r.dedup_key,

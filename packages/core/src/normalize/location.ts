@@ -85,5 +85,52 @@ export function parseLocation(locationRaw: string | null, jdText = ""): ParsedLo
       ? true
       : null;
 
-  return { mode, city, country, timezone, remoteGeo, sponsorship };
+  // 6. confidence (§11.3) — how much we trust the geo we just parsed. Be honest:
+  //    a lone stray "US" hint on a "remote" role, or a bare capitalized token with
+  //    no resolvable country, is a guess and must NOT read as fact downstream.
+  const confidence = scoreConfidence(loc, haystack, mode, country, city, remoteGeo);
+
+  return { mode, city, country, timezone, remoteGeo, sponsorship, confidence };
+}
+
+/** Deterministic 0..1 confidence for the parsed geo (§11.3). */
+function scoreConfidence(
+  loc: string,
+  haystack: string,
+  mode: LocationMode,
+  country: string | null,
+  city: string | null,
+  remoteGeo: RemoteGeo,
+): number {
+  if (mode === "remote") {
+    const indiaSignal = INDIA_OK_RE.test(haystack) || INDIA_CITIES.test(loc);
+    const usSignal = US_HINT.test(haystack) || US_ONLY_RE.test(haystack);
+    const euSignal = EU_HINT.test(haystack) || EU_ONLY_RE.test(haystack);
+    const worldwide = WORLDWIDE_RE.test(haystack);
+    const explicitRestrict = US_ONLY_RE.test(haystack) || EU_ONLY_RE.test(haystack);
+    const conflicting = [indiaSignal, usSignal, euSignal].filter(Boolean).length > 1;
+    if (worldwide || (indiaSignal && !conflicting)) return 0.9; // unambiguous open remote
+    if (explicitRestrict && !conflicting) return 0.85; // explicit "US-only" phrasing
+    if (conflicting) return 0.4; // multiple, competing geo hints — unsure which binds
+    if (remoteGeo === "unknown") return 0.35; // "remote" with zero geo info
+    return 0.5; // us_only INFERRED from a lone hint — a soft guess, flag it
+  }
+  if (mode === "hybrid" || mode === "onsite") {
+    if (country && city) return 0.85; // explicit city + resolvable country
+    if (country) return 0.7;
+    if (city) return 0.45; // a capitalized token, but no country we recognize
+    return 0.3; // bare / ambiguous
+  }
+  return 0.2; // mode unknown, nothing resolved
+}
+
+/**
+ * India-workable = onsite/hybrid in India, OR remote that's open to India
+ * (`india_ok` / `worldwide`). Used by the "India-onsite allowed" view filter and
+ * as a soft ranking signal — never a hard filter (invariant #4).
+ */
+export function isIndiaWorkable(loc: ParsedLocation): boolean {
+  if (loc.mode === "onsite" || loc.mode === "hybrid") return loc.country === "India";
+  if (loc.mode === "remote") return loc.remoteGeo === "india_ok" || loc.remoteGeo === "worldwide";
+  return false;
 }

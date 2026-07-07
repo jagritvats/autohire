@@ -34,8 +34,26 @@ export const ParsedLocation = z.object({
   timezone: z.string().nullable().default(null),
   remoteGeo: RemoteGeo.default("unknown"),
   sponsorship: z.boolean().nullable().default(null),
+  /**
+   * 0..1 confidence in the parsed geo (§11.3). High = explicit city+country or an
+   * unambiguous remote-geo; low = a bare/ambiguous string or a "remote" with
+   * conflicting geo hints. Low confidence ⇒ the matcher surfaces an honest
+   * "verify before applying" flag rather than scoring a guess as fact.
+   */
+  confidence: z.number().min(0).max(1).default(0.5),
 });
 export type ParsedLocation = z.infer<typeof ParsedLocation>;
+
+/**
+ * Years-of-experience asked for, parsed deterministically from the JD (§11.2).
+ * Both nullable: `min` open-ended lower bound ("3+ years"), `max` upper bound of a
+ * range. A soft seniority signal only — never a hard exclusion (invariant #4).
+ */
+export const ExperienceRange = z.object({
+  min: z.number().nullable().default(null),
+  max: z.number().nullable().default(null),
+});
+export type ExperienceRange = z.infer<typeof ExperienceRange>;
 
 export const SalaryBand = z.object({
   min: z.number().nullable().default(null),
@@ -120,6 +138,8 @@ export const Posting = z.object({
 
   location: ParsedLocation,
   salary: SalaryBand,
+  /** years-of-experience the JD asks for (§11.2); {null,null} when unstated. */
+  experience: ExperienceRange.default({ min: null, max: null }),
 
   applyUrl: z.string().nullable().default(null),
   // embeddings live in pgvector; in JS we carry the array (or null until embedded)

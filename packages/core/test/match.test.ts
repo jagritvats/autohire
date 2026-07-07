@@ -46,8 +46,9 @@ function makePosting(over: Partial<Posting> = {}): Posting {
     jdText: "",
     jdSkills: ["go", "kafka", "postgres", "distributed_systems"],
     requirements: [],
-    location: { mode: "remote", city: null, country: null, timezone: null, remoteGeo: "worldwide", sponsorship: null },
+    location: { mode: "remote", city: null, country: null, timezone: null, remoteGeo: "worldwide", sponsorship: null, confidence: 0.9 },
     salary: { min: null, max: null, currency: "USD", source: "none", confidence: "low" },
+    experience: { min: null, max: null },
     applyUrl: null,
     jdEmbedding: null,
     firstSeen: now,
@@ -90,7 +91,7 @@ describe("soft-weighted scoring", () => {
     const profile = makeProfile();
     const ok = scorePosting(makePosting(), profile);
     const usOnly = scorePosting(
-      makePosting({ location: { mode: "remote", city: null, country: null, timezone: null, remoteGeo: "us_only", sponsorship: null } }),
+      makePosting({ location: { mode: "remote", city: null, country: null, timezone: null, remoteGeo: "us_only", sponsorship: null, confidence: 0.85 } }),
       profile,
     );
     expect(usOnly.breakdown.location).toBeLessThan(ok.breakdown.location);
@@ -124,10 +125,47 @@ describe("the only two hard exclusions (§11.3)", () => {
 
   it("excludes an impossible onsite-abroad role only when relocate is off", () => {
     const posting = makePosting({
-      location: { mode: "onsite", city: "Berlin", country: "Europe", timezone: null, remoteGeo: "unknown", sponsorship: false },
+      location: { mode: "onsite", city: "Berlin", country: "Europe", timezone: null, remoteGeo: "unknown", sponsorship: false, confidence: 0.7 },
     });
     expect(scorePosting(posting, makeProfile({ relocate: true })).rulePass).toBe(true);
     expect(scorePosting(posting, makeProfile({ relocate: false })).rulePass).toBe(false);
+  });
+});
+
+describe("India-onsite soft signal + honest confidence (§11.3)", () => {
+  it("notes an onsite-India role as India-workable and keeps it rule-passing (not a gate)", () => {
+    const res = scorePosting(
+      makePosting({
+        location: { mode: "onsite", city: "Bengaluru", country: "India", timezone: "Asia/Kolkata", remoteGeo: "unknown", sponsorship: null, confidence: 0.85 },
+      }),
+      makeProfile(),
+    );
+    expect(res.rulePass).toBe(true);
+    expect(res.flags.locationNote ?? "").toMatch(/india-workable/i);
+    expect(res.breakdown.location).toBeGreaterThan(0.5);
+  });
+
+  it("dampens the location score and flags 'verify' when the geo is low-confidence", () => {
+    const profile = makeProfile();
+    const confident = scorePosting(makePosting(), profile); // worldwide, confidence 0.9
+    const unsure = scorePosting(
+      makePosting({
+        location: { mode: "remote", city: null, country: null, timezone: null, remoteGeo: "worldwide", sponsorship: null, confidence: 0.3 },
+      }),
+      profile,
+    );
+    expect(unsure.breakdown.location).toBeLessThan(confident.breakdown.location);
+    expect(unsure.flags.redFlags.join(" ")).toMatch(/uncertain|verify/i);
+    expect(unsure.rulePass).toBe(true); // never a hard exclusion
+  });
+
+  it("adds a light YoE stretch note when the JD asks materially more than you have", () => {
+    const res = scorePosting(
+      makePosting({ experience: { min: 8, max: null } }), // profile yoe is 2
+      makeProfile(),
+    );
+    expect(res.flags.redFlags.join(" ")).toMatch(/stretch/i);
+    expect(res.rulePass).toBe(true);
   });
 });
 

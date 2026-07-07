@@ -13,6 +13,7 @@ import {
 } from "@jobflow/pipeline";
 import { getAdapter } from "@jobflow/adapters";
 import type { Match, Posting } from "@jobflow/core";
+import { isIndiaWorkable } from "@jobflow/core";
 import { getRepo, ensureTenant } from "./repo.js";
 
 /** Serializable match-card DTO for the client UI (§11.6). */
@@ -28,7 +29,11 @@ export interface FeedCard {
   ats: string;
   ageDays: number;
   atsDirect: boolean;
-  location: { mode: string; label: string; remoteGeo: string };
+  location: { mode: string; label: string; remoteGeo: string; country: string | null; confidence: number };
+  /** parsed years-of-experience the JD asks for (§11.2); nulls when unstated. */
+  experience: { min: number | null; max: number | null };
+  /** true when the role is workable from India (onsite/hybrid IN, or IN-ok/worldwide remote). */
+  indiaWorkable: boolean;
   level: string | null;
   levelNote: string | null;
   stackNote: string | null;
@@ -55,8 +60,12 @@ export interface FeedData {
 /** The secondary views (per-user / lifecycle collections), rendered as feed cards. */
 export type PostingView = "bookmarks" | "archived" | "invalidated";
 
-/** Read the feed from the repo. Bootstraps + ingests once if the store is empty. */
-export async function getFeed(): Promise<FeedData> {
+/**
+ * Read the feed from the repo. Bootstraps + ingests once if the store is empty.
+ * `indiaOnly` is a soft VIEW filter (not a hard exclusion, invariant #4): it shows
+ * only India-workable roles for a user who wants them.
+ */
+export async function getFeed(opts: { indiaOnly?: boolean } = {}): Promise<FeedData> {
   const repo = await getRepo();
   await ensureTenant(repo);
   let matches = await repo.listMatches(DEFAULT_TENANT, 80);
@@ -64,6 +73,7 @@ export async function getFeed(): Promise<FeedData> {
     await ingestAndRank(repo);
     matches = await repo.listMatches(DEFAULT_TENANT, 80);
   }
+  if (opts.indiaOnly) matches = matches.filter((m) => isIndiaWorkable(m.posting.location));
   return shape(repo, matches);
 }
 
@@ -124,7 +134,15 @@ function buildCard(
     ats: p.atsType,
     ageDays,
     atsDirect: p.atsType !== "unknown",
-    location: { mode: p.location.mode, label: [p.location.city, p.location.country].filter(Boolean).join(", "), remoteGeo: p.location.remoteGeo },
+    location: {
+      mode: p.location.mode,
+      label: [p.location.city, p.location.country].filter(Boolean).join(", "),
+      remoteGeo: p.location.remoteGeo,
+      country: p.location.country,
+      confidence: p.location.confidence,
+    },
+    experience: { min: p.experience.min, max: p.experience.max },
+    indiaWorkable: isIndiaWorkable(p.location),
     level: p.levelBand,
     levelNote: m?.levelNote ?? null,
     stackNote: m?.stackNote ?? null,

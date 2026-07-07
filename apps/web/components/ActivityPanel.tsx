@@ -18,6 +18,7 @@ const COMMANDS: Array<{ type: string; label: string }> = [
   { type: "poll", label: "Poll all" },
   { type: "rank", label: "Re-rank" },
   { type: "enrich_t1", label: "Enrich comp" },
+  { type: "recheck", label: "Recheck all" }, // empty payload → worker rechecks all active postings
 ];
 
 export function ActivityPanel() {
@@ -120,6 +121,8 @@ function summary(j: Job): string {
   if ("ranked" in r) return `${r.scored} scored → ${r.ranked} ranked`;
   if ("seeded" in r) return `seeded ${r.seeded} · resolved ${r.resolved}`;
   if ("companiesEnriched" in r) return `${r.companiesEnriched} co comp · ${r.postingsEstimated} est`;
+  if ("purged" in r) return `${r.purged} purged`;
+  if ("staled" in r) return `${r.requested} rechecked · ${r.staled} stale`; // RecheckStats
   return j.status;
 }
 function ago(t: string | null): string {

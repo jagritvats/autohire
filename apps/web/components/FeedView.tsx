@@ -29,6 +29,11 @@ export function FeedView({ initial }: { initial: FeedData }) {
   const [geos, setGeos] = useState<Set<string>>(new Set());
   const [minScore, setMinScore] = useState(0);
   const [hideUsOnly, setHideUsOnly] = useState(false);
+  // India-onsite "allowed" view filter — server-fetched (UI → api → feed → query).
+  const [indiaOnly, setIndiaOnly] = useState(false);
+  const [indiaCards, setIndiaCards] = useState<FeedCard[] | null>(null);
+  const [indiaLoading, setIndiaLoading] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const toggle = (set: Set<string>, v: string, fn: (s: Set<string>) => void) => {
@@ -37,7 +42,8 @@ export function FeedView({ initial }: { initial: FeedData }) {
     fn(next);
   };
 
-  const baseCards = view === "feed" ? data.cards : viewData[view];
+  const baseCards =
+    view === "feed" ? (indiaOnly ? (indiaCards ?? []) : data.cards) : viewData[view];
 
   const cards = useMemo(() => {
     return baseCards.filter((c) => {
@@ -49,6 +55,21 @@ export function FeedView({ initial }: { initial: FeedData }) {
       return true;
     });
   }, [baseCards, arch, modes, geos, minScore, hideUsOnly]);
+
+  // India-onsite "allowed" filter: fetch the India-workable feed on first toggle-on.
+  const toggleIndia = () => {
+    const next = !indiaOnly;
+    setIndiaOnly(next);
+    if (next) setView("feed");
+    if (next && indiaCards === null) {
+      setIndiaLoading(true);
+      fetch("/api/postings?india=1", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : { cards: [] }))
+        .then((d) => setIndiaCards((d.cards as FeedCard[]) ?? []))
+        .catch(() => setIndiaCards([]))
+        .finally(() => setIndiaLoading(false));
+    }
+  };
 
   // ── mutation plumbing ──
   const jreq = (url: string, body: unknown, method = "POST") =>
@@ -83,23 +104,35 @@ export function FeedView({ initial }: { initial: FeedData }) {
     if (v !== "feed") loadView(v);
   };
 
+  const flashNotice = (msg: string) => {
+    setNotice(msg);
+    setTimeout(() => setNotice((n) => (n === msg ? null : n)), 7000);
+  };
+
   const refresh = () => {
     startTransition(async () => {
       const res = await fetch("/api/refresh", { method: "POST" });
       if (res.ok) {
         setData(await res.json());
         setView("feed");
+        setIndiaCards(null); // invalidate the cached India-workable slice
       }
     });
   };
 
+  // recheck/purge now ENQUEUE cloud jobs (→ { queued, job }); they no longer return a
+  // fresh feed. Surface a "queued" notice and let the Activity panel show progress.
   const recheck = () => {
     startTransition(async () => {
       const res = await jreq("/api/postings/recheck", {});
-      if (res.ok) {
-        setData(await res.json());
-        setView("feed");
-      }
+      const d = await res.json().catch(() => ({}));
+      flashNotice(
+        res.ok && d?.queued
+          ? "Recheck queued — watch the Activity panel."
+          : res.ok
+            ? "Recheck requested."
+            : "Recheck failed to queue.",
+      );
     });
   };
 
@@ -109,10 +142,14 @@ export function FeedView({ initial }: { initial: FeedData }) {
     if (!raw || !Number.isFinite(days) || days <= 0) return;
     startTransition(async () => {
       const res = await jreq("/api/postings/purge", { olderThanDays: days, field: "lastSeen" });
-      if (res.ok) {
-        setData(await res.json());
-        setView("feed");
-      }
+      const d = await res.json().catch(() => ({}));
+      flashNotice(
+        res.ok && d?.queued
+          ? "Remove-old queued — watch the Activity panel."
+          : res.ok
+            ? "Remove-old requested."
+            : "Remove-old failed to queue.",
+      );
     });
   };
 
@@ -156,7 +193,11 @@ export function FeedView({ initial }: { initial: FeedData }) {
 
   const emptyMsg =
     view === "feed"
-      ? "No matches under these filters."
+      ? indiaOnly && indiaLoading
+        ? "Loading India-workable roles…"
+        : indiaOnly
+          ? "No India-workable roles under these filters."
+          : "No matches under these filters."
       : loadingView
         ? "Loading…"
         : `No ${view} yet.`;
@@ -219,6 +260,21 @@ export function FeedView({ initial }: { initial: FeedData }) {
         </div>
 
         <div className="rail-group">
+          <h4>region</h4>
+          <div className="chip-row">
+            <button
+              className="chip"
+              data-on={indiaOnly}
+              onClick={toggleIndia}
+              disabled={indiaLoading}
+              title="Show only India-workable roles (onsite/hybrid in India, or India-ok / worldwide remote)"
+            >
+              {indiaLoading ? "loading…" : "india-onsite allowed"}
+            </button>
+          </div>
+        </div>
+
+        <div className="rail-group">
           <h4>honesty</h4>
           <div className="chip-row">
             <button className="chip" data-on={hideUsOnly} onClick={() => setHideUsOnly((v) => !v)}>
@@ -251,6 +307,12 @@ export function FeedView({ initial }: { initial: FeedData }) {
             {pending ? "polling…" : "↻ sync re-poll"}
           </button>
         </div>
+
+        {notice && (
+          <div className="notice" role="status">
+            {notice}
+          </div>
+        )}
 
         <ActivityPanel />
 

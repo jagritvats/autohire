@@ -69,13 +69,17 @@ export function scorePosting(
 
   // ── component: location & remote-geo (§11.3) ──
   const locResult = scoreLocation(posting, profile);
-  if (locResult.flag) redFlags.push(locResult.flag);
+  for (const f of locResult.flags) redFlags.push(f);
 
   // ── component: freshness (§3) — ATS-direct + fresh ranks above stale aggregator ──
   const freshness = scoreFreshness(posting);
 
   // ── component: salary fit ──
   const salaryScore = scoreSalary(posting, profile);
+
+  // ── light soft signal: JD's asked YoE vs yours (§11.2) — a stretch note, never a gate ──
+  const expNote = experienceNote(posting.experience, profile.yoe);
+  if (expNote && redFlags.length < 4) redFlags.push(expNote);
 
   // ── stretch flag for "X required" must-haves you don't have (never an exclusion) ──
   for (const req of posting.requirements) {
@@ -188,6 +192,16 @@ function scoreSeniority(
   };
 }
 
+// ── experience (§11.2) — a soft "stretch" note when the JD asks materially more
+//    YoE than you have. Deterministic (parsed), never a hard exclusion (invariant #4). ──
+function experienceNote(exp: Posting["experience"], yoe: number): string | null {
+  if (exp.min == null) return null;
+  const gap = exp.min - yoe;
+  if (gap < 3) return null; // within reach — "5+ yrs" is usually aspirational
+  const range = exp.max != null && exp.max !== exp.min ? `${exp.min}–${exp.max}` : `${exp.min}+`;
+  return `JD asks ~${range} yrs experience (you have ~${yoe}) — stretch`;
+}
+
 // ── location ──────────────────────────────────────────────────────────────
 const GEO_PENALTY: Record<RemoteGeo, number> = {
   worldwide: 1,
@@ -199,44 +213,61 @@ const GEO_PENALTY: Record<RemoteGeo, number> = {
   unknown: 0.7,
 };
 
+/** below this, the parsed geo is a guess — dampen the score + flag it honestly (§11.3). */
+const LOW_LOCATION_CONFIDENCE = 0.5;
+/** small honest boost so India-workable roles rank well for a user who wants them (§11.3). */
+const INDIA_ONSITE_BOOST = 0.1;
+
 function scoreLocation(
   posting: Posting,
   profile: Profile,
-): { score: number; note: string | null; flag: string | null } {
+): { score: number; note: string | null; flags: string[] } {
   const loc = posting.location;
   const weights = profile.prefs.locationWeights;
+  const flags: string[] = [];
 
   // base from the user's weighted ranked prefs (§11.3) — match label fragments
   const labelScore = matchLocationLabel(loc, weights);
+
+  let score: number;
+  let note: string | null;
 
   if (loc.mode === "remote") {
     // geo restriction MULTIPLIES the pref score so a us_only "remote" is down-weighted
     // hard, not surfaced as a clean remote match (§11.3).
     const geo = GEO_PENALTY[loc.remoteGeo];
     const openBonus = loc.remoteGeo === "india_ok" || loc.remoteGeo === "worldwide" ? 0.1 : 0;
-    const score = clamp(labelScore * geo + openBonus);
-    let flag: string | null = null;
-    let note = `Remote (${loc.remoteGeo}).`;
+    score = clamp(labelScore * geo + openBonus);
+    note = `Remote (${loc.remoteGeo}).`;
     if (loc.remoteGeo === "us_only") {
-      flag = `"Remote" is US-only / US work-auth — not actually open to you`;
+      flags.push(`"Remote" is US-only / US work-auth — not actually open to you`);
       note = `"Remote" but US-only — false-positive remote.`;
     } else if (loc.remoteGeo === "eu_only") {
-      flag = `"Remote" is EU-only`;
+      flags.push(`"Remote" is EU-only`);
     }
-    return { score: clamp(score), note, flag };
-  }
-
-  if (loc.mode === "hybrid" || loc.mode === "onsite") {
-    let flag: string | null = null;
+  } else if (loc.mode === "hybrid" || loc.mode === "onsite") {
+    // onsite/hybrid in India is workable — a small honest boost, not a hard filter.
+    const indiaWorkable = loc.country === "India";
+    score = clamp(indiaWorkable ? labelScore + INDIA_ONSITE_BOOST : labelScore);
     // onsite abroad with no sponsorship and you can't relocate freely → flag
     if (loc.country && loc.country !== "India" && loc.sponsorship === false) {
-      flag = `Onsite ${loc.country}, no sponsorship offered`;
+      flags.push(`Onsite ${loc.country}, no sponsorship offered`);
     }
-    const note = `${cap(loc.mode)}${loc.city ? ` · ${loc.city}` : ""}.`;
-    return { score: clamp(labelScore), note, flag };
+    note = `${cap(loc.mode)}${loc.city ? ` · ${loc.city}` : ""}${indiaWorkable ? " · India-workable" : ""}.`;
+  } else {
+    score = 0.5;
+    note = null;
   }
 
-  return { score: 0.5, note: null, flag: null };
+  // honest confidence handling (§11.3): when we're unsure of the geo, pull the score
+  // toward neutral and surface a "verify" flag — don't rank a guess as if it were fact.
+  if (loc.confidence < LOW_LOCATION_CONFIDENCE) {
+    score = clamp(score * 0.85 + 0.5 * 0.15);
+    flags.push("Location uncertain — verify before applying");
+    note = `${note ?? ""} (location uncertain)`.trim();
+  }
+
+  return { score: clamp(score), note, flags };
 }
 
 function matchLocationLabel(

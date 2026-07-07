@@ -4,6 +4,7 @@ import {
   extractSkills,
   parseRequirements,
   parseLocation,
+  isIndiaWorkable,
   extractSalaryFromText,
   normCompany,
 } from "../src/normalize/index.js";
@@ -82,6 +83,44 @@ describe("location parsing — the false-positive minefield (§11.3)", () => {
 
   it("reads sponsorship signals", () => {
     expect(parseLocation("London", "We do not offer visa sponsorship.").sponsorship).toBe(false);
+  });
+});
+
+describe("location confidence (§11.3) — honest about guesses", () => {
+  it("is HIGH for an explicit city + country", () => {
+    expect(parseLocation("Bengaluru, India", "").confidence).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it("is HIGH for unambiguous worldwide / india-ok remote", () => {
+    expect(parseLocation("Remote", "Work from anywhere, fully remote worldwide.").confidence).toBeGreaterThanOrEqual(0.8);
+    expect(parseLocation("Remote - India", "").confidence).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it("is HIGH when a remote role is explicitly US-only", () => {
+    expect(parseLocation("Remote", "Must be authorized to work in the US.").confidence).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it("is LOW for a bare 'Remote' with no geo hints", () => {
+    expect(parseLocation("Remote", "").confidence).toBeLessThan(0.5);
+  });
+
+  it("is LOW when a remote role carries conflicting geo hints", () => {
+    // mentions both India and the US → we can't be sure which binds
+    const loc = parseLocation("Remote", "Open to India; team is US-based across New York.");
+    expect(loc.confidence).toBeLessThan(0.5);
+  });
+});
+
+describe("isIndiaWorkable (§11.3) — soft view filter, not a hard gate", () => {
+  it("includes onsite/hybrid in India and India-ok / worldwide remote", () => {
+    expect(isIndiaWorkable(parseLocation("Bengaluru, India", ""))).toBe(true);
+    expect(isIndiaWorkable(parseLocation("Remote - India", ""))).toBe(true);
+    expect(isIndiaWorkable(parseLocation("Remote", "fully remote worldwide"))).toBe(true);
+  });
+
+  it("excludes onsite abroad and US-only remote", () => {
+    expect(isIndiaWorkable(parseLocation("Berlin, Germany", ""))).toBe(false);
+    expect(isIndiaWorkable(parseLocation("Remote", "US-only, authorized to work in the US"))).toBe(false);
   });
 });
 

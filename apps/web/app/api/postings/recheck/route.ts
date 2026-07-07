@@ -1,26 +1,26 @@
 import { NextResponse } from "next/server";
+import { JOB_RUNTIME } from "@jobflow/core";
+import { DEFAULT_TENANT } from "@jobflow/pipeline";
 import { getRepo } from "@/lib/repo";
-import { recheckFeed } from "@/lib/feed";
 
-// re-polls live ATS boards → can take a while.
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
 
 /**
  * Mass recheck. Body accepts `{ postingIds }` (explicit), `{ companyId }` (all its
- * postings), or neither (every active posting). Re-runs the poller machinery to
- * refetch + bump lastSeen / mark stale, then re-ranks and returns the fresh feed.
+ * postings), or neither (every active posting). Re-polling live ATS boards is slow and
+ * Tier 1-2 work, so this ENQUEUES a cloud `recheck` job for the worker to drain (rather
+ * than blocking the request). Returns the queued job; the feed refreshes when it lands.
  */
 export async function POST(req: Request) {
   const repo = await getRepo();
   const body = await req.json().catch(() => ({}));
-  let ids: string[] = Array.isArray(body?.postingIds) ? body.postingIds : [];
-  if (ids.length === 0 && body?.companyId) {
-    ids = (await repo.listPostingsByCompany(body.companyId)).map((p) => p.id);
-  }
-  if (ids.length === 0) {
-    ids = (await repo.listActivePostings()).map((p) => p.id);
-  }
-  const data = await recheckFeed(ids);
-  return NextResponse.json(data);
+  const postingIds: string[] | undefined = Array.isArray(body?.postingIds) ? body.postingIds : undefined;
+  const companyId: string | undefined = typeof body?.companyId === "string" ? body.companyId : undefined;
+  const job = await repo.enqueueJob({
+    tenantId: DEFAULT_TENANT,
+    type: "recheck",
+    runtime: JOB_RUNTIME["recheck"],
+    payload: { postingIds, companyId },
+  });
+  return NextResponse.json({ queued: true, job });
 }

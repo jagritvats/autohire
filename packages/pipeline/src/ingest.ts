@@ -168,6 +168,7 @@ export async function toNewPosting(
     requirements: n.requirements,
     location: n.location,
     salary: n.salary,
+    experience: n.experience,
     applyUrl: n.applyUrl,
     jdEmbedding: embedding,
     dedupKey: n.dedupKey,

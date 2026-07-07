@@ -21,8 +21,9 @@ function newPosting(over: Partial<NewPosting> = {}): NewPosting {
     jdText: "build things",
     jdSkills: ["go", "postgres"],
     requirements: [],
-    location: { mode: "remote", city: null, country: null, timezone: null, remoteGeo: "worldwide", sponsorship: null },
+    location: { mode: "remote", city: null, country: null, timezone: null, remoteGeo: "worldwide", sponsorship: null, confidence: 0.9 },
     salary: { min: null, max: null, currency: "USD", source: "none", confidence: "low" },
+    experience: { min: null, max: null },
     applyUrl: null,
     jdEmbedding: null,
     dedupKey: "acme|backend-engineer|remote:worldwide",
@@ -52,6 +53,24 @@ async function seedMatch(repo: InMemoryRepository, tenantId: string, postingId: 
   };
   await repo.saveMatches([m]);
 }
+
+describe("experience + location confidence round-trip (§11.2/§11.3)", () => {
+  it("upsert preserves experience band and location confidence", async () => {
+    const repo = new InMemoryRepository();
+    const co = await seedCompany(repo);
+    const p = await repo.upsertPosting(
+      newPosting({
+        companyId: co.id,
+        experience: { min: 2, max: 4 },
+        location: { mode: "onsite", city: "Pune", country: "India", timezone: "Asia/Kolkata", remoteGeo: "unknown", sponsorship: null, confidence: 0.85 },
+      }),
+    );
+    const got = await repo.getPosting(p.id);
+    expect(got?.experience).toEqual({ min: 2, max: 4 });
+    expect(got?.location.confidence).toBe(0.85);
+    expect(got?.location.country).toBe("India");
+  });
+});
 
 describe("posting lifecycle — new postings default to active", () => {
   it("upsert assigns status='active' and the feed sees it", async () => {

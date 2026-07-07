@@ -133,6 +133,8 @@ export const JobType = z.enum([
   "poll", // poll registered ATS boards due for poll
   "rank", // recompute matches for the tenant
   "enrich_t1", // Tier-1 enrichment (Adzuna / levels.fyi) — cloud
+  "recheck", // re-poll a set of postings via Tier 1-2 adapters (freshness/staleness) — cloud
+  "purge", // bulk soft/hard-remove postings older than a threshold — cloud
   "tier3_poll", // Naukri/Glassdoor/etc — LOCAL agent only
   "enrich_t3", // ratings/India comp — LOCAL agent only
   "form_fill", // Playwright fill to review gate — LOCAL agent only
@@ -152,6 +154,8 @@ export const JOB_RUNTIME: Record<z.infer<typeof JobType>, z.infer<typeof JobRunt
   poll: "cloud",
   rank: "cloud",
   enrich_t1: "cloud",
+  recheck: "cloud",
+  purge: "cloud",
   tier3_poll: "local",
   enrich_t3: "local",
   form_fill: "local",
