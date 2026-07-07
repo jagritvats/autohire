@@ -12,7 +12,9 @@ interface RawNumberMatch {
 }
 
 const CURRENCY_HINTS: Array<[RegExp, string]> = [
-  [/₹|rs\.?|inr|lpa|lakhs?|crore/i, "INR"],
+  // `\brs\.?` (word-boundary) so "Yrs"/"hrs" don't false-match INR; `lacs?` covers
+  // Naukri's "N-M Lacs P.A." phrasing (the dominant Indian-board CTC format).
+  [/₹|\brs\.?|inr|lpa|lakhs?|lacs?|crore/i, "INR"],
   [/\$|usd|dollars?/i, "USD"],
   [/€|eur|euros?/i, "EUR"],
   [/£|gbp|pounds?/i, "GBP"],

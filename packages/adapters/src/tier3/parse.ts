@@ -191,16 +191,14 @@ function safeCodePoint(n: number): string {
   }
 }
 
-/** Strip tags → collapsed plain text (for reading a value out of an inner HTML fragment). */
+/** Strip tags → collapsed plain text (for reading a value out of an inner HTML fragment).
+ *  Strips BEFORE decoding so a decoded `&lt;` can't be mistaken for a tag boundary. */
 export function stripTags(html: string): string {
-  return decodeEntities(
-    html
-      .replace(/<style[\s\S]*?<\/style>/gi, " ")
-      .replace(/<script[\s\S]*?<\/script>/gi, " ")
-      .replace(/<[^>]+>/g, " "),
-  )
-    .replace(/\s+/g, " ")
-    .trim();
+  const noTags = html
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<[^>]+>/g, " ");
+  return decodeEntities(noTags).replace(/\s+/g, " ").trim();
 }
 
 /** First capture group of a regex against a string, decoded + trimmed, else null. */
