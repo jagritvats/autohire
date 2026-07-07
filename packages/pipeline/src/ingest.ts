@@ -92,6 +92,58 @@ export async function ingestFromAdapter(
   return stats;
 }
 
+export interface RecheckStats {
+  requested: number;
+  companies: number;
+  fetched: number;
+  upserted: number;
+  staled: number;
+  /** requested postings whose company was successfully re-polled (verified fresh/gone). */
+  verified: number;
+  /** companies that couldn't be re-polled (no resolved ATS board). */
+  skipped: string[];
+}
+
+/**
+ * Mass recheck: re-verify a set of postings by re-polling their ATS boards through
+ * the SAME machinery the poller uses (`ingestCompany`) — refetch → idempotent upsert
+ * (bumps lastSeen) → markStale for any that disappeared (§3). No adapter logic is
+ * duplicated. Postings whose company has no resolved board can't be verified and are
+ * reported in `skipped`. One re-poll per distinct company covers all its requested ids.
+ */
+export async function recheckPostings(
+  repo: Repository,
+  postingIds: string[],
+  opts: { embedder?: Embedder; limit?: number } = {},
+): Promise<RecheckStats> {
+  const stats: RecheckStats = { requested: postingIds.length, companies: 0, fetched: 0, upserted: 0, staled: 0, verified: 0, skipped: [] };
+
+  // resolve the distinct companies behind the requested postings
+  const companyIds = new Map<string, string[]>(); // companyId → its requested postingIds
+  for (const id of postingIds) {
+    const p = await repo.getPosting(id);
+    if (!p) continue;
+    const list = companyIds.get(p.companyId) ?? [];
+    list.push(id);
+    companyIds.set(p.companyId, list);
+  }
+
+  for (const [companyId, ids] of companyIds) {
+    const company = await repo.getCompany(companyId);
+    if (!company || company.atsType === "unknown" || !company.atsSlug) {
+      stats.skipped.push(company?.name ?? companyId);
+      continue;
+    }
+    const r = await ingestCompany(repo, company, { embedder: opts.embedder, limit: opts.limit });
+    stats.companies++;
+    stats.fetched += r.fetched;
+    stats.upserted += r.upserted;
+    stats.staled += r.staled;
+    stats.verified += ids.length;
+  }
+  return stats;
+}
+
 /** Assemble a NewPosting (repo assigns id/timestamps), computing the JD embedding. */
 export async function toNewPosting(
   n: NormalizedPosting,

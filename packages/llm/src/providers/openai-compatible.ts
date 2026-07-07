@@ -1,5 +1,6 @@
 import { localEmbed } from "@jobflow/core";
 import type { CompletionRequest, LlmProvider, ProviderConfig } from "../provider.js";
+import { fetchWithTimeout, mapProviderError, retryAfterMs, withRetry } from "../http.js";
 
 /**
  * Covers both xAI Grok and OpenAI — same Chat Completions shape, different base URL
@@ -36,20 +37,28 @@ export class OpenAICompatibleProvider implements LlmProvider {
       ...(req.system ? [{ role: "system", content: req.system }] : []),
       { role: "user", content: req.prompt },
     ];
-    const res = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${this.apiKey}` },
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature: req.temperature ?? 0.3,
-        max_tokens: req.maxTokens ?? 1024,
-        ...(req.json ? { response_format: { type: "json_object" } } : {}),
-      }),
+    const body = JSON.stringify({
+      model,
+      messages,
+      temperature: req.temperature ?? 0.3,
+      max_tokens: req.maxTokens ?? 1024,
+      ...(req.json ? { response_format: { type: "json_object" } } : {}),
     });
-    if (!res.ok) throw new Error(`${this.name} ${res.status}: ${await res.text()}`);
-    const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
-    return data.choices?.[0]?.message?.content ?? "";
+    const label = this.name;
+    return withRetry(
+      async () => {
+        const res = await fetchWithTimeout(
+          `${this.baseUrl}/chat/completions`,
+          { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${this.apiKey}` }, body },
+          req.timeoutMs ?? 45_000,
+          label,
+        );
+        if (!res.ok) throw mapProviderError(res.status, await res.text(), label, retryAfterMs(res));
+        const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+        return data.choices?.[0]?.message?.content ?? "";
+      },
+      { name: label },
+    );
   }
 
   async embed(texts: string[]): Promise<number[][]> {

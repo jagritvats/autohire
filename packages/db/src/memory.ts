@@ -46,6 +46,8 @@ export class InMemoryRepository implements Repository {
   private salaryCache = new Map<string, SalaryCacheEntry & { fetchedAt: number }>();
   private generations: Generation[] = [];
   private contexts = new Map<string, ConnectedContext>(); // key: `${tenantId}:${source}`
+  // per-user posting overlay (archive + bookmark), key: `${tenantId}:${postingId}`
+  private postingState = new Map<string, { archived: boolean; bookmarked: boolean }>();
 
   async upsertCompany(c: UpsertCompany): Promise<Company> {
     const existingId = this.companyByNorm.get(c.nameNorm);
@@ -151,7 +153,7 @@ export class InMemoryRepository implements Repository {
   async postingCountsByCompany(): Promise<Record<string, number>> {
     const counts: Record<string, number> = {};
     for (const p of this.postings.values()) {
-      if (p.isActive) counts[p.companyId] = (counts[p.companyId] ?? 0) + 1;
+      if (p.isActive && p.status === "active") counts[p.companyId] = (counts[p.companyId] ?? 0) + 1;
     }
     return counts;
   }
@@ -172,6 +174,10 @@ export class InMemoryRepository implements Repository {
         isActive: true,
         repostCount: existing.repostCount + (reposted ? 1 : 0),
         canonicalId: existing.canonicalId,
+        // re-seen → clear staleness, but a manual `invalidated` decision persists (§3).
+        status: existing.status === "stale" ? "active" : existing.status,
+        invalidReason: existing.invalidReason,
+        invalidatedAt: existing.invalidatedAt,
       };
       this.postings.set(existing.id, updated);
       return updated;
@@ -184,6 +190,9 @@ export class InMemoryRepository implements Repository {
       isActive: true,
       repostCount: 0,
       canonicalId: null,
+      status: "active",
+      invalidReason: null,
+      invalidatedAt: null,
     };
     this.postings.set(posting.id, posting);
     this.postingByAtsKey.set(key, posting.id);
@@ -195,10 +204,12 @@ export class InMemoryRepository implements Repository {
   }
 
   async listActivePostings(): Promise<Posting[]> {
-    return [...this.postings.values()].filter((p) => p.isActive);
+    return [...this.postings.values()].filter((p) => p.isActive && p.status === "active");
   }
   async listPostingsByCompany(companyId: string): Promise<Posting[]> {
-    return [...this.postings.values()].filter((p) => p.companyId === companyId && p.isActive);
+    return [...this.postings.values()].filter(
+      (p) => p.companyId === companyId && p.isActive && p.status === "active",
+    );
   }
 
   async setCanonical(postingId: string, canonicalId: string): Promise<void> {
@@ -216,10 +227,92 @@ export class InMemoryRepository implements Repository {
     for (const p of this.postings.values()) {
       if (p.companyId === companyId && p.isActive && !seen.has(p.atsJobId)) {
         p.isActive = false;
+        // preserve a manual invalidation; otherwise reflect staleness in the status.
+        if (p.status !== "invalidated") p.status = "stale";
         n++;
       }
     }
     return n;
+  }
+
+  // ── posting lifecycle (manual, global) ──
+  async invalidatePosting(id: string, reason: string): Promise<void> {
+    const p = this.postings.get(id);
+    if (!p) return;
+    p.status = "invalidated";
+    p.invalidReason = reason;
+    p.invalidatedAt = new Date();
+  }
+  async revalidatePosting(id: string): Promise<void> {
+    const p = this.postings.get(id);
+    if (!p || p.status !== "invalidated") return;
+    // re-seen since? isActive tells us whether it's still on the board.
+    p.status = p.isActive ? "active" : "stale";
+    p.invalidReason = null;
+    p.invalidatedAt = null;
+  }
+  async listInvalidatedPostings(): Promise<Posting[]> {
+    return [...this.postings.values()].filter((p) => p.status === "invalidated");
+  }
+  async purgeOldPostings(opts: {
+    olderThanDays: number;
+    field?: "lastSeen" | "firstSeen";
+    hard?: boolean;
+  }): Promise<number> {
+    const field = opts.field ?? "lastSeen";
+    const cutoff = Date.now() - opts.olderThanDays * 86_400_000;
+    let n = 0;
+    for (const p of [...this.postings.values()]) {
+      if (p.status === "invalidated") continue; // a manual decision outranks age
+      const t = new Date(p[field] as string | Date).getTime();
+      if (t >= cutoff) continue;
+      if (opts.hard) {
+        this.postings.delete(p.id);
+        this.postingByAtsKey.delete(`${p.atsType}:${p.atsJobId}`);
+      } else {
+        if (!p.isActive && p.status === "stale") continue; // already soft-deleted
+        p.isActive = false;
+        p.status = "stale";
+      }
+      n++;
+    }
+    return n;
+  }
+
+  // ── per-user posting overlay (archive + bookmark) ──
+  private stateFor(tenantId: string, postingId: string) {
+    const key = `${tenantId}:${postingId}`;
+    let s = this.postingState.get(key);
+    if (!s) {
+      s = { archived: false, bookmarked: false };
+      this.postingState.set(key, s);
+    }
+    return s;
+  }
+  async setPostingArchived(tenantId: string, postingId: string, archived: boolean): Promise<void> {
+    this.stateFor(tenantId, postingId).archived = archived;
+  }
+  async setPostingBookmarked(tenantId: string, postingId: string, bookmarked: boolean): Promise<void> {
+    this.stateFor(tenantId, postingId).bookmarked = bookmarked;
+  }
+  async getPostingUserState(tenantId: string): Promise<{ archived: Set<string>; bookmarked: Set<string> }> {
+    const archived = new Set<string>();
+    const bookmarked = new Set<string>();
+    for (const [key, s] of this.postingState) {
+      if (!key.startsWith(`${tenantId}:`)) continue;
+      const postingId = key.slice(tenantId.length + 1);
+      if (s.archived) archived.add(postingId);
+      if (s.bookmarked) bookmarked.add(postingId);
+    }
+    return { archived, bookmarked };
+  }
+  async listArchivedPostings(tenantId: string): Promise<Posting[]> {
+    const { archived } = await this.getPostingUserState(tenantId);
+    return [...archived].map((id) => this.postings.get(id)).filter((p): p is Posting => !!p);
+  }
+  async listBookmarkedPostings(tenantId: string): Promise<Posting[]> {
+    const { bookmarked } = await this.getPostingUserState(tenantId);
+    return [...bookmarked].map((id) => this.postings.get(id)).filter((p): p is Posting => !!p);
   }
 
   async getProfile(tenantId: string): Promise<Profile | null> {
@@ -263,16 +356,23 @@ export class InMemoryRepository implements Repository {
   }
 
   async listMatches(tenantId: string, limit = 50): Promise<Array<Match & { posting: Posting }>> {
+    const { archived } = await this.getPostingUserState(tenantId);
     const list = (this.matches.get(tenantId) ?? [])
       .filter((m) => m.rulePass)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit);
+      .sort((a, b) => b.score - a.score);
     return list
       .map((m) => {
         const posting = this.postings.get(m.postingId);
-        return posting ? { ...m, posting } : null;
+        // feed = active + non-invalidated + non-stale + not archived by this tenant
+        if (!posting || !posting.isActive || posting.status !== "active" || archived.has(posting.id)) return null;
+        return { ...m, posting };
       })
-      .filter((x): x is Match & { posting: Posting } => x !== null);
+      .filter((x): x is Match & { posting: Posting } => x !== null)
+      .slice(0, limit);
+  }
+  async listMatchesForPostings(tenantId: string, postingIds: string[]): Promise<Match[]> {
+    const ids = new Set(postingIds);
+    return (this.matches.get(tenantId) ?? []).filter((m) => ids.has(m.postingId));
   }
 
   async getSalaryCache(key: string): Promise<SalaryCacheEntry | null> {

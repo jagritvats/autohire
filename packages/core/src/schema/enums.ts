@@ -83,6 +83,15 @@ export const LocationMode = z.enum(["remote", "hybrid", "onsite", "unknown"]);
 export type LocationMode = z.infer<typeof LocationMode>;
 
 /**
+ * Posting lifecycle (§3). A single global status alongside the `isActive` freshness
+ * flag: `active` shows in the feed; `invalidated` = manually judged bad (spam/dupe/
+ * fake, reversible); `stale` = disappeared from the ATS (soft-deleted by markStale).
+ * Per-user hide (archive) and bookmark are NOT here — they're a tenant-scoped overlay.
+ */
+export const PostingStatus = z.enum(["active", "invalidated", "stale"]);
+export type PostingStatus = z.infer<typeof PostingStatus>;
+
+/**
  * Geo-restriction tag for "remote" roles — the false-positive minefield (§11.3).
  * A `us_only` remote role gets down-weighted hard, not surfaced as a clean match.
  */

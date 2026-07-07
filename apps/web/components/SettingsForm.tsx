@@ -174,18 +174,23 @@ export function SettingsForm({
   const genDraft = async (kind: string, force: boolean) => {
     setGenBusy(kind);
     setSaved(null);
-    const res = await fetch("/api/generate", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ postingId: null, kind, force }),
-    });
-    const body = await res.json().catch(() => ({}));
-    setGenBusy(null);
-    if (!res.ok) {
-      setSaved(body.error ?? "Generation failed.");
-      return;
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ postingId: null, kind, force }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSaved(body.error ?? "Generation failed.");
+        return;
+      }
+      setDrafts((cur) => ({ ...cur, [kind]: { kind, text: body.text ?? "", model: body.model ?? "echo" } }));
+    } catch (e) {
+      setSaved(`Generation failed — ${(e as Error).message}`);
+    } finally {
+      setGenBusy(null);
     }
-    setDrafts((cur) => ({ ...cur, [kind]: { kind, text: body.text ?? "", model: body.model ?? "echo" } }));
   };
 
   const clearDrafts = async () => {
@@ -335,7 +340,7 @@ export function SettingsForm({
           </label>
           {resumeFile && <span className="file-pill">📄 {resumeFile}</span>}
           {resumeLatex && <span className="src-tier amber">LaTeX template imported</span>}
-          <span className="hint">stored for the autofill agent to attach; text below drives tailoring</span>
+          <span className="hint">drives tailoring in every format — bullets, Markdown, and LaTeX (pasted plain text seeds the Markdown résumé's structure too)</span>
         </div>
         <textarea
           className="big-text"

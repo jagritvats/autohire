@@ -138,7 +138,7 @@ export class PgRepository implements Repository {
   }
   async postingCountsByCompany(): Promise<Record<string, number>> {
     const { rows } = await this.q<{ company_id: string; n: string }>(
-      "select company_id, count(*)::text as n from posting where is_active group by company_id",
+      "select company_id, count(*)::text as n from posting where is_active and status = 'active' group by company_id",
     );
     const out: Record<string, number> = {};
     for (const r of rows) out[r.company_id] = Number(r.n);
@@ -165,6 +165,8 @@ export class PgRepository implements Repository {
          salary_source = excluded.salary_source, salary_confidence = excluded.salary_confidence,
          apply_url = excluded.apply_url, jd_embedding = excluded.jd_embedding,
          last_seen = now(), is_active = true,
+         -- re-seen: clear staleness; a manual invalidated decision persists (§3)
+         status = case when posting.status = 'stale' then 'active' else posting.status end,
          repost_count = posting.repost_count + case when posting.title_norm <> excluded.title_norm then 1 else 0 end
        returning *`,
       [
@@ -183,11 +185,14 @@ export class PgRepository implements Repository {
     return rows[0] ? rowToPosting(rows[0]) : null;
   }
   async listActivePostings(): Promise<Posting[]> {
-    const { rows } = await this.q("select * from posting where is_active = true");
+    const { rows } = await this.q("select * from posting where is_active = true and status = 'active'");
     return rows.map(rowToPosting);
   }
   async listPostingsByCompany(companyId: string): Promise<Posting[]> {
-    const { rows } = await this.q("select * from posting where company_id = $1 and is_active = true order by first_seen desc", [companyId]);
+    const { rows } = await this.q(
+      "select * from posting where company_id = $1 and is_active = true and status = 'active' order by first_seen desc",
+      [companyId],
+    );
     return rows.map(rowToPosting);
   }
   async setCanonical(postingId: string, canonicalId: string): Promise<void> {
@@ -201,10 +206,109 @@ export class PgRepository implements Repository {
   }
   async markStale(companyId: string, seenAtsJobIds: string[]): Promise<number> {
     const { rowCount } = await this.q(
-      "update posting set is_active = false where company_id = $1 and is_active = true and not (ats_job_id = any($2))",
+      `update posting set is_active = false,
+         status = case when status = 'invalidated' then status else 'stale' end
+       where company_id = $1 and is_active = true and not (ats_job_id = any($2))`,
       [companyId, seenAtsJobIds.length ? seenAtsJobIds : [""]],
     );
     return rowCount ?? 0;
+  }
+
+  // ── posting lifecycle (manual, global) ──
+  async invalidatePosting(id: string, reason: string): Promise<void> {
+    await this.q(
+      "update posting set status = 'invalidated', invalid_reason = $2, invalidated_at = now() where id = $1",
+      [id, reason],
+    );
+  }
+  async revalidatePosting(id: string): Promise<void> {
+    // re-seen since? is_active tells us whether it's still on the board.
+    await this.q(
+      `update posting set
+         status = case when is_active then 'active' else 'stale' end,
+         invalid_reason = null, invalidated_at = null
+       where id = $1 and status = 'invalidated'`,
+      [id],
+    );
+  }
+  async listInvalidatedPostings(): Promise<Posting[]> {
+    const { rows } = await this.q("select * from posting where status = 'invalidated' order by invalidated_at desc");
+    return rows.map(rowToPosting);
+  }
+  async purgeOldPostings(opts: {
+    olderThanDays: number;
+    field?: "lastSeen" | "firstSeen";
+    hard?: boolean;
+  }): Promise<number> {
+    const col = opts.field === "firstSeen" ? "first_seen" : "last_seen";
+    // a manual invalidation outranks age; interval built from a bound int param.
+    const cutoff = `now() - ($1 || ' days')::interval`;
+    if (opts.hard) {
+      const { rowCount } = await this.q(
+        `delete from posting where status <> 'invalidated' and ${col} < ${cutoff}`,
+        [String(opts.olderThanDays)],
+      );
+      return rowCount ?? 0;
+    }
+    const { rowCount } = await this.q(
+      `update posting set is_active = false, status = 'stale'
+       where status = 'active' and ${col} < ${cutoff}`,
+      [String(opts.olderThanDays)],
+    );
+    return rowCount ?? 0;
+  }
+
+  // ── per-user posting overlay (archive + bookmark) ──
+  async setPostingArchived(tenantId: string, postingId: string, archived: boolean): Promise<void> {
+    await this.q(
+      `insert into posting_user_state (tenant_id, posting_id, archived, archived_at, updated_at)
+       values ($1, $2, $3, case when $3 then now() else null end, now())
+       on conflict (tenant_id, posting_id) do update set
+         archived = excluded.archived,
+         archived_at = case when excluded.archived then coalesce(posting_user_state.archived_at, now()) else null end,
+         updated_at = now()`,
+      [tenantId, postingId, archived],
+    );
+  }
+  async setPostingBookmarked(tenantId: string, postingId: string, bookmarked: boolean): Promise<void> {
+    await this.q(
+      `insert into posting_user_state (tenant_id, posting_id, bookmarked, bookmarked_at, updated_at)
+       values ($1, $2, $3, case when $3 then now() else null end, now())
+       on conflict (tenant_id, posting_id) do update set
+         bookmarked = excluded.bookmarked,
+         bookmarked_at = case when excluded.bookmarked then coalesce(posting_user_state.bookmarked_at, now()) else null end,
+         updated_at = now()`,
+      [tenantId, postingId, bookmarked],
+    );
+  }
+  async getPostingUserState(tenantId: string): Promise<{ archived: Set<string>; bookmarked: Set<string> }> {
+    const { rows } = await this.q<{ posting_id: string; archived: boolean; bookmarked: boolean }>(
+      "select posting_id, archived, bookmarked from posting_user_state where tenant_id = $1 and (archived or bookmarked)",
+      [tenantId],
+    );
+    const archived = new Set<string>();
+    const bookmarked = new Set<string>();
+    for (const r of rows) {
+      if (r.archived) archived.add(r.posting_id);
+      if (r.bookmarked) bookmarked.add(r.posting_id);
+    }
+    return { archived, bookmarked };
+  }
+  async listArchivedPostings(tenantId: string): Promise<Posting[]> {
+    const { rows } = await this.q(
+      `select p.* from posting p join posting_user_state s on s.posting_id = p.id
+       where s.tenant_id = $1 and s.archived order by s.archived_at desc nulls last`,
+      [tenantId],
+    );
+    return rows.map(rowToPosting);
+  }
+  async listBookmarkedPostings(tenantId: string): Promise<Posting[]> {
+    const { rows } = await this.q(
+      `select p.* from posting p join posting_user_state s on s.posting_id = p.id
+       where s.tenant_id = $1 and s.bookmarked order by s.bookmarked_at desc nulls last`,
+      [tenantId],
+    );
+    return rows.map(rowToPosting);
   }
 
   // ── profile / config / evidence ──
@@ -295,14 +399,25 @@ export class PgRepository implements Repository {
     }
   }
   async listMatches(tenantId: string, limit = 50): Promise<Array<Match & { posting: Posting }>> {
+    // feed = rule-passing + active + non-invalidated/stale + not archived by this tenant
     const { rows } = await this.q(
       `select m.*, row_to_json(p.*) as posting from match m
        join posting p on p.id = m.posting_id
-       where m.tenant_id = $1 and m.rule_pass = true and p.is_active = true
+       left join posting_user_state s on s.posting_id = p.id and s.tenant_id = m.tenant_id
+       where m.tenant_id = $1 and m.rule_pass = true and p.is_active = true and p.status = 'active'
+         and coalesce(s.archived, false) = false
        order by m.score desc limit $2`,
       [tenantId, limit],
     );
     return rows.map((r) => ({ ...rowToMatch(r), posting: rowToPosting(r.posting) }));
+  }
+  async listMatchesForPostings(tenantId: string, postingIds: string[]): Promise<Match[]> {
+    if (postingIds.length === 0) return [];
+    const { rows } = await this.q(
+      "select * from match where tenant_id = $1 and posting_id = any($2)",
+      [tenantId, postingIds],
+    );
+    return rows.map(rowToMatch);
   }
 
   // ── applications ──
@@ -536,6 +651,7 @@ function rowToPosting(r: pg.QueryResultRow): Posting {
     levelBand: r.level_band, jdText: r.jd_text, jdSkills: r.jd_skills ?? [], requirements: parseJson(r.requirements, []),
     location, salary, applyUrl: r.apply_url, jdEmbedding: parseJson(r.jd_embedding, null),
     firstSeen: r.first_seen, lastSeen: r.last_seen, isActive: r.is_active, repostCount: r.repost_count,
+    status: r.status ?? "active", invalidReason: r.invalid_reason ?? null, invalidatedAt: r.invalidated_at ?? null,
     canonicalId: r.canonical_id, dedupKey: r.dedup_key,
   };
 }

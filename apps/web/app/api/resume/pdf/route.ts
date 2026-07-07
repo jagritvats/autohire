@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
-import { DEFAULT_TENANT, defaultProfile } from "@jobflow/pipeline";
-import type { Profile } from "@jobflow/core";
+import { DEFAULT_TENANT } from "@jobflow/pipeline";
+import type { Application } from "@jobflow/core";
 import { getRepo, ensureTenant } from "@/lib/repo";
 import { generateTailored } from "@/lib/tailor";
 import { compileLatex } from "@/lib/latex";
@@ -56,9 +57,15 @@ export async function POST(req: Request) {
       await writeFile(path, result.pdf);
       const repo = await getRepo();
       await ensureTenant(repo);
-      const current = (await repo.getProfile(DEFAULT_TENANT)) ?? defaultProfile();
-      const next: Profile = { ...current, prefs: { ...current.prefs, contact: { ...current.prefs.contact, resumePath: path } } };
-      await repo.saveProfile(next);
+      // attach to THIS application (not the global profile) so tailoring role B doesn't
+      // clobber role A's attachment; the agent prefers this over the base résumé.
+      const existing = await repo.getApplicationByPosting(DEFAULT_TENANT, postingId);
+      const app: Application = existing ?? {
+        id: randomUUID(), tenantId: DEFAULT_TENANT, postingId, status: "drafting",
+        appliedVia: null, tailoredResumeUrl: null, resumeVariant: null, answers: {},
+        submittedAt: null, nextAction: null, nextActionAt: null, outcome: null,
+      };
+      await repo.upsertApplication({ ...app, tailoredResumeUrl: path });
     } catch {
       /* best-effort; the PDF still streams back */
     }

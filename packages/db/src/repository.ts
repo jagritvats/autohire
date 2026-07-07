@@ -52,6 +52,19 @@ export interface Repository {
   /** soft-delete postings not seen in this poll of a company (role filled/pulled). */
   markStale(companyId: string, seenAtsJobIds: string[]): Promise<number>;
 
+  // ── posting lifecycle (manual, shared-global; §3) ──
+  /** manually mark a posting invalid (spam/dupe/fake) with a reason — reversible. */
+  invalidatePosting(id: string, reason: string): Promise<void>;
+  /** undo an invalidation → back to active (no-op if it wasn't invalidated). */
+  revalidatePosting(id: string): Promise<void>;
+  listInvalidatedPostings(): Promise<Posting[]>;
+  /**
+   * Bulk soft-delete (default) or hard-purge postings older than a threshold, by
+   * `lastSeen` (default) or `firstSeen`. Soft = mark stale + inactive; hard = delete.
+   * Never touches invalidated postings (a manual decision outranks age). Returns count.
+   */
+  purgeOldPostings(opts: PurgeOptions): Promise<number>;
+
   // ── profile / config / evidence (tenant-scoped) ──
   getProfile(tenantId: string): Promise<Profile | null>;
   saveProfile(p: Profile): Promise<Profile>;
@@ -62,9 +75,21 @@ export interface Repository {
   saveEvidence(e: Evidence): Promise<Evidence>;
   deleteEvidence(tenantId: string, id: string): Promise<void>;
 
+  // ── per-user posting overlay: archive + bookmark (tenant-scoped, §5/§6.1) ──
+  /** archive/unarchive a posting for this tenant — retained but hidden from the feed. */
+  setPostingArchived(tenantId: string, postingId: string, archived: boolean): Promise<void>;
+  /** bookmark/unbookmark a posting for this tenant. */
+  setPostingBookmarked(tenantId: string, postingId: string, bookmarked: boolean): Promise<void>;
+  listArchivedPostings(tenantId: string): Promise<Posting[]>;
+  listBookmarkedPostings(tenantId: string): Promise<Posting[]>;
+  /** the tenant's archived/bookmarked posting-id sets — for feed filtering + badges. */
+  getPostingUserState(tenantId: string): Promise<{ archived: Set<string>; bookmarked: Set<string> }>;
+
   // ── matches (tenant-scoped) ──
   saveMatches(matches: Match[]): Promise<void>;
   listMatches(tenantId: string, limit?: number): Promise<Array<Match & { posting: Posting }>>;
+  /** matches for a specific posting set (enriches archived/bookmark views with score). */
+  listMatchesForPostings(tenantId: string, postingIds: string[]): Promise<Match[]>;
 
   // ── salary cache (memoize role+location lookups with TTL, §11.4) ──
   getSalaryCache(key: string): Promise<SalaryCacheEntry | null>;
@@ -114,6 +139,15 @@ export interface EnqueueJob {
   payload?: Record<string, unknown>;
 }
 
+export interface PurgeOptions {
+  /** age threshold in days. */
+  olderThanDays: number;
+  /** which timestamp to compare against (default lastSeen). */
+  field?: "lastSeen" | "firstSeen";
+  /** true → DELETE the rows; false/undefined → soft-delete (mark stale + inactive). */
+  hard?: boolean;
+}
+
 export interface CompanyEnrichmentPatch {
   compMedian?: number | null;
   compCurrency?: string | null;
@@ -151,6 +185,9 @@ export interface UpsertCompany {
   pollCadence?: Company["pollCadence"];
 }
 
-/** Fields the pipeline supplies; repo assigns id/firstSeen/lastSeen/isActive. */
+/** Fields the pipeline supplies; repo assigns id/firstSeen/lastSeen/isActive/lifecycle. */
 export interface NewPosting
-  extends Omit<Posting, "id" | "firstSeen" | "lastSeen" | "isActive" | "repostCount" | "canonicalId"> {}
+  extends Omit<
+    Posting,
+    "id" | "firstSeen" | "lastSeen" | "isActive" | "repostCount" | "canonicalId" | "status" | "invalidReason" | "invalidatedAt"
+  > {}

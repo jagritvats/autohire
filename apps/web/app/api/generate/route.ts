@@ -32,7 +32,9 @@ export async function POST(req: Request) {
     const draft = await generateTailored(parsed.data);
     return NextResponse.json(draft);
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 400 });
+    // ProviderError carries a friendly userMessage + raw detail (§ retries/progress).
+    const pe = e as Error & { userMessage?: string; detail?: string; status?: number };
+    return NextResponse.json({ error: pe.userMessage ?? pe.message, detail: pe.detail }, { status: pe.status && pe.status < 500 ? pe.status : 502 });
   }
 }
 

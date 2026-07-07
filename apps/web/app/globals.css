@@ -432,6 +432,28 @@ a.company:hover { color: var(--signal); }
 .track:hover { color: var(--ink); border-color: var(--ink-dim); }
 .track.tracked { color: var(--signal); border-color: var(--signal-dim); cursor: default; }
 
+/* ── card manage buttons (bookmark / archive / invalidate) ── */
+.mini {
+  font-family: var(--mono); font-size: 11px; padding: 5px 9px; border-radius: var(--radius);
+  border: 1px solid var(--line); color: var(--ink-faint); background: transparent; cursor: pointer; white-space: nowrap;
+  transition: all 0.14s ease;
+}
+.mini:hover { color: var(--ink); border-color: var(--line-bright); }
+.mini[data-on="true"] { color: var(--signal); border-color: var(--signal-dim); background: rgba(94, 242, 160, 0.08); }
+.mini.danger:hover { color: var(--red); border-color: var(--red); }
+.mini.danger[data-on="true"] { color: var(--red); border-color: var(--red); background: rgba(242, 113, 94, 0.08); }
+.flag.invalid { color: var(--red); border-color: var(--red); background: rgba(242, 113, 94, 0.07); }
+.flag.invalid::before { content: "⊘ "; opacity: 0.8; }
+
+/* ── feed view tabs (feed / bookmarks / archived / invalidated) ── */
+.view-tabs { display: flex; gap: 8px; padding: 12px 22px 0; flex-wrap: wrap; }
+.view-tab {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; padding: 5px 12px; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--ink-faint); background: transparent; cursor: pointer; transition: all 0.14s ease;
+}
+.view-tab:hover { color: var(--ink); border-color: var(--line-bright); }
+.view-tab[data-on="true"] { color: var(--signal); border-color: var(--signal-dim); background: rgba(94, 242, 160, 0.08); }
+
 /* ── company detail ── */
 .company-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
 @media (max-width: 760px) { .company-grid { grid-template-columns: 1fr; } }
@@ -588,6 +610,18 @@ a.company:hover { color: var(--signal); }
 .tailor-app-msg { margin-top: 10px; font-size: 12px; color: var(--signal); border: 1px solid var(--signal-dim); background: rgba(94,242,160,.06); border-radius: 6px; padding: 8px 12px; }
 
 /* ── latex résumé block ── */
-.latex-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.latex-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; align-items: center; }
 .latex-template summary { font-size: 12px; color: var(--ink-dim); cursor: pointer; width: fit-content; }
 .latex-template summary:hover { color: var(--signal); }
+
+/* ── résumé format panes (Bullets · Markdown · LaTeX) + progress ── */
+.pane { margin-top: 4px; }
+.pane-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.pane-head .hint { max-width: 62ch; }
+.pane-btns { margin-left: auto; white-space: nowrap; }
+.md-block { display: flex; flex-direction: column; gap: 8px; }
+.md-block .src-preview pre { max-height: 380px; }
+.cmd.danger { border-color: var(--amber-dim); color: var(--amber); }
+.cmd.danger:hover { color: var(--red); border-color: var(--red); background: rgba(242,113,94,.08); }
+/* the gen-meta line doubles as the live progress readout (label · Ns · cancel) */
+.gen-meta .cmd { margin-left: 6px; padding: 2px 8px; }

@@ -8,6 +8,7 @@ import {
   JobType,
   LevelBand,
   LocationMode,
+  PostingStatus,
   RemoteGeo,
   RequirementStrength,
   RoleArchetype,
@@ -129,6 +130,12 @@ export const Posting = z.object({
   lastSeen: ts,
   isActive: z.boolean().default(true),
   repostCount: z.number().int().default(0),
+  /** manual lifecycle (§3). Only `active` reaches the feed; `invalidated`/`stale`
+   *  are excluded. `isActive` stays the "seen in the latest poll" freshness flag. */
+  status: PostingStatus.default("active"),
+  /** why it was manually invalidated (spam/dupe/fake), null unless invalidated. */
+  invalidReason: z.string().nullable().default(null),
+  invalidatedAt: ts.nullable().default(null),
 
   // dedup (§ Deduper) — self-ref to canonical winner
   canonicalId: uuid.nullable().default(null),
@@ -201,6 +208,7 @@ export type Profile = z.infer<typeof Profile>;
 export const GenerationKind = z.enum([
   "resume",
   "resume_latex",
+  "resume_md",
   "why_here",
   "interesting_problem",
   "about_blurb",

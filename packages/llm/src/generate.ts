@@ -3,6 +3,7 @@ import { isLatexDocument, type ConnectedContext, type Evidence, type Posting, ty
 import type { LlmProvider } from "./provider.js";
 import { HONEST_VOICE, backgroundBlock, connectedContextBlock, evidenceBlock, selectEvidence } from "./prompts.js";
 import { renderBuiltinResume, stripLatexFences } from "./latex.js";
+import { renderBuiltinResumeMarkdown, stripCodeFences, looksLikeMarkdownResume } from "./markdown.js";
 
 /**
  * Evidence-grounded generation (§4). Resume bullets + application answers, every
@@ -44,14 +45,16 @@ ${connectedContextBlock(contexts)}
 
 Return JSON: { "yc_startup": [..], "enterprise": [..], "product": [..], "atsKeywordCoverage": 0..1, "missingKeywords": [..] }`;
 
-  const raw = await llm.complete({
-    system: `${HONEST_VOICE}\nYou tailor resumes. Each bullet maps to a specific evidence entry; never invent.`,
-    prompt,
-    task: "strong",
-    json: true,
-    maxTokens: 1200,
-  });
+  // one try covers BOTH the network call and the parse, so a transient/timeout
+  // failure degrades to the deterministic evidence bullets instead of throwing (§ retries).
   try {
+    const raw = await llm.complete({
+      system: `${HONEST_VOICE}\nYou tailor resumes. Each bullet maps to a specific evidence entry; never invent.`,
+      prompt,
+      task: "strong",
+      json: true,
+      maxTokens: 1200,
+    });
     return ResumeVariants.parse(JSON.parse(extractJson(raw)));
   } catch {
     return {
@@ -125,6 +128,66 @@ ${connectedContextBlock(contexts)}`;
   }
   const tex = stripLatexFences(raw);
   return isLatexDocument(tex) ? tex : fallback();
+}
+
+// ── tailored Markdown / plain-text résumé (§ Customize — the no-TeX common format) ──
+/**
+ * Produce a tailored Markdown résumé document. If the profile has a base résumé (pasted
+ * or extracted), the LLM preserves its structure and rewrites summary+bullets to the JD;
+ * otherwise it fills a clean layout. Non-résumé output (e.g. echo) falls back to the
+ * deterministic builder, so the result is always a usable document. HONEST_VOICE + evidence.
+ */
+export async function tailorResumeMarkdown(
+  llm: LlmProvider,
+  profile: Profile,
+  evidence: Evidence[],
+  posting: Posting,
+  contexts: ConnectedContext[] = [],
+): Promise<string> {
+  const relevant = selectEvidence(evidence, posting.jdSkills, 8);
+  const base = (profile.masterResume ?? "").trim();
+  const fallback = () => renderBuiltinResumeMarkdown(profile, evidence, posting);
+
+  const prompt = base
+    ? `Rewrite this candidate's résumé as clean GitHub-flavored Markdown tailored to the JD, using ONLY the evidence.
+PRESERVE the base résumé's section order and structure; rewrite the summary + experience/project bullets to
+target the JD. Do not invent. Use "# " for the name, "## " for section headers, "- " for bullets. Return ONLY the Markdown.
+
+BASE RÉSUMÉ:
+${base.slice(0, 4000)}
+
+JD: ${posting.title} @ ${posting.companyName}
+JD skills: ${posting.jdSkills.join(", ")}
+JD excerpt: ${posting.jdText.slice(0, 1200)}
+
+EVIDENCE BANK:
+${evidenceBlock(relevant)}
+${connectedContextBlock(contexts)}`
+    : `Write a clean one-page résumé in GitHub-flavored Markdown tailored to the JD, using ONLY the evidence.
+Structure: "# Name", a contact line, "## Summary", "## Skills", "## Experience & Projects" ("- " bullets). Return ONLY the Markdown.
+
+CONTACT: ${[profile.prefs.contact.firstName, profile.prefs.contact.lastName].filter(Boolean).join(" ")} · ${profile.prefs.contact.email} · ${profile.prefs.contact.github} · ${profile.prefs.contact.linkedin}
+JD: ${posting.title} @ ${posting.companyName}
+JD skills: ${posting.jdSkills.join(", ")}
+
+EVIDENCE BANK:
+${evidenceBlock(relevant)}
+${backgroundBlock(profile)}
+${connectedContextBlock(contexts)}`;
+
+  let raw: string;
+  try {
+    raw = await llm.complete({
+      system: `${HONEST_VOICE}\nYou are a résumé writer. Output clean Markdown only; never invent — ground every bullet in the evidence.`,
+      prompt,
+      task: "strong",
+      maxTokens: 2000,
+    });
+  } catch {
+    return fallback();
+  }
+  const md = stripCodeFences(raw);
+  return looksLikeMarkdownResume(md) ? md : fallback();
 }
 
 // ── application answers ("Why X?", "hardest problem") ──

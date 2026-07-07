@@ -8,6 +8,7 @@ import {
   createProvider,
   tailorResume,
   tailorResumeLatex,
+  tailorResumeMarkdown,
   type ResumeVariants,
 } from "@jobflow/llm";
 import type { ConnectedContext, Evidence, Generation, GenerationKind, Posting, Profile } from "@jobflow/core";
@@ -21,7 +22,7 @@ import { getRepo, ensureTenant } from "./repo.js";
  */
 
 /** Canonical questions for the fixed kinds — kept stable so the cache slot is stable. */
-export const KIND_QUESTION: Record<Exclude<GenerationKind, "answer" | "resume" | "resume_latex">, string> = {
+export const KIND_QUESTION: Record<Exclude<GenerationKind, "answer" | "resume" | "resume_latex" | "resume_md">, string> = {
   why_here: "Why do you want to work here?",
   interesting_problem: "Describe a unique or interesting problem you've solved, and how.",
   about_blurb: "Write a short 'about me' for a job application.",
@@ -51,7 +52,7 @@ export interface GenerationDTO {
 /** Resolve the slot prompt for a kind (free-form answers carry their own question). */
 function slotPrompt(kind: GenerationKind, question?: string): string {
   if (kind === "answer") return (question ?? "").trim();
-  if (kind === "resume" || kind === "resume_latex") return "";
+  if (kind === "resume" || kind === "resume_latex" || kind === "resume_md") return "";
   return KIND_QUESTION[kind];
 }
 
@@ -178,6 +179,10 @@ async function runGenerator(
   if (kind === "resume_latex") {
     if (!posting) throw new Error("LaTeX résumé tailoring needs a posting");
     return tailorResumeLatex(llm, profile, evidence, posting, contexts);
+  }
+  if (kind === "resume_md") {
+    if (!posting) throw new Error("Markdown résumé tailoring needs a posting");
+    return tailorResumeMarkdown(llm, profile, evidence, posting, contexts);
   }
   // posting-specific questions go through answerQuestion; generic ones through answerGeneric
   if (posting && kind !== "about_blurb") {

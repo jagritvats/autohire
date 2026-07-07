@@ -17,6 +17,8 @@ export interface CompletionRequest {
   temperature?: number;
   /** ask the provider for strict JSON; the caller still validates with Zod */
   json?: boolean;
+  /** per-call network timeout (ms); provider aborts + throws a typed timeout on expiry. */
+  timeoutMs?: number;
 }
 
 export interface LlmProvider {

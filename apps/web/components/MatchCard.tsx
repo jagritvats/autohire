@@ -6,10 +6,16 @@ export function MatchCard({
   card,
   index,
   onTrack,
+  onBookmark,
+  onArchive,
+  onInvalidate,
 }: {
   card: FeedCard;
   index: number;
   onTrack?: (card: FeedCard) => void;
+  onBookmark?: (card: FeedCard) => void;
+  onArchive?: (card: FeedCard) => void;
+  onInvalidate?: (card: FeedCard) => void;
 }) {
   const band = card.score >= 78 ? "s-hi" : card.score >= 60 ? "s-mid" : "s-lo";
   const geoBad = card.location.remoteGeo === "us_only" || card.location.remoteGeo === "eu_only";
@@ -92,11 +98,32 @@ export function MatchCard({
             ))}
           </div>
         )}
+
+        {card.invalidated && card.invalidReason && (
+          <div className="flags">
+            <span className="flag invalid">invalidated · {card.invalidReason}</span>
+          </div>
+        )}
       </div>
 
       <div className="actions">
         <span className="arch">{card.archetype.replace(/_/g, "/")}</span>
         <div className="action-btns">
+          {onBookmark && (
+            <button className="mini" data-on={card.bookmarked} onClick={() => onBookmark(card)} title={card.bookmarked ? "Remove bookmark" : "Bookmark"}>
+              {card.bookmarked ? "★ saved" : "☆ save"}
+            </button>
+          )}
+          {onArchive && (
+            <button className="mini" onClick={() => onArchive(card)} title={card.archived ? "Unarchive" : "Archive (hide from feed)"}>
+              {card.archived ? "⤴ unarchive" : "⤓ archive"}
+            </button>
+          )}
+          {onInvalidate && (
+            <button className="mini danger" data-on={card.invalidated} onClick={() => onInvalidate(card)} title={card.invalidated ? "Restore" : "Mark invalid (spam/dupe/fake)"}>
+              {card.invalidated ? "↺ restore" : "⊘ invalid"}
+            </button>
+          )}
           <a className="tailor-link" href={`/tailor/${card.id}`} title="Tailor resume + answers for this role">
             ✎ tailor
           </a>

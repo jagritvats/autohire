@@ -94,6 +94,8 @@ async function formFill(repo: Repository, job: Job, ctx: HandlerCtx): Promise<Re
   const app = await repo.getApplicationByPosting(DEFAULT_TENANT, postingId);
   const answers = (job.payload.answers as Record<string, string> | undefined) ?? app?.answers ?? {};
   const applicant = mapContactToApplicant(profile.prefs.contact, answers);
+  // prefer this application's tailored PDF; fall back to the base résumé (§ per-role attach).
+  if (app?.tailoredResumeUrl) applicant.resumePath = app.tailoredResumeUrl;
   if (!applicant.email) throw new Error("No contact email set — fill your contact details in Settings first.");
 
   const ats = posting.atsType === "unknown" ? "greenhouse" : posting.atsType;

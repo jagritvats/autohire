@@ -1,5 +1,6 @@
 import { localEmbed } from "@jobflow/core";
 import type { CompletionRequest, LlmProvider, ProviderConfig } from "../provider.js";
+import { fetchWithTimeout, mapProviderError, retryAfterMs, withRetry } from "../http.js";
 
 /** Claude via the Messages API. Strong model for re-rank/answers; cheap for normalize. */
 export class AnthropicProvider implements LlmProvider {
@@ -21,24 +22,31 @@ export class AnthropicProvider implements LlmProvider {
     const system = req.json
       ? `${req.system ?? ""}\nRespond with ONLY valid JSON, no prose, no markdown fences.`.trim()
       : req.system;
-    const res = await fetch(`${this.baseUrl}/messages`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": this.apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: req.maxTokens ?? 1024,
-        temperature: req.temperature ?? 0.3,
-        ...(system ? { system } : {}),
-        messages: [{ role: "user", content: req.prompt }],
-      }),
+    const body = JSON.stringify({
+      model,
+      max_tokens: req.maxTokens ?? 1024,
+      temperature: req.temperature ?? 0.3,
+      ...(system ? { system } : {}),
+      messages: [{ role: "user", content: req.prompt }],
     });
-    if (!res.ok) throw new Error(`Anthropic ${res.status}: ${await res.text()}`);
-    const data = (await res.json()) as { content?: Array<{ text?: string }> };
-    return data.content?.map((c) => c.text ?? "").join("") ?? "";
+    return withRetry(
+      async () => {
+        const res = await fetchWithTimeout(
+          `${this.baseUrl}/messages`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-api-key": this.apiKey, "anthropic-version": "2023-06-01" },
+            body,
+          },
+          req.timeoutMs ?? 45_000,
+          "Anthropic",
+        );
+        if (!res.ok) throw mapProviderError(res.status, await res.text(), "Anthropic", retryAfterMs(res));
+        const data = (await res.json()) as { content?: Array<{ text?: string }> };
+        return data.content?.map((c) => c.text ?? "").join("") ?? "";
+      },
+      { name: "Anthropic" },
+    );
   }
 
   /** Anthropic has no public embeddings endpoint → use the local embedder.
