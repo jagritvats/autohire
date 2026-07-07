@@ -34,8 +34,13 @@ const ARCHETYPE_PATTERNS: Array<[RegExp, RoleArchetype]> = [
   [/\b(software engineer|sde|swe|developer|programmer)\b/i, "backend"],
 ];
 
-/** Words we strip so two postings of the same role collapse to one canonical title. */
+/** Words we strip so two postings of the same role collapse to one canonical title.
+ *  Seniority is stripped here because it's captured separately in `levelBand` — so
+ *  "Sr. Backend Engineer" and "Backend Engineer" share a titleNorm and dedup. */
 const NOISE = [
+  /\b(sr\.?|snr|senior|jr\.?|junior|staff|principal|lead|mid[ -]?level|entry[ -]?level|associate)\b/gi,
+  /\b(ii|iii|iv)\b/gi, // roman level suffixes: SDE II, Engineer III (keeps the role word)
+  /\b\d\b/g, // standalone digit level: "SDE 2"
   /\b(remote|hybrid|onsite|on-site)\b/gi,
   /\b(full[ -]?time|part[ -]?time|contract|permanent)\b/gi,
   /\(.*?\)/g, // parentheticals: "(Backend)", "(f/m/d)", "(Remote, US)"

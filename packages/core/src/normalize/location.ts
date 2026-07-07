@@ -22,7 +22,7 @@ const EU_ONLY_RE = /\b(remote[ ,-]*(within )?(the )?(eu|europe|emea)|eu[ -]?only
 const INDIA_OK_RE = /\b(remote[ ,-]*india|india[ -]?(based|remote)|anywhere in india)\b/i;
 const WORLDWIDE_RE = /\b(remote[ ,-]*(anywhere|worldwide|global)|work from anywhere|fully remote)\b/i;
 
-const SPONSORSHIP_NEG = /\b(no (visa )?sponsorship|not (able|eligible) to sponsor|do not (provide|offer) sponsorship|without sponsorship)\b/i;
+const SPONSORSHIP_NEG = /(no (visa )?sponsorship|not (able|eligible) to sponsor|(do|does|will|can) ?n[o']t (provide|offer|sponsor)[^.]{0,20}sponsor|without sponsorship|unable to sponsor|cannot sponsor)/i;
 const SPONSORSHIP_POS = /\b(visa sponsorship|will sponsor|relocation (provided|assistance|support)|sponsorship available)\b/i;
 
 const TZ_HINTS: Array<[RegExp, string]> = [

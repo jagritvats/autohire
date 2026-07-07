@@ -2,7 +2,15 @@ import type { FeedCard } from "@/lib/feed";
 
 const TIER3 = new Set(["naukri", "ambitionbox", "glassdoor", "linkedin"]);
 
-export function MatchCard({ card, index }: { card: FeedCard; index: number }) {
+export function MatchCard({
+  card,
+  index,
+  onTrack,
+}: {
+  card: FeedCard;
+  index: number;
+  onTrack?: (card: FeedCard) => void;
+}) {
   const band = card.score >= 78 ? "s-hi" : card.score >= 60 ? "s-mid" : "s-lo";
   const geoBad = card.location.remoteGeo === "us_only" || card.location.remoteGeo === "eu_only";
   const locText =
@@ -20,11 +28,14 @@ export function MatchCard({ card, index }: { card: FeedCard; index: number }) {
       <div className="body">
         <div className="row1">
           <span className="title">{card.title}</span>
-          <span className="company">{card.company}</span>
+          <a className="company" href={`/company/${card.companyId}`}>
+            {card.company}
+          </a>
           <span className="dot">·</span>
           <span className="loc">
             {geoBad ? <span className="geo-bad">{locText}</span> : locText}
           </span>
+          {card.applied && <span className="applied-badge">✓ in CRM</span>}
         </div>
 
         <div className="meta">
@@ -39,8 +50,10 @@ export function MatchCard({ card, index }: { card: FeedCard; index: number }) {
           )}
           {TIER3.has(card.source) && <span className="tag tier3">tier-3 · local</span>}
           {card.comp && (
-            <span className="tag comp">
-              {card.comp.label} <span className="conf">· {card.comp.confidence}</span>
+            <span className="tag comp" title={`source: ${card.comp.source}`}>
+              {isEstimate(card.comp.source) ? "~" : ""}
+              {card.comp.label}{" "}
+              <span className="conf">· {card.comp.confidence}{isEstimate(card.comp.source) ? " est" : ""}</span>
             </span>
           )}
         </div>
@@ -83,13 +96,26 @@ export function MatchCard({ card, index }: { card: FeedCard; index: number }) {
 
       <div className="actions">
         <span className="arch">{card.archetype.replace(/_/g, "/")}</span>
-        {card.applyUrl ? (
-          <a className="apply" href={card.applyUrl} target="_blank" rel="noreferrer">
-            Apply →
+        <div className="action-btns">
+          <a className="tailor-link" href={`/tailor/${card.id}`} title="Tailor resume + answers for this role">
+            ✎ tailor
           </a>
-        ) : (
-          <span className="apply disabled">no link</span>
-        )}
+          {onTrack &&
+            (card.applied ? (
+              <span className="track tracked">✓ tracked</span>
+            ) : (
+              <button className="track" onClick={() => onTrack(card)}>
+                + track
+              </button>
+            ))}
+          {card.applyUrl ? (
+            <a className="apply" href={card.applyUrl} target="_blank" rel="noreferrer">
+              Apply →
+            </a>
+          ) : (
+            <span className="apply disabled">no link</span>
+          )}
+        </div>
       </div>
     </article>
   );
@@ -100,4 +126,8 @@ function cap(s: string) {
 }
 function isLangNote(note: string) {
   return /primary language/i.test(note);
+}
+function isEstimate(source: string) {
+  // a modeled comp (adzuna/levels.fyi) is never shown as fact — mark it "~ … est".
+  return source !== "jd_direct" && source !== "none";
 }

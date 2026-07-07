@@ -1,0 +1,24 @@
+{
+  "name": "@jobflow/agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@jobflow/adapters": "workspace:*",
+    "@jobflow/autofill": "workspace:*",
+    "@jobflow/core": "workspace:*",
+    "@jobflow/db": "workspace:*",
+    "@jobflow/llm": "workspace:*",
+    "@jobflow/pipeline": "workspace:*"
+  },
+  "optionalDependencies": {
+    "playwright": "^1.49.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
+  }
+}

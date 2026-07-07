@@ -3,6 +3,7 @@ import {
   ingestCompany,
   ingestFromAdapter,
   rebuildMatches,
+  enrichTopMatches,
   DEFAULT_TENANT,
   SEED_COMPANIES,
   defaultProfile,
@@ -10,7 +11,11 @@ import {
 } from "@jobflow/pipeline";
 import { cloudAdapters } from "@jobflow/adapters";
 import { createProvider, providerEmbedder } from "@jobflow/llm";
+import { loadRootEnv } from "@jobflow/db";
 import { makeRepository } from "./repo.js";
+import { runLoop } from "./jobs.js";
+
+loadRootEnv();
 
 /**
  * Cloud orchestrator (§2, §8). The cron entrypoint. CRITICAL INVARIANT: this only
@@ -64,11 +69,29 @@ async function rank(): Promise<void> {
   log(`rank: ${r.scored} scored → ${r.ranked} ranked, ${r.excluded} excluded`);
 }
 
+async function enrich(): Promise<void> {
+  const repo = await makeRepository();
+  const r = await enrichTopMatches(repo, { tenantId: DEFAULT_TENANT, limit: 40 });
+  log(`enrich: ${r.companiesEnriched} companies (comp benchmark), ${r.postingsEstimated} postings estimated · adzuna=${r.adzunaUsed}`);
+}
+
 async function main(): Promise<void> {
   const cmd = process.argv[2] ?? "all";
+  // `runner` = long-lived drain loop for web-enqueued jobs (the command plane).
+  // `runner --once` drains the current backlog and exits (good for cron + CI).
+  if (cmd === "runner") {
+    const repo = await makeRepository();
+    const ctx = { embedder: providerEmbedder(createProvider()) };
+    const once = process.argv.includes("--once");
+    log(`job runner started${once ? " (once)" : ""}`);
+    await runLoop(repo, ctx, { once, log: (m) => log(m) });
+    return;
+  }
+  // one-shot orchestration (the cron path)
   if (cmd === "discover" || cmd === "all") await discover();
   if (cmd === "poll" || cmd === "all") await poll();
   if (cmd === "rank" || cmd === "all") await rank();
+  if (cmd === "enrich" || cmd === "all") await enrich();
 }
 
 main().catch((e) => {

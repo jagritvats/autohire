@@ -9,6 +9,7 @@
   },
   "packageManager": "pnpm@9.15.9",
   "scripts": {
+    "setup": "pnpm install && pnpm -r build",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
@@ -16,8 +17,17 @@
     "ingest": "pnpm --filter @jobflow/cli ingest",
     "match": "pnpm --filter @jobflow/cli match",
     "demo": "pnpm --filter @jobflow/cli demo",
+    "dev": "pnpm --filter @jobflow/web dev",
     "web": "pnpm --filter @jobflow/web dev",
-    "db:migrate": "pnpm --filter @jobflow/db migrate"
+    "start": "pnpm --filter @jobflow/web start",
+    "worker": "pnpm --filter @jobflow/worker runner",
+    "agent": "pnpm --filter @jobflow/agent start",
+    "db:migrate": "pnpm --filter @jobflow/db migrate",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f web worker",
+    "docker:migrate": "docker compose run --rm migrate",
+    "docker:rebuild": "docker compose build --no-cache"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

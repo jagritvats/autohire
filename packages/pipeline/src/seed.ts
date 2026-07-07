@@ -42,12 +42,24 @@ export function defaultProfile(): Profile {
       "idempotent ledgers, double-entry accounting, production LLM infra. Built NexusAlgo " +
       "(production LLM trading infra with live P&L), Verdict (full-stack ship-fast), Synapse, " +
       "and contributed to kafka-ui. Strong on systems design, concurrency, and fintech domain.",
+    resumeLatex: "",
+    aboutText: "",
     profileEmbedding: null,
     yoe: 2,
     levelBand: "mid",
     prefs: {
       salaryFloor: 2_000_000,
       currency: "INR",
+      contact: {
+        firstName: "",
+        lastName: "",
+        email: "",
+        phone: "",
+        linkedin: "",
+        github: "",
+        portfolio: "",
+        resumePath: "",
+      },
       locationWeights: [
         { label: "remote", weight: 1.0 },
         { label: "bengaluru", weight: 0.85 },

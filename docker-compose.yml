@@ -1,0 +1,84 @@
+# JobFlow stack — Postgres + migrate + web + worker, up with one command:
+#   docker compose up -d --build      (or: pnpm docker:up)
+#
+# Secrets come from your gitignored root .env via compose interpolation (${VAR});
+# DATABASE_URL is fixed to the `db` service here. The local AGENT (Tier-3 + form-fill)
+# is intentionally NOT a service — it runs on your machine: `pnpm agent`.
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: jobflow
+    ports:
+      - "5433:5432" # host 5433 → avoids clashing with a local PG / Supabase :55322
+    volumes:
+      - jobflow-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d jobflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # one-shot: applies every migration in packages/db/migrations, then exits
+  migrate:
+    build:
+      context: .
+      target: migrate
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/jobflow
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  web:
+    build:
+      context: .
+      target: web
+      args:
+        INSTALL_LATEX: ${INSTALL_LATEX:-1} # 0 = skip TeX (smaller image; .tex fallback)
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/jobflow
+      NODE_ENV: production
+      LLM_PROVIDER: ${LLM_PROVIDER:-echo}
+      LLM_MODEL_CHEAP: ${LLM_MODEL_CHEAP:-}
+      LLM_MODEL_STRONG: ${LLM_MODEL_STRONG:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      XAI_API_KEY: ${XAI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ADZUNA_APP_ID: ${ADZUNA_APP_ID:-}
+      ADZUNA_APP_KEY: ${ADZUNA_APP_KEY:-}
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    build:
+      context: .
+      target: worker
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/jobflow
+      NODE_ENV: production
+      LLM_PROVIDER: ${LLM_PROVIDER:-echo}
+      LLM_MODEL_CHEAP: ${LLM_MODEL_CHEAP:-}
+      LLM_MODEL_STRONG: ${LLM_MODEL_STRONG:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      XAI_API_KEY: ${XAI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ADZUNA_APP_ID: ${ADZUNA_APP_ID:-}
+      ADZUNA_APP_KEY: ${ADZUNA_APP_KEY:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  jobflow-db:

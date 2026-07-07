@@ -2,4 +2,6 @@ export * from "./embedder.js";
 export * from "./ingest.js";
 export * from "./match.js";
 export * from "./discover.js";
+export * from "./enrich.js";
+export * from "./import.js";
 export * from "./seed.js";

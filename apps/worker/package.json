@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "tsx src/orchestrator.ts",
+    "runner": "tsx src/orchestrator.ts runner",
     "poll": "tsx src/orchestrator.ts poll",
     "discover": "tsx src/orchestrator.ts discover",
     "rank": "tsx src/orchestrator.ts rank",

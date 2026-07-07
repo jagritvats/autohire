@@ -34,6 +34,14 @@ The four ATS/discovery sources were probed live and return real data: **Greenhou
 - ✅ Match card render (CLI + web).
 - 🟡 Re-rank currently enriches but is not yet persisted back onto `match` rows in the loop (function exists; wire into `rebuildMatches`/worker).
 
+### Enrichment + CRM (control-plane Phase 3) — ✅ done & verified on local Supabase
+- ✅ **Tier-1 comp cascade** (§11.4): `levels.fyi` `.md` enricher (free, no key, **attribution surfaced**) — parses all-roles median + per-job-family table; `Adzuna` enricher (country-aware incl. India, key-gated). Cascade `direct → adzuna → levels`, **gated on match score** (top-N only), cached in `salary_cache` (TTL), with **honest confidence** (US levels comp → `low` for non-US roles).
+- ✅ Verified live: 9 companies got comp benchmarks (Stripe $285k median…), 21 postings estimated.
+- ✅ **Company detail page** (`/company/[id]`): comp median + job-family breakdown + levels.fyi attribution; ratings panel (honest "Tier-3 / local agent" placeholder); open postings.
+- ✅ Comp surfaced on cards, **estimates marked** (`~ … est`) so a modeled number is never shown as fact.
+- ✅ **`enrich_t1` job** (worker handler + `enrich` one-shot + "Enrich comp" command-bar button).
+- ✅ **Application CRM** (`/applications`): track from a card (`+ track`), status pipeline (saved→…→outcome) with a funnel, next-action + due-date reminders, **don't-double-apply badge** (`✓ in CRM`) on the feed.
+
 ### Prep (Pillar 2, §4) — 🟡 generation done, agents pending
 - ✅ Evidence Bank (schema + seed: NexusAlgo / kafka-ui / Verdict / ZFH ledger / Synapse).
 - ✅ Resume tailoring (3 strategy variants + ATS keyword coverage) — evidence-grounded.
@@ -46,32 +54,50 @@ The four ATS/discovery sources were probed live and return real data: **Greenhou
 - ✅ Per-ATS field maps (Greenhouse/Lever/Ashby/Workable/Workday) + fill-plan builder + dry-run.
 - ✅ Playwright runner that fills to a **review gate and never submits** (lazy-imported).
 - ✅ Don't-double-apply guard (`alreadyApplied` + `appliedDedupKeys`).
-- 🟡 Application CRM (schema exists; status pipeline / reminders / analytics UI not built).
-- ⬜ Calendar wiring for `next_action_at`.
+- ✅ Application CRM (`/applications`): status pipeline + funnel + next-action reminders + don't-double-apply (Phase 3).
+- ⬜ Calendar wiring for `next_action_at` (reminders surface in-app today).
 
-### Local agent (Tier 3, §7.1) — 🟡 scaffolded
-- ✅ Tier-3 adapter contract + flag-guard (Naukri/AmbitionBox/Glassdoor/LinkedIn), excluded from cloud registry by design.
+### Local agent (control-plane Phase 4, §7.1) — ✅ runtime done & verified; per-site parsing to tune
+- ✅ **`apps/agent`** runtime: connects to the shared DB, **heartbeats** every 30s (UI shows it online + flags/sources), **drains `runtime=local` jobs** sequentially in the user's own browser context (lazy Playwright — boots without Chromium installed).
+- ✅ **Effective-flags merge**: env machine-gate (`JOBFLOW_BROWSER`/`MODE`) ∧ web toggle, source opt-ins, `autosubmit` hard-false. Verified: with browser off, the agent claims local jobs and **refuses** them with a clear message; the cloud worker never sees them (`runtime` boundary).
+- ✅ **form_fill** handler → `fillPlanOnPage` (autofill) opens the form in the user's session, fills from the profile Contact + answers, **stops at the review gate** (no submit path); marks the CRM row "review & submit".
+- ✅ **tier3_poll / enrich_t3** framework: flag-guarded, `localFetch` (user-session page fetch) wired into the Tier-3 adapters; normalize→upsert reuses the pipeline.
+- ✅ Web dispatch: local jobs enqueue-able (guarded); **"fill"** on CRM rows, **"browse {source}"** in Settings; **Contact** settings section for the filler.
 - ✅ MV3 extension: manifest, content script (capture + inline match panel), service worker, popup.
-- ⬜ Actual local Playwright page-scraping for Tier-3 sources (the `localFetch` impl).
-- ⬜ Local cron scheduler + sync-up to Supabase.
-- ⬜ Extension ↔ app endpoints (`/api/score`, `/api/capture`) on the web side.
+- ⬜ Per-site Tier-3 selectors (Naukri/LinkedIn/Glassdoor/AmbitionBox) — best-effort; tune on your session/locale (see docs/SETUP.md).
+- ⬜ Extension ↔ app endpoints (`/api/score`, `/api/capture`); local cron for unattended Tier-3 sync.
+
+### Bug fixes (this round)
+- ✅ `/api/jobs` infinite re-render (ActivityPanel effect depended on the state it set) → stable mount-once self-scheduling poller.
+- ✅ Sidebar nav overflow with 4 tabs + mode pill → wraps cleanly.
+- ✅ Settings page crash in durable mode → the SQL-seeded `automation_flags` used snake_case (`tier3_sources`) but the app reads camelCase; `getConfig` now normalizes both, migration default fixed, form hardened.
 
 ### Trends & digest (§10) — ⬜
 - `trend_snapshot` table exists. Skill-trend tracker, gap radar, comp drift, daily/weekly digest not built.
 
-### Enrichment (§11.4–5) — 🟡
-- ✅ Salary cascade step 1 (direct-from-JD) + confidence tagging + `salary_cache` table.
-- ⬜ Adzuna + levels.fyi `.md` cascade steps; ratings/culture/interview-difficulty summaries (Tier-3 enrichers stubbed).
+### Enrichment (§11.4–5) — ✅ Tier-1 done; ratings are Tier-3 (Phase 4)
+- ✅ Salary cascade: direct-from-JD → Adzuna (key-gated) → levels.fyi `.md` (free, attributed), cached + confidence-tagged, gated on match score.
+- ⬜ Ratings/culture/interview-difficulty summaries — Tier-3 (AmbitionBox/Glassdoor) via the local agent (Phase 4); the UI panel + data model are ready.
 
-### Platform / infra — 🟡
-- ✅ Multi-tenant schema + RLS + pgvector migrations (`packages/db/migrations`).
-- ✅ Repository abstraction + in-memory impl.
+### Platform / infra — ✅ control-plane Phase 1 done
+- ✅ Multi-tenant schema + RLS migrations (`packages/db/migrations`); embeddings stored as `jsonb` (pgvector is the documented scale path).
+- ✅ Repository abstraction + in-memory impl **+ `PgRepository`** (node-postgres) — durable persistence against Supabase/any Postgres via `DATABASE_URL`.
+- ✅ Runnable migrator (`pnpm db:migrate`) + repo factory (`createRepository()` → Postgres if `DATABASE_URL`, else in-memory).
+- ✅ `0003_jobs.sql` — `job` + `agent_heartbeat` tables (command-plane foundation for Phase 2/4).
+- ✅ **Settings UI** (`/settings`): edit stack, comp/floor, YoE/level, target archetypes, remote-geo, location weights, automation flags + Tier-3 opt-ins. `PUT /api/profile` re-ranks the feed (verified: changing stack reorders results); `GET/PUT /api/config`.
+- ✅ Web feed reads from the repo (no more per-process memo hack); `/api/refresh` re-polls + re-ranks through the repo.
 - ✅ Swappable LLM (echo/anthropic/grok/openai) + provider embedder.
-- ✅ Worker orchestrator (discover|poll|rank) + GitHub Actions cron.
-- ⬜ **SupabaseRepository** (the one piece blocking durable persistence; schema + interface are ready).
-- ⬜ pg-boss/pgmq queue (currently synchronous in-process).
-- ⬜ Tests (vitest configured; suites not yet written — start with `normalize` + `match`).
-- ⬜ Tenant settings UI + local-agent auth handshake (multi-tenant hardening, post-v1).
+- ✅ Worker orchestrator (discover|poll|rank) on the shared repo factory + GitHub Actions cron.
+- ✅ **Tests** — vitest suites for `normalize` + `match` (24 tests; caught 2 real bugs on the way in).
+- ✅ **Local Supabase** wired (Docker, project `jobflow`, ports 553xx) + root-`.env` loader; migrations applied; verified durable (1.2k+ postings persisted).
+
+### Command plane (control-plane Phase 2) — ✅ done & verified on local Supabase
+- ✅ `job` queue: `Job` type + Repository methods (`enqueueJob` / `claimJob` with `FOR UPDATE SKIP LOCKED` / `completeJob` / `listJobs`) + `agent_heartbeat`. **`runtime` encodes the tier boundary** — the cloud runner refuses any `local` job.
+- ✅ **Worker job-runner** (`pnpm --filter @jobflow/worker runner`): drains `runtime=cloud` jobs (discover/poll/rank/enrich_t1), writes status back.
+- ✅ **Web command plane**: `/api/jobs` (enqueue + list), `/api/companies` (list/add-with-detection/poll-now/pause/cadence/remove). **Activity panel** (live job status + agent-online pill + "no worker draining" hint) on the feed + registry.
+- ✅ **`/companies` registry UI**: add by name/URL → ATS Detector resolves the board → auto-poll; pause/resume, cadence, remove. (Verified: added "Notion" from the UI → resolved `ashby/notion` → 143 postings ingested.)
+- ⬜ Realtime push (currently the panel polls every 1.5–5s) — swap to Supabase Realtime later.
+- ⬜ Auth (Supabase) + local-agent device-token handshake (Phase 4 / multi-tenant hardening).
 
 ---
 

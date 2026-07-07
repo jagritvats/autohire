@@ -118,6 +118,37 @@ export const ApplicationStatus = z.enum([
 ]);
 export type ApplicationStatus = z.infer<typeof ApplicationStatus>;
 
+/** Command-plane job types. `runtime` decides which plane drains it (§ control plane). */
+export const JobType = z.enum([
+  "discover", // resolve seed/new companies → ATS boards
+  "poll", // poll registered ATS boards due for poll
+  "rank", // recompute matches for the tenant
+  "enrich_t1", // Tier-1 enrichment (Adzuna / levels.fyi) — cloud
+  "tier3_poll", // Naukri/Glassdoor/etc — LOCAL agent only
+  "enrich_t3", // ratings/India comp — LOCAL agent only
+  "form_fill", // Playwright fill to review gate — LOCAL agent only
+  "import_yc", // import your YC/Work-at-a-Startup profile — LOCAL agent only (auth-gated)
+]);
+export type JobType = z.infer<typeof JobType>;
+
+export const JobRuntime = z.enum(["cloud", "local"]);
+export type JobRuntime = z.infer<typeof JobRuntime>;
+
+export const JobStatus = z.enum(["queued", "running", "done", "error", "canceled"]);
+export type JobStatus = z.infer<typeof JobStatus>;
+
+/** which plane a job type runs on — the tier boundary, encoded (invariant #1). */
+export const JOB_RUNTIME: Record<z.infer<typeof JobType>, z.infer<typeof JobRuntime>> = {
+  discover: "cloud",
+  poll: "cloud",
+  rank: "cloud",
+  enrich_t1: "cloud",
+  tier3_poll: "local",
+  enrich_t3: "local",
+  form_fill: "local",
+  import_yc: "local",
+};
+
 export const RoleArchetype = z.enum([
   "backend",
   "platform",

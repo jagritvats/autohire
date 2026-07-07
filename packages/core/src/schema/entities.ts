@@ -3,6 +3,9 @@ import {
   ApplicationStatus,
   AtsType,
   ExecutionTier,
+  JobRuntime,
+  JobStatus,
+  JobType,
   LevelBand,
   LocationMode,
   RemoteGeo,
@@ -63,6 +66,13 @@ export const Company = z.object({
   ratingSource: z.string().nullable().default(null),
   cultureSummary: z.string().nullable().default(null),
   interviewDifficulty: z.string().nullable().default(null),
+  // comp benchmark (levels.fyi, attributed) — §11.4
+  compMedian: z.number().nullable().default(null),
+  compCurrency: z.string().nullable().default(null),
+  compSource: z.string().nullable().default(null),
+  compBreakdown: z.array(z.object({ family: z.string(), median: z.number() })).nullable().default(null),
+  compUpdatedAt: ts.nullable().default(null),
+  enrichedAt: ts.nullable().default(null),
   createdAt: ts.optional(),
 });
 export type Company = z.infer<typeof Company>;
@@ -140,9 +150,24 @@ export const Evidence = z.object({
 export type Evidence = z.infer<typeof Evidence>;
 
 // ── Profile + prefs (§5, §11) ──
+/** Contact / identity used by the local form-filler (§7.1). Never invented — only
+ *  what you put here is typed into a form, and it always stops at the review gate. */
+export const Contact = z.object({
+  firstName: z.string().default(""),
+  lastName: z.string().default(""),
+  email: z.string().default(""),
+  phone: z.string().default(""),
+  linkedin: z.string().default(""),
+  github: z.string().default(""),
+  portfolio: z.string().default(""),
+  resumePath: z.string().default(""),
+});
+export type Contact = z.infer<typeof Contact>;
+
 export const ProfilePrefs = z.object({
   salaryFloor: z.number().default(0),
   currency: z.string().default("INR"),
+  contact: Contact.default({}),
   /** weighted ranked location prefs, not binary (§11.3) */
   locationWeights: z
     .array(z.object({ label: z.string(), weight: z.number() }))
@@ -158,13 +183,75 @@ export type ProfilePrefs = z.infer<typeof ProfilePrefs>;
 export const Profile = z.object({
   id: uuid,
   tenantId: uuid,
+  /** base resume text — pasted or extracted from an uploaded file; grounds generation (§4). */
   masterResume: z.string().default(""),
+  /** raw base LaTeX résumé (when imported as .tex) — the template tailoring rewrites. */
+  resumeLatex: z.string().default(""),
+  /** free "about you" narrative — additional background grounding for generation (§4). */
+  aboutText: z.string().default(""),
   profileEmbedding: z.array(z.number()).nullable().default(null),
   yoe: z.number().default(0),
   levelBand: LevelBand.default("mid"),
   prefs: ProfilePrefs,
 });
 export type Profile = z.infer<typeof Profile>;
+
+// ── Generation — a cached, evidence-grounded draft (resume variants / answers, §4) ──
+/** `resume` content is JSON.stringify(ResumeVariants); the rest are plain answer text. */
+export const GenerationKind = z.enum([
+  "resume",
+  "resume_latex",
+  "why_here",
+  "interesting_problem",
+  "about_blurb",
+  "answer",
+]);
+export type GenerationKind = z.infer<typeof GenerationKind>;
+
+export const Generation = z.object({
+  id: uuid,
+  tenantId: uuid,
+  /** null = generic (settings drafts); set = tailored to a specific posting. */
+  postingId: uuid.nullable().default(null),
+  kind: GenerationKind,
+  /** the question text, for free-form answers (part of the cache slot key). */
+  prompt: z.string().default(""),
+  content: z.string(),
+  model: z.string().default("echo"),
+  /** sha256 of the inputs — a mismatch means the draft is stale (§ cache). */
+  inputHash: z.string(),
+  createdAt: ts,
+});
+export type Generation = z.infer<typeof Generation>;
+
+// ── Connected context — imported, read-only profile sources (§ Customize) ──
+/** Where an imported context came from. `manual` = pasted by hand. */
+export const ProfileSourceKind = z.enum(["github", "linkedin", "yc", "manual"]);
+export type ProfileSourceKind = z.infer<typeof ProfileSourceKind>;
+
+/**
+ * A read-only context imported from an external source (GitHub repos, a LinkedIn
+ * data-export, a YC/WaaS profile). It is *background* for generation — never merged
+ * into the Evidence Bank or stack — so the Evidence Bank stays the citeable spine
+ * (invariant #3). One row per (tenant, source); re-importing replaces it.
+ */
+export const ConnectedContext = z.object({
+  id: uuid,
+  tenantId: uuid,
+  source: ProfileSourceKind,
+  /** username / "export" / profile URL — identifies what was imported. */
+  handle: z.string().default(""),
+  /** display label (e.g. "github.com/jagritvats"). */
+  label: z.string().default(""),
+  /** rendered text fed to generation when `enabled`. */
+  content: z.string().default(""),
+  /** structured items (repos / positions) kept for display + re-render. */
+  items: z.array(z.record(z.unknown())).default([]),
+  /** only enabled contexts are fed to generation. */
+  enabled: z.boolean().default(true),
+  syncedAt: ts,
+});
+export type ConnectedContext = z.infer<typeof ConnectedContext>;
 
 // ── Match — scored posting against a profile (§5, §11.6) ──
 export const ScoreBreakdown = z.object({
@@ -194,6 +281,64 @@ export const Match = z.object({
   generatedAt: ts,
 });
 export type Match = z.infer<typeof Match>;
+
+// ── Command-plane job (§ control plane: web enqueues, worker/agent drain) ──
+export const Job = z.object({
+  id: uuid,
+  tenantId: uuid,
+  type: JobType,
+  runtime: JobRuntime,
+  payload: z.record(z.unknown()).default({}),
+  status: JobStatus.default("queued"),
+  result: z.record(z.unknown()).nullable().default(null),
+  error: z.string().nullable().default(null),
+  createdAt: ts,
+  pickedAt: ts.nullable().default(null),
+  finishedAt: ts.nullable().default(null),
+});
+export type Job = z.infer<typeof Job>;
+
+// ── Local-agent heartbeat (§7.1) — proves the agent is online + its live flags ──
+export const AgentHeartbeat = z.object({
+  tenantId: uuid,
+  lastSeen: ts,
+  version: z.string().nullable().default(null),
+  flags: z.record(z.unknown()).default({}),
+  enabledSources: z.array(z.string()).default([]),
+});
+export type AgentHeartbeat = z.infer<typeof AgentHeartbeat>;
+
+// ── Tenant config — drives behavior as DATA, edited in the settings UI (§6.1) ──
+export const AutomationFlagsSchema = z.object({
+  browser: z.enum(["off", "on"]).default("off"),
+  mode: z.enum(["capture", "fill"]).default("capture"),
+  autosubmit: z.literal(false).default(false), // hard-false by type
+  rate: z.enum(["human", "fast"]).default("human"),
+  tier3Sources: z.array(z.string()).default([]),
+});
+export type AutomationFlagsSchema = z.infer<typeof AutomationFlagsSchema>;
+
+/** Supported generation providers — echo runs offline; the rest read a key (§ Customize). */
+export const LlmChoice = z.enum(["echo", "anthropic", "grok", "openai"]);
+export type LlmChoice = z.infer<typeof LlmChoice>;
+
+export const TenantConfig = z.object({
+  tenantId: uuid,
+  sourcesEnabled: z
+    .array(z.string())
+    .default(["greenhouse", "lever", "ashby", "workable", "remotive", "arbeitnow", "hn_whoishiring"]),
+  automationFlags: AutomationFlagsSchema.default({}),
+  /** which generation provider runs (echo | anthropic | grok | openai). */
+  llmChoice: z.string().default("echo"),
+  /** strong-model override (blank → the provider's default model). */
+  llmModel: z.string().default(""),
+  /** API key for the chosen provider (blank → fall back to the matching env var). */
+  llmApiKey: z.string().default(""),
+  /** custom base URL / gateway (blank → the provider's default). */
+  llmBaseUrl: z.string().default(""),
+  digestCadence: z.enum(["off", "daily", "weekly"]).default("daily"),
+});
+export type TenantConfig = z.infer<typeof TenantConfig>;
 
 // ── Application CRM (§7) ──
 export const Application = z.object({

@@ -2,9 +2,11 @@
 -- Shared-global tables (company, posting, stack_edge) have NO tenant_id: the
 -- registry is the same for everyone. Tenant-scoped tables carry tenant_id + RLS.
 
-create extension if not exists vector;       -- pgvector
 create extension if not exists pg_trgm;      -- fuzzy company/title matching
 create extension if not exists "uuid-ossp";
+-- pgvector is the SCALE PATH (see note at bottom). v1 stores embeddings as jsonb
+-- so the column isn't locked to one dimension while the embedder is still in flux.
+-- create extension if not exists vector;
 
 -- ─────────────────────────── tenancy ───────────────────────────
 create table tenant (
@@ -21,7 +23,7 @@ create table tenant_config (
   currency         text not null default 'INR',
   location_weights jsonb not null default '[]',
   stack_profile    jsonb not null default '{}',
-  automation_flags jsonb not null default '{"browser":"off","mode":"capture","autosubmit":false,"rate":"human","tier3_sources":[]}',
+  automation_flags jsonb not null default '{"browser":"off","mode":"capture","autosubmit":false,"rate":"human","tier3Sources":[]}',
   llm_choice       text not null default 'echo',
   digest_cadence   text not null default 'daily'
 );
@@ -77,7 +79,8 @@ create table posting (
   currency        text not null default 'USD',
   salary_source   text not null default 'none',
   salary_confidence text not null default 'low',
-  jd_embedding    vector(1536),
+  apply_url       text,
+  jd_embedding    jsonb,                   -- float[]; pgvector is the scale path
   first_seen      timestamptz not null default now(),
   last_seen       timestamptz not null default now(),
   is_active       boolean not null default true,
@@ -88,8 +91,7 @@ create table posting (
 );
 create index posting_dedup_idx on posting (dedup_key);
 create index posting_active_idx on posting (is_active, last_seen desc);
--- approximate-NN index for embedding similarity (matcher + dedup stage-2)
-create index posting_embedding_idx on posting using hnsw (jd_embedding vector_cosine_ops);
+-- (scale path: replace jd_embedding with vector(N) + a hnsw cosine index)
 
 create table stack_edge (
   from_skill      text not null,
@@ -103,7 +105,7 @@ create table profile (
   id                uuid primary key default uuid_generate_v4(),
   tenant_id         uuid not null references tenant(id) on delete cascade,
   master_resume     text not null default '',
-  profile_embedding vector(1536),
+  profile_embedding jsonb,
   yoe               numeric not null default 0,
   level_band        text not null default 'mid',
   prefs             jsonb not null default '{}',
@@ -118,7 +120,7 @@ create table evidence (
   detail     text not null,
   metric     text,
   tags       text[] not null default '{}',
-  embedding  vector(1536)
+  embedding  jsonb
 );
 create index evidence_tenant_idx on evidence (tenant_id);
 
@@ -198,3 +200,18 @@ create table trend_snapshot (
   freq_delta    int not null default 0,
   in_target_set boolean not null default false
 );
+
+-- ── seed a default single-tenant row so v1 works out of the box ──
+insert into tenant (id, name, plan)
+values ('00000000-0000-0000-0000-000000000001', 'default', 'free')
+on conflict (id) do nothing;
+insert into tenant_config (tenant_id)
+values ('00000000-0000-0000-0000-000000000001')
+on conflict (tenant_id) do nothing;
+
+-- ── SCALE PATH (when a fixed-dim real embedder is chosen) ──
+-- create extension vector;
+-- alter table posting add column jd_embedding_v vector(1536);
+-- update posting set jd_embedding_v = (select array_agg(x::float)::vector
+--   from jsonb_array_elements_text(jd_embedding) x);  -- backfill
+-- create index on posting using hnsw (jd_embedding_v vector_cosine_ops);

@@ -8,6 +8,16 @@ export { WorkableAdapter } from "./ats/workable.js";
 export { RemotiveAdapter } from "./aggregators/remotive.js";
 export { ArbeitnowAdapter } from "./aggregators/arbeitnow.js";
 export { HnWhoIsHiringAdapter } from "./hn/whoishiring.js";
+// Tier-1 enrichment (§11.4) — comp cascade, cloud-safe.
+export {
+  fetchLevelsComp,
+  parseLevelsMarkdown,
+  familyMedianFor,
+  slugFromName,
+  LEVELS_ATTRIBUTION,
+  type LevelsComp,
+} from "./enrich/levelsfyi.js";
+export { fetchAdzunaSalary, hasAdzunaKeys, type AdzunaSalary } from "./enrich/adzuna.js";
 // Tier 3 — local agent only; deliberately NOT in the cloud `ADAPTERS` registry.
 export {
   NaukriAdapter,

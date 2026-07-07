@@ -1,0 +1,31 @@
+# Never copy host build artifacts / deps (Windows-specific symlinks) or secrets
+node_modules
+**/node_modules
+.next
+**/.next
+dist
+**/dist
+*.tsbuildinfo
+coverage
+out
+build
+
+# secrets / local state
+.env
+.env.*
+*.session.json
+.jobflow
+uploads
+playwright-report
+test-results
+.cache
+
+# vcs / editor / os
+.git
+.github
+.vscode
+.DS_Store
+Thumbs.db
+
+# docs/plans not needed in the image
+*.md

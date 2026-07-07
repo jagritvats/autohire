@@ -3,6 +3,7 @@ export * from "./factory.js";
 export * from "./prompts.js";
 export * from "./rerank.js";
 export * from "./generate.js";
+export * from "./latex.js";
 
 import { localEmbed } from "@jobflow/core";
 import type { LlmProvider } from "./provider.js";

@@ -42,7 +42,20 @@ export async function runFill(plan: FillPlan, opts: RunnerOptions = {}): Promise
     viewport: null,
   });
   const page = context.pages()[0] ?? (await context.newPage());
+  return fillPlanOnPage(page, plan, { flags, dryRun: opts.dryRun });
+}
 
+/**
+ * Fill a plan on an ALREADY-OPEN page (the agent owns one logged-in persistent
+ * context and drives jobs sequentially through it). Stops at the review gate —
+ * there is no submit here, by design (gate 4 must already have been asserted).
+ */
+export async function fillPlanOnPage(
+  page: PwPage,
+  plan: FillPlan,
+  opts: { flags: AutomationFlags; dryRun?: boolean },
+): Promise<FillReport> {
+  const { flags } = opts;
   const report: FillReport = {
     filled: [],
     skippedNoField: [],
@@ -52,38 +65,31 @@ export async function runFill(plan: FillPlan, opts: RunnerOptions = {}): Promise
     note: "Stopped at review. Human must edit + submit.",
   };
 
-  try {
-    await page.goto(plan.url, { waitUntil: "domcontentloaded" });
-    await sleep(actionDelayMs(flags));
+  await page.goto(plan.url, { waitUntil: "domcontentloaded" });
+  await sleep(actionDelayMs(flags));
 
-    for (const f of plan.fields) {
-      const locator = await firstVisible(page, f.selectors);
-      if (!locator) {
-        report.skippedNoField.push(f.field);
-        continue;
-      }
-      if (!opts.dryRun) {
-        await fillField(locator, f, flags);
-      }
-      report.filled.push(f.field);
+  for (const f of plan.fields) {
+    const locator = await firstVisible(page, f.selectors);
+    if (!locator) {
+      report.skippedNoField.push(f.field);
+      continue;
+    }
+    if (!opts.dryRun) await fillField(locator, f, flags);
+    report.filled.push(f.field);
+    await sleep(actionDelayMs(flags));
+  }
+
+  for (const q of plan.questionFields) {
+    const ta = await findTextareaByLabel(page, q.question);
+    if (ta) {
+      if (!opts.dryRun) await ta.fill(q.answer);
+      report.answersMatched.push(q.question);
       await sleep(actionDelayMs(flags));
     }
-
-    // free-text questions: match the visible question label to our drafted answers
-    for (const q of plan.questionFields) {
-      const ta = await findTextareaByLabel(page, q.question);
-      if (ta) {
-        if (!opts.dryRun) await ta.fill(q.answer);
-        report.answersMatched.push(q.question);
-        await sleep(actionDelayMs(flags));
-      }
-    }
-
-    // REVIEW GATE: leave everything as-is. We do NOT submit, by design.
-    report.reviewUrl = page.url();
-  } finally {
-    // intentionally keep the context open for human review; caller closes it.
   }
+
+  // REVIEW GATE: leave everything as-is. We do NOT submit, by design.
+  report.reviewUrl = page.url();
   return report;
 }
 
@@ -128,22 +134,37 @@ function defaultProfileDir(): string {
   return process.env.JOBFLOW_BROWSER_PROFILE ?? ".jobflow/browser-profile";
 }
 
+/**
+ * Launch the user's OWN persistent browser context (their logged-in sessions). The
+ * agent owns ONE of these and drives all browser jobs through it sequentially, so
+ * Tier-3 fetch and form-fill never fight over the same Chromium profile (§7.1).
+ */
+export async function launchUserContext(opts: { userDataDir?: string; headless?: boolean } = {}): Promise<PwContext> {
+  const pw = await importPlaywright();
+  return pw.chromium.launchPersistentContext(opts.userDataDir ?? defaultProfileDir(), {
+    headless: opts.headless ?? false,
+    viewport: null,
+  });
+}
+
 // ── minimal structural types so this file type-checks without @types/playwright ──
-interface PwLocator {
+export interface PwLocator {
   first(): PwLocator;
   isVisible(opts?: { timeout?: number }): Promise<boolean>;
   fill(value: string): Promise<void>;
   setInputFiles(files: string): Promise<void>;
 }
-interface PwPage {
+export interface PwPage {
   goto(url: string, opts?: { waitUntil?: string }): Promise<unknown>;
   url(): string;
+  content(): Promise<string>;
+  close(): Promise<void>;
   locator(selector: string): PwLocator;
-  newPage?: never;
 }
-interface PwContext {
+export interface PwContext {
   pages(): PwPage[];
   newPage(): Promise<PwPage>;
+  close(): Promise<void>;
 }
 interface PwModule {
   chromium: {

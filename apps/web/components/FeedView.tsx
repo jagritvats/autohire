@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import type { FeedCard, FeedData } from "@/lib/feed";
 import { MatchCard } from "./MatchCard";
+import { ActivityPanel } from "./ActivityPanel";
 
 const ARCHETYPES = ["backend", "platform", "infra_devops", "fullstack", "data_ml", "sre", "frontend"];
 const MODES = ["remote", "hybrid", "onsite"];
@@ -41,6 +42,19 @@ export function FeedView({ initial }: { initial: FeedData }) {
     });
   };
 
+  const track = async (card: FeedCard) => {
+    // optimistic: mark this company+role applied across the feed (don't-double-apply)
+    setData((d) => ({
+      ...d,
+      cards: d.cards.map((c) => (c.companyId === card.companyId && c.title === card.title ? { ...c, applied: true } : c)),
+    }));
+    await fetch("/api/applications", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ postingId: card.id, status: "saved" }),
+    });
+  };
+
   return (
     <div className="shell">
       <aside className="rail">
@@ -48,6 +62,15 @@ export function FeedView({ initial }: { initial: FeedData }) {
           Job<span className="flow">Flow</span>
         </h1>
         <div className="tagline">ranked match feed</div>
+        <nav className="rail-nav">
+          <a href="/" data-active="true">feed</a>
+          <a href="/applications">pipeline</a>
+          <a href="/companies">registry</a>
+          <a href="/settings">settings</a>
+          <span className="durable-pill" data-on={data.stats.durable}>
+            {data.stats.durable ? "durable" : "in-memory"}
+          </span>
+        </nav>
 
         <div className="rail-group">
           <h4>
@@ -107,15 +130,17 @@ export function FeedView({ initial }: { initial: FeedData }) {
           <Stat n={data.stats.excluded} l="hard-excluded" muted />
           <Stat n={cards.length} l="shown" />
           <button className="refresh" onClick={refresh} disabled={pending}>
-            {pending ? "polling…" : "↻ re-poll"}
+            {pending ? "polling…" : "↻ sync re-poll"}
           </button>
         </div>
+
+        <ActivityPanel />
 
         <div className="feed">
           {cards.length === 0 ? (
             <div className="feed-empty">No matches under these filters.</div>
           ) : (
-            cards.map((c, i) => <MatchCard key={c.id} card={c} index={i} />)
+            cards.map((c, i) => <MatchCard key={c.id} card={c} index={i} onTrack={track} />)
           )}
         </div>
       </main>
