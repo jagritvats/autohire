@@ -28,6 +28,7 @@ export function FeedView({ initial }: { initial: FeedData }) {
   const [modes, setModes] = useState<Set<string>>(new Set());
   const [geos, setGeos] = useState<Set<string>>(new Set());
   const [minScore, setMinScore] = useState(0);
+  const [maxYears, setMaxYears] = useState(0); // 0 = any; caps the role's minimum required YoE
   const [hideUsOnly, setHideUsOnly] = useState(false);
   // India-onsite "allowed" view filter — server-fetched (UI → api → feed → query).
   const [indiaOnly, setIndiaOnly] = useState(false);
@@ -50,13 +51,16 @@ export function FeedView({ initial }: { initial: FeedData }) {
   const cards = useMemo(() => {
     return baseCards.filter((c) => {
       if (c.score < minScore) return false;
+      // max-years cap: hide roles whose stated MINIMUM YoE exceeds the cap. Roles with no
+      // parsed minimum (min === null) are always kept — never hide on unknown (§11, invariant #4).
+      if (maxYears > 0 && c.experience.min != null && c.experience.min > maxYears) return false;
       if (arch.size && !arch.has(c.archetype)) return false;
       if (modes.size && !modes.has(c.location.mode)) return false;
       if (geos.size && c.location.mode === "remote" && !geos.has(c.location.remoteGeo)) return false;
       if (hideUsOnly && c.location.remoteGeo === "us_only") return false;
       return true;
     });
-  }, [baseCards, arch, modes, geos, minScore, hideUsOnly]);
+  }, [baseCards, arch, modes, geos, minScore, maxYears, hideUsOnly]);
 
   // India-onsite "allowed" filter: fetch the India-workable feed on first toggle-on.
   const toggleIndia = () => {
@@ -226,6 +230,21 @@ export function FeedView({ initial }: { initial: FeedData }) {
             min score <span className="slider-val">{minScore}</span>
           </h4>
           <input type="range" min={0} max={90} step={5} value={minScore} onChange={(e) => setMinScore(+e.target.value)} />
+        </div>
+
+        <div className="rail-group">
+          <h4>
+            max years exp <span className="slider-val">{maxYears === 0 ? "any" : `≤${maxYears}y`}</span>
+          </h4>
+          <input
+            type="range"
+            min={0}
+            max={15}
+            step={1}
+            value={maxYears}
+            onChange={(e) => setMaxYears(+e.target.value)}
+            title="Hide roles asking for more than N years of experience. Roles with no stated minimum are kept."
+          />
         </div>
 
         <div className="rail-group">
