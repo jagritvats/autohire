@@ -160,6 +160,8 @@ export interface PwPage {
   content(): Promise<string>;
   close(): Promise<void>;
   locator(selector: string): PwLocator;
+  /** run a function in the page context (used to replay a site's own XHR with its cookies). */
+  evaluate<R, A = unknown>(pageFunction: (arg: A) => R | Promise<R>, arg?: A): Promise<R>;
 }
 export interface PwContext {
   pages(): PwPage[];

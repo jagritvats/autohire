@@ -88,6 +88,19 @@ All in the root `.env`. Grouped by what they unlock.
 | `JOBFLOW_TIER3_SOURCES` | _(empty)_ | Optional env allow-list (csv: `naukri,linkedin,glassdoor,ambitionbox`). If set, restricts which sources the web can enable. |
 | `JOBFLOW_BROWSER_PROFILE` | `.jobflow/browser-profile` | Path to the Chromium user-data dir the agent drives — point it at a profile **logged into** LinkedIn/Naukri/etc. |
 
+#### Tier-3 poll targeting — the "good-paying software/engineering in India" sweep
+
+All **optional**; unset → curated defaults (`INDIA_SWE_QUERIES` × Indian tech hubs, incl. a remote pass). These shape **what** the local agent browses, not the match filter — the ranker still weights salary/location/stack with honest flags (invariant #4). `minLpa` defaults to your **profile's INR salary floor** expressed in LPA.
+
+| Var | Example | What it does |
+|---|---|---|
+| `JOBFLOW_TIER3_QUERIES` | `backend engineer,platform engineer,sde` | csv keyword-query override (else the curated software/eng set). |
+| `JOBFLOW_TIER3_LOCATIONS` | `bengaluru,pune,hyderabad` | csv Indian hub override (blank hubs still includes a remote/location-agnostic pass). |
+| `JOBFLOW_TIER3_MIN_LPA` | `20` | soft CTC floor in LPA (lakhs/annum); biases the search toward well-paid roles. |
+| `JOBFLOW_TIER3_FRESHNESS_DAYS` | `15` | recency window for the search facet. |
+| `JOBFLOW_TIER3_LIMIT` | `25` | cards pulled per (query × location) cell. |
+| `JOBFLOW_TIER3_MAX_TARGETS` | `8` | politeness cap on total cells per browse (sequential, human-paced). |
+
 ### Misc
 | Var | Default | What it does |
 |---|---|---|
@@ -122,7 +135,7 @@ The agent is the only part that touches your logged-in sessions, so turning it o
    ```
 3. **Opt in from the UI:** Settings → Automation → toggle "browser automation (master)" on, and select the Tier-3 sources you want (`naukri`, `linkedin`, …). Save.
 4. **Run the agent:** `pnpm --filter @jobflow/agent start`. It heartbeats every 30s → the feed's "local agent" pill goes green and shows the enabled sources.
-5. **Use it:** the feed/CRM "fill" buttons enqueue `form_fill` (the agent opens the form in your browser, fills it, **stops at review** — you submit); Settings "browse {source}" buttons enqueue `tier3_poll`.
+5. **Use it:** the feed/CRM "fill" buttons enqueue `form_fill` (the agent opens the form in your browser, fills it, **stops at review** — you submit); Settings "browse {source}" buttons enqueue `tier3_poll`, which runs the good-paying-India-SWE sweep (query × tech-hub × CTC floor) in your session and then enqueues a `rank` so the new postings surface in the feed. Override the sweep per-run via the job payload (`queries`, `locations`, `minLpa`, `limit`, `maxTargets`) or globally via the `JOBFLOW_TIER3_*` env vars above.
 
 **Honest caveats:**
 - Tier-3 site selectors (Naukri/LinkedIn/Glassdoor/AmbitionBox) are **best-effort and need tuning** for your session/locale — the framework (your-session fetch, flag-guard, normalize→upsert) is built; the per-site parsing is the part to refine on your machine.

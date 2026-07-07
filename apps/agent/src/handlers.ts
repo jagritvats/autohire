@@ -15,7 +15,11 @@ import {
   AmbitionBoxEnricher,
   GlassdoorEnricher,
   htmlToText,
+  buildIndiaSweTargets,
+  lpaFloorFromInr,
   type Tier3Context,
+  type Tier3PollOptions,
+  type Tier3PollTarget,
 } from "@jobflow/adapters";
 import { DEFAULT_TENANT, defaultProfile, ingestFromAdapter, type Embedder } from "@jobflow/pipeline";
 import type { AgentSession } from "./session.js";
@@ -113,19 +117,105 @@ async function formFill(repo: Repository, job: Job, ctx: HandlerCtx): Promise<Re
 }
 
 // ── Tier-3 job poll (Naukri/LinkedIn) in the user's session ──
+// Sweeps a curated "good-paying software/engineering in India" target matrix (query ×
+// Indian tech hub, soft CTC floor) through the user's OWN session, human-paced and
+// sequential. Payload overrides the defaults; the profile's INR salaryFloor sets the
+// LPA floor. Biasing the source query toward higher CTC / hubs shapes WHAT we poll —
+// it is not a hard match filter (invariant #4).
 async function tier3Poll(repo: Repository, job: Job, ctx: HandlerCtx): Promise<Record<string, unknown>> {
   const source = String(job.payload.source ?? "");
   if (!ctx.flags.enabledSources.includes(source)) {
     throw new Error(`Source '${source}' is not opted in. Enable it in Settings → Automation (Tier-3 sources).`);
   }
-  const tier3: Tier3Context = { enabledSources: ctx.flags.enabledSources, localFetch: (url) => ctx.session.localFetch(url) };
+  const tier3: Tier3Context = {
+    enabledSources: ctx.flags.enabledSources,
+    localFetch: (url) => ctx.session.localFetch(url),
+    localFetchJson: (url, headers) => ctx.session.localFetchJson(url, headers),
+  };
   const adapter =
     source === "naukri" ? new NaukriAdapter(tier3) : source === "linkedin" ? new LinkedInAdapter(tier3) : null;
   if (!adapter) throw new Error(`No job adapter for Tier-3 source '${source}'`);
 
-  const query = (job.payload.query as string | undefined) ?? "backend developer";
-  const stats = await ingestFromAdapter(repo, adapter, { query }, { embedder: ctx.embedder });
-  return { source, fetched: stats.fetched, upserted: stats.upserted, errors: stats.errors };
+  const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? defaultProfile();
+  const targets = planTier3Targets(job.payload, profile.prefs.salaryFloor);
+
+  let fetched = 0;
+  let upserted = 0;
+  const errors: string[] = [];
+  const sweep: Array<{ q: string; loc: string; got: number }> = [];
+  for (const t of targets) {
+    const ft = {
+      query: t.query,
+      location: t.location || undefined,
+      limit: t.limit,
+      params: { minLpa: t.minLpa, freshnessDays: t.freshnessDays },
+    };
+    const s = await ingestFromAdapter(repo, adapter, ft, { embedder: ctx.embedder });
+    fetched += s.fetched;
+    upserted += s.upserted;
+    errors.push(...s.errors);
+    sweep.push({ q: t.query, loc: t.location || "remote/any", got: s.fetched });
+    await politeDelay(ctx.flags.rate); // human pacing between page loads (no parallel sessions)
+  }
+
+  // Close the loop: browsed postings only reach the feed once matches are (re)built.
+  // Enqueue a cloud `rank` — pure DB work, holds no session, so it stays invariant-#1 safe.
+  if (upserted > 0) {
+    await repo.enqueueJob({ tenantId: DEFAULT_TENANT, type: "rank", runtime: JOB_RUNTIME.rank, payload: {} });
+  }
+  return { source, targets: targets.length, fetched, upserted, errors: errors.slice(0, 5), sweep };
+}
+
+/**
+ * Plan the poll target matrix from (payload override → env override → profile floor).
+ * A payload `query`/`queries` narrows the sweep; otherwise the curated India SWE query
+ * set is used. `minLpa` defaults to the profile's INR salaryFloor expressed in LPA.
+ */
+function planTier3Targets(payload: Record<string, unknown>, salaryFloorInr: number): Tier3PollTarget[] {
+  const env = tier3TargetEnv();
+  const payloadQueries = asStrArray(payload.queries) ?? (payload.query ? [String(payload.query)] : undefined);
+  const opts: Tier3PollOptions = {
+    queries: payloadQueries ?? env.queries,
+    locations: asStrArray(payload.locations) ?? (payload.location ? [String(payload.location)] : undefined) ?? env.locations,
+    minLpa: asNum(payload.minLpa) ?? env.minLpa ?? lpaFloorFromInr(salaryFloorInr),
+    freshnessDays: asNum(payload.freshnessDays) ?? env.freshnessDays,
+    limitPerTarget: asNum(payload.limit) ?? env.limitPerTarget,
+    maxTargets: asNum(payload.maxTargets) ?? env.maxTargets,
+    remote: typeof payload.remote === "boolean" ? payload.remote : undefined,
+  };
+  return buildIndiaSweTargets(opts);
+}
+
+/** Optional env overrides for the Tier-3 sweep (all default off → curated defaults apply). */
+function tier3TargetEnv(): Tier3PollOptions {
+  return {
+    queries: asCsv(process.env.JOBFLOW_TIER3_QUERIES),
+    locations: asCsv(process.env.JOBFLOW_TIER3_LOCATIONS),
+    minLpa: asNum(process.env.JOBFLOW_TIER3_MIN_LPA),
+    freshnessDays: asNum(process.env.JOBFLOW_TIER3_FRESHNESS_DAYS),
+    limitPerTarget: asNum(process.env.JOBFLOW_TIER3_LIMIT),
+    maxTargets: asNum(process.env.JOBFLOW_TIER3_MAX_TARGETS),
+  };
+}
+
+function asStrArray(v: unknown): string[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const xs = v.map((x) => String(x)).filter((x) => x.trim());
+  return xs.length ? xs : undefined;
+}
+function asCsv(v: string | undefined): string[] | undefined {
+  if (!v) return undefined;
+  const xs = v.split(",").map((s) => s.trim()).filter(Boolean);
+  return xs.length ? xs : undefined;
+}
+function asNum(v: unknown): number | undefined {
+  if (v == null || v === "") return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
+function politeDelay(rate: "human" | "fast"): Promise<void> {
+  const ms = rate === "fast" ? 250 + Math.random() * 250 : 1200 + Math.random() * 1800;
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 // ── Tier-3 enrichment (ratings/comp) in the user's session ──
@@ -139,7 +229,11 @@ async function enrichT3(repo: Repository, job: Job, ctx: HandlerCtx): Promise<Re
   const company = await repo.getCompany(companyId);
   if (!company) throw new Error("company not found");
 
-  const tier3: Tier3Context = { enabledSources: ctx.flags.enabledSources, localFetch: (url) => ctx.session.localFetch(url) };
+  const tier3: Tier3Context = {
+    enabledSources: ctx.flags.enabledSources,
+    localFetch: (url) => ctx.session.localFetch(url),
+    localFetchJson: (url, headers) => ctx.session.localFetchJson(url, headers),
+  };
   const enricher = source === "glassdoor" ? new GlassdoorEnricher(tier3) : new AmbitionBoxEnricher(tier3);
   const e = await enricher.enrich({ companyName: company.name });
   if (!e) return { source, parsed: false, note: "no ratings parsed (selectors need tuning for your session)" };

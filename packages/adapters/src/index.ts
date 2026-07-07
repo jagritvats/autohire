@@ -27,3 +27,12 @@ export {
   Tier3DisabledError,
   type Tier3Context,
 } from "./tier3/index.js";
+// Tier-3 India-SWE poll targeting (pure config; used by the local agent's poll planner).
+export {
+  INDIA_TECH_HUBS,
+  INDIA_SWE_QUERIES,
+  buildIndiaSweTargets,
+  lpaFloorFromInr,
+  type Tier3PollTarget,
+  type Tier3PollOptions,
+} from "./tier3/targets.js";

@@ -276,12 +276,14 @@ export function SettingsForm({
   };
 
   const dispatchTier3 = async (source: string) => {
+    // No hardcoded query: the agent runs the curated good-paying-software/eng-in-India
+    // sweep (query × tech-hub × CTC floor from your profile). Override via JOBFLOW_TIER3_*.
     await fetch("/api/jobs", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ type: "tier3_poll", payload: { source, query: "backend developer" } }),
+      body: JSON.stringify({ type: "tier3_poll", payload: { source } }),
     });
-    setSaved(`Queued a ${source} browse — your local agent will run it in your session (if online + enabled).`);
+    setSaved(`Queued a ${source} browse for good-paying software/engineering roles in India — your local agent will run it in your session (if online + enabled) and re-rank the feed.`);
   };
 
   const saveConfig = () =>
@@ -761,12 +763,14 @@ export function SettingsForm({
         </p>
         {config.automationFlags.tier3Sources.length > 0 && (
           <div className="chip-row" style={{ marginTop: 8 }}>
-            <span className="hint">Dispatch a browse (local agent):</span>
-            {config.automationFlags.tier3Sources.map((s) => (
-              <button key={s} className="cmd" onClick={() => dispatchTier3(s)}>
-                browse {s} →
-              </button>
-            ))}
+            <span className="hint">Browse good-paying software/eng roles in India (local agent):</span>
+            {config.automationFlags.tier3Sources
+              .filter((s) => s === "naukri" || s === "linkedin")
+              .map((s) => (
+                <button key={s} className="cmd" onClick={() => dispatchTier3(s)}>
+                  browse {s} →
+                </button>
+              ))}
           </div>
         )}
         <button className="save ghost" onClick={saveConfig} disabled={pending} style={{ marginTop: 12 }}>
