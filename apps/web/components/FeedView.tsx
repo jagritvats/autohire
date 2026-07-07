@@ -42,8 +42,10 @@ export function FeedView({ initial }: { initial: FeedData }) {
     fn(next);
   };
 
+  // `?? []` guards against a momentarily-undefined server payload (e.g. a slow/empty
+  // fetch, or a shape mismatch during dev-server reloads) — never crash the whole view.
   const baseCards =
-    view === "feed" ? (indiaOnly ? (indiaCards ?? []) : data.cards) : viewData[view];
+    (view === "feed" ? (indiaOnly ? (indiaCards ?? []) : data.cards) : viewData[view]) ?? [];
 
   const cards = useMemo(() => {
     return baseCards.filter((c) => {
