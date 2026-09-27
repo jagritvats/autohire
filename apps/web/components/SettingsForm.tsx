@@ -166,7 +166,10 @@ export function SettingsForm({
       setSaved(
         body.isLatex
           ? `Imported LaTeX résumé (${body.chars ?? 0} chars of text + the .tex template). Review, then Save.`
-          : `Extracted ${body.chars ?? 0} chars from ${body.fileName}. Review the text, then Save.`,
+          : `Extracted ${body.chars ?? 0} chars from ${body.fileName}. Review the text, then Save.` +
+              (body.latexKept
+                ? " Your earlier LaTeX template is still set (LaTeX tailoring rewrites it) — clear it under “LaTeX template” if it's out of date."
+                : ""),
       );
     } finally {
       setUploading(false);
@@ -651,8 +654,8 @@ export function SettingsForm({
           );
         })}
         <p className="hint" style={{ marginTop: 8 }}>
-          Save your resume + about first — drafts ground on them and the Evidence Bank. With no LLM key set, the
-          offline <code>echo</code> provider returns a deterministic stub.
+          Save your resume + about first — drafts ground on them and the Evidence Bank. Drafts need a generation
+          model (below); the offline <code>echo</code> stub can&apos;t write prose.
         </p>
       </section>
 

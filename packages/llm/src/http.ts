@@ -37,6 +37,16 @@ export function mapProviderError(status: number, body: string, name = "provider"
   return new ProviderError(msg, detail, status, retryAfterMs);
 }
 
+/** The model stopped at its output limit (`requireComplete`). 422 → not retried: the
+ *  same request would stop at the same place. */
+export function truncatedOutputError(name: string, maxTokens: number | undefined): ProviderError {
+  return new ProviderError(
+    `${name} stopped at its output limit before finishing — regenerate, or pick a model with a larger output limit.`,
+    `${name}: output hit max_tokens=${maxTokens ?? "default"}`,
+    422,
+  );
+}
+
 /** A fetch with an abort-based timeout that throws a typed ProviderError on expiry. */
 export async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number, name = "provider"): Promise<Response> {
   const ctrl = new AbortController();

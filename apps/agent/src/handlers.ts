@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Job } from "@jobflow/core";
-import { JOB_RUNTIME } from "@jobflow/core";
+import { COVER_LETTER_ANSWER_KEY, JOB_RUNTIME } from "@jobflow/core";
 import type { Repository } from "@jobflow/db";
 import {
   buildFillPlan,
@@ -108,8 +108,11 @@ async function formFill(repo: Repository, job: Job, ctx: HandlerCtx): Promise<Re
   // prefer answers passed on the job; else fall back to the tailored answers saved on
   // the application (the "Save to application" flow on the tailor page).
   const app = await repo.getApplicationByPosting(DEFAULT_TENANT, postingId);
-  const answers = (job.payload.answers as Record<string, string> | undefined) ?? app?.answers ?? {};
+  const { [COVER_LETTER_ANSWER_KEY]: coverLetter, ...answers } =
+    (job.payload.answers as Record<string, string> | undefined) ?? app?.answers ?? {};
   const applicant = mapContactToApplicant(profile.prefs.contact, answers);
+  // the saved cover letter goes to the form's cover-letter field, not the fuzzy question matcher
+  if (coverLetter?.trim()) applicant.coverLetter = coverLetter;
   // prefer this application's tailored PDF; fall back to the base résumé (§ per-role attach).
   if (app?.tailoredResumeUrl) applicant.resumePath = app.tailoredResumeUrl;
   if (!applicant.email) throw new Error("No contact email set — fill your contact details in Settings first.");

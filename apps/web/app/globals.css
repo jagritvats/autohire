@@ -617,7 +617,7 @@ a.company:hover { color: var(--signal); }
 /* ── résumé format panes (Bullets · Markdown · LaTeX) + progress ── */
 .pane { margin-top: 4px; }
 .pane-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
-.pane-head .hint { max-width: 62ch; }
+.pane-head .hint { max-width: 96ch; }
 .pane-btns { margin-left: auto; white-space: nowrap; }
 .md-block { display: flex; flex-direction: column; gap: 8px; }
 .md-block .src-preview pre { max-height: 380px; }
@@ -629,3 +629,32 @@ a.company:hover { color: var(--signal); }
 .stale-banner { margin: 8px 0; padding: 8px 12px; border: 1px solid var(--amber-dim); border-radius: var(--radius); color: var(--amber); font-size: 12px; }
 .tag.exp[data-fit="stretch"] { color: var(--amber); border-color: var(--amber-dim); }
 .tag.exp[data-fit="far"] { color: var(--red); border-color: var(--red); }
+
+/* ── tailor: what it grounds on + source/preview split ── */
+.settings-shell.tailor-shell { max-width: 1320px; }
+.inputs-strip { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; background: var(--bg-card); display: flex; flex-direction: column; gap: 8px; }
+.in-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.in-chip { font-size: 11px; border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; color: var(--ink-faint); }
+.in-chip[data-ok="true"] { color: var(--signal); border-color: var(--signal-dim); }
+.in-warnings { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--amber); line-height: 1.5; }
+.in-warnings a, .tailor-warn a { color: inherit; text-decoration: underline; }
+.tailor-warn { margin: 8px 0; padding: 8px 12px; border: 1px solid var(--amber-dim); border-radius: 6px; color: var(--amber); font-size: 12px; line-height: 1.5; background: rgba(242,179,94,.05); }
+.doc-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+@media (max-width: 1000px) { .doc-split { grid-template-columns: 1fr; } }
+.doc-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.doc-label { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); }
+.doc-src {
+  width: 100%; height: 780px; resize: vertical; background: var(--bg-raised); border: 1px solid var(--line); color: var(--ink);
+  font-family: var(--mono); font-size: 12px; line-height: 1.5; padding: 10px 12px; border-radius: 6px; tab-size: 2;
+}
+.doc-src.prose { font-size: 13px; line-height: 1.6; height: 560px; }
+.doc-src:focus { outline: none; border-color: var(--signal-dim); }
+.page-frame { width: 100%; height: 780px; border: 1px solid var(--line); border-radius: 6px; background: #e9e9e6; }
+.page-frame.short { height: 560px; }
+.page-empty {
+  min-height: 200px; display: flex; align-items: center; justify-content: center; text-align: center; padding: 20px;
+  border: 1px dashed var(--line-bright); border-radius: 6px; font-size: 12px; color: var(--ink-faint); line-height: 1.6;
+}
+.page-empty a { color: var(--signal); }
+.page-note { font-size: 11.5px; color: var(--amber); }
+.note-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }

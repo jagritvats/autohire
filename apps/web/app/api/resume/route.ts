@@ -82,5 +82,8 @@ export async function POST(req: Request) {
   };
   await repo.saveProfile(next);
 
-  return NextResponse.json({ text, fileName: name, resumePath, chars: text.length, isLatex: !!latex, latex });
+  // a PDF/text upload doesn't touch the LaTeX template — say so, since LaTeX tailoring
+  // keeps rewriting that older .tex until it's replaced or cleared
+  const latexKept = !latex && !!current.resumeLatex.trim();
+  return NextResponse.json({ text, fileName: name, resumePath, chars: text.length, isLatex: !!latex, latex, latexKept });
 }

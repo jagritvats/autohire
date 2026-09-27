@@ -103,11 +103,17 @@ async function demo(): Promise<void> {
     hr();
     log(`\x1b[1m  TAILORING\x1b[0m  (evidence-grounded, honest-voice) — top match`);
     hr();
-    const variants = await tailorResume(llm, profile, evidence, top.posting);
-    log(`  ATS keyword coverage: ${(variants.atsKeywordCoverage * 100).toFixed(0)}%` +
-        (variants.missingKeywords.length ? ` · surface: ${variants.missingKeywords.slice(0, 5).join(", ")}` : ""));
-    log(`  yc/startup bullets:`);
-    variants.yc_startup.slice(0, 3).forEach((b) => log(`    • ${b}`));
+    // a real model's failure surfaces as an error (never a silent template) — log it and go on
+    const variants = await tailorResume(llm, profile, evidence, top.posting).catch((e: Error & { userMessage?: string }) => {
+      log(`  tailoring failed: ${e.userMessage ?? e.message}`);
+      return null;
+    });
+    if (variants) {
+      log(`  ATS keyword coverage: ${(variants.atsKeywordCoverage * 100).toFixed(0)}%` +
+          (variants.missingKeywords.length ? ` · surface: ${variants.missingKeywords.slice(0, 5).join(", ")}` : ""));
+      log(`  yc/startup bullets:`);
+      variants.yc_startup.slice(0, 3).forEach((b) => log(`    • ${b}`));
+    }
     const ans = await answerQuestion(llm, profile, evidence, top.posting, "Why do you want to work here?");
     log(`  answer ("Why here?"): ${ans.slice(0, 200)}…`);
 

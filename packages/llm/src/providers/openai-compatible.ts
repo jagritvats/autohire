@@ -1,6 +1,6 @@
 import { LOCAL_EMBEDDER_ID, localEmbed } from "@jobflow/core";
 import type { CompletionRequest, LlmProvider, ProviderConfig } from "../provider.js";
-import { fetchWithTimeout, mapProviderError, retryAfterMs, withRetry } from "../http.js";
+import { fetchWithTimeout, mapProviderError, retryAfterMs, truncatedOutputError, withRetry } from "../http.js";
 
 /**
  * Covers both xAI Grok and OpenAI — same Chat Completions shape, different base URL
@@ -59,10 +59,11 @@ export class OpenAICompatibleProvider implements LlmProvider {
           label,
         );
         if (!res.ok) throw mapProviderError(res.status, await res.text(), label, retryAfterMs(res));
-        const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+        const data = (await res.json()) as { choices?: Array<{ message?: { content?: string }; finish_reason?: string }> };
+        if (req.requireComplete && data.choices?.[0]?.finish_reason === "length") throw truncatedOutputError(label, req.maxTokens);
         return data.choices?.[0]?.message?.content ?? "";
       },
-      { name: label },
+      { name: label, retries: req.retries },
     );
   }
 

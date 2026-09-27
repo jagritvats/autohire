@@ -46,6 +46,12 @@ The four ATS/discovery sources were probed live and return real data: **Greenhou
 - ✅ Evidence Bank (schema + seed: NexusAlgo / kafka-ui / Verdict / ZFH ledger / Synapse).
 - ✅ Resume tailoring (3 strategy variants + ATS keyword coverage) — evidence-grounded.
 - ✅ Application-answer generation — honest-voice, evidence-cited.
+- ✅ **Tailor rework (2026-09-27)** — the review found tailoring ran on sample evidence under `echo`, told the model to drop the base résumé ("ONLY the evidence"), sent the JD's first 1,200 raw chars (HTML + boilerplate), cut `.tex` templates at 6k chars, accepted truncated LaTeX, and silently cached a template on any model error. Now:
+  - the base résumé, Evidence Bank and declared skills are the citeable ground truth (invariant #3); `jdForPrompt` sends requirements first and drops benefits/EEO;
+  - LaTeX: the model rewrites only the body, spliced into the user's preamble byte-for-byte; `latexBodyIssues` + provider stop-reason checks reject cut-off output; a dropped section is flagged;
+  - real-model failures surface (never cached); with `echo`, documents are the user's own résumé reformatted and labelled `builtin`, and prose (answers, cover letters) refuses;
+  - tailor page: "grounded on" strip with warnings, editable source + live preview (inline PDF for LaTeX), edits persist, stale-draft badges, Markdown → typeset PDF for autofill, recruiter-friendly attachment names;
+  - **cover letter** (optional personal note; saved to the application; the agent fills the form's cover-letter field).
 - ⬜ Multi-agent prep graph (Researcher / Question Forecaster / Prep-Plan / Evidence Matcher).
 - ⬜ `question_bank` accretion across applications.
 

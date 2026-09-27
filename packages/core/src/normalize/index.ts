@@ -21,6 +21,7 @@ export * from "./salary.js";
 export * from "./links.js";
 export * from "./chat.js";
 export * from "./reposts.js";
+export * from "./jd.js";
 
 /**
  * The canonical fields derived from a RawPosting. The persistence layer combines

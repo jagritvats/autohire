@@ -19,6 +19,12 @@ export interface CompletionRequest {
   json?: boolean;
   /** per-call network timeout (ms); provider aborts + throws a typed timeout on expiry. */
   timeoutMs?: number;
+  /** transient-failure retries (default 2). Long document generations use fewer — each
+   *  attempt can take minutes. */
+  retries?: number;
+  /** throw instead of returning text when the model stopped at `maxTokens` — a cut-off
+   *  résumé must never be passed off as a finished one. */
+  requireComplete?: boolean;
 }
 
 export interface LlmProvider {
@@ -31,6 +37,12 @@ export interface LlmProvider {
   readonly embedderId?: string;
   complete(req: CompletionRequest): Promise<string>;
   embed(texts: string[]): Promise<number[][]>;
+}
+
+/** The offline echo stub produces no real text — generators use their deterministic
+ *  builders (documents) or refuse (prose) instead of passing the echo off as a draft. */
+export function isOfflineProvider(llm: Pick<LlmProvider, "name">): boolean {
+  return llm.name === "echo";
 }
 
 export interface ProviderConfig {

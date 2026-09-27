@@ -258,11 +258,13 @@ export const Profile = z.object({
 export type Profile = z.infer<typeof Profile>;
 
 // ── Generation — a cached, evidence-grounded draft (resume variants / answers, §4) ──
-/** `resume` content is JSON.stringify(ResumeVariants); the rest are plain answer text. */
+/** `resume` content is JSON.stringify(ResumeVariants); `cover_letter` is JSON of
+ *  {text, note}; the rest are plain text (a .tex / Markdown document, or an answer). */
 export const GenerationKind = z.enum([
   "resume",
   "resume_latex",
   "resume_md",
+  "cover_letter",
   "why_here",
   "interesting_problem",
   "about_blurb",
@@ -422,3 +424,7 @@ export const Application = z.object({
   outcome: z.string().nullable().default(null),
 });
 export type Application = z.infer<typeof Application>;
+
+/** Where a saved cover letter lives in `Application.answers`; the agent maps it to the
+ *  form's cover-letter field rather than fuzzy-matching it as a free-text question. */
+export const COVER_LETTER_ANSWER_KEY = "cover letter";

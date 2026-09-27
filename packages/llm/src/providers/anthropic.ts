@@ -1,6 +1,6 @@
 import { LOCAL_EMBEDDER_ID, localEmbed } from "@jobflow/core";
 import type { CompletionRequest, LlmProvider, ProviderConfig } from "../provider.js";
-import { fetchWithTimeout, mapProviderError, retryAfterMs, withRetry } from "../http.js";
+import { fetchWithTimeout, mapProviderError, retryAfterMs, truncatedOutputError, withRetry } from "../http.js";
 
 /** Claude via the Messages API. Strong model for re-rank/answers; cheap for normalize. */
 export class AnthropicProvider implements LlmProvider {
@@ -43,10 +43,11 @@ export class AnthropicProvider implements LlmProvider {
           "Anthropic",
         );
         if (!res.ok) throw mapProviderError(res.status, await res.text(), "Anthropic", retryAfterMs(res));
-        const data = (await res.json()) as { content?: Array<{ text?: string }> };
-        return data.content?.map((c) => c.text ?? "").join("") ?? "";
+        const data = (await res.json()) as { content?: Array<{ type?: string; text?: string }>; stop_reason?: string };
+        if (req.requireComplete && data.stop_reason === "max_tokens") throw truncatedOutputError("Anthropic", req.maxTokens);
+        return data.content?.map((c) => (c.type === undefined || c.type === "text" ? c.text ?? "" : "")).join("") ?? "";
       },
-      { name: "Anthropic" },
+      { name: "Anthropic", retries: req.retries },
     );
   }
 

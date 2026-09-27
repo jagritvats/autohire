@@ -55,7 +55,8 @@ export async function compileLatex(tex: string): Promise<CompileResult> {
   const logPath = join(dir, "resume.log");
   try {
     await writeFile(texPath, tex, "utf8");
-    const opts = { cwd: dir, timeout: 60_000, windowsHide: true } as const;
+    // tectonic's first run downloads its package bundle — minutes, not seconds
+    const opts = { cwd: dir, timeout: engine === "tectonic" ? 300_000 : 60_000, windowsHide: true } as const;
     if (engine === "tectonic") {
       await exec("tectonic", ["--outdir", dir, "--chatter", "minimal", "--keep-logs", texPath], opts).catch(() => {});
     } else {
