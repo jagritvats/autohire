@@ -1,8 +1,13 @@
 name: jobflow-poll
 
 # Cloud cron (Tier 1-2 only). Discovers + polls ATS boards + aggregators, then
-# re-ranks. Free GitHub Actions minutes; no infra (§8, §9, §12-Q1).
+# re-ranks and enriches. Free GitHub Actions minutes; no infra (§8, §9, §12-Q1).
 # Tier 3 (Naukri/Glassdoor/AmbitionBox/LinkedIn) NEVER runs here — local agent only.
+#
+# A scheduled run only makes sense against a HOSTED Postgres (the DATABASE_URL secret):
+# without one the worker falls back to an in-memory store that dies with the runner, so a
+# cron poll would hit every board every 6h and persist nothing. The gate job skips those
+# runs; "Run workflow" (workflow_dispatch) always goes ahead, as an end-to-end smoke test.
 
 on:
   schedule:
@@ -14,7 +19,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - id: check
+        env:
+          HAS_DB: ${{ secrets.DATABASE_URL != '' }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$HAS_DB" = "true" ] || [ "$EVENT" = "workflow_dispatch" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No DATABASE_URL secret: a scheduled poll into an in-memory store would persist nothing, so it is skipped. Add the secret (a hosted Postgres) to enable the cron; 'Run workflow' still runs as a smoke test."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
   poll:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -37,14 +61,20 @@ jobs:
       JSEARCH_RAPIDAPI_KEY: ${{ secrets.JSEARCH_RAPIDAPI_KEY }}
     steps:
       - uses: actions/checkout@v4
+      # no `version:` — the action reads package.json's "packageManager" (pnpm@9.15.9).
+      # Pinning "9" here too made action-setup@v4 abort every run: it refuses two versions
+      # that aren't the identical string ("9" ≠ "9.15.9").
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r build
-      - name: discover + poll + rank
+      # a hosted DB must have the schema the code writes (e.g. 0013's salary columns);
+      # the migrator is idempotent and tracks what it has applied
+      - name: migrate
+        if: env.DATABASE_URL != ''
+        run: pnpm --filter @jobflow/db migrate
+      - name: discover + poll + rank + enrich
         run: pnpm --filter @jobflow/worker start
