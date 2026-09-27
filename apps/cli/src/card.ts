@@ -1,4 +1,4 @@
-import { postingAgeDays, type Match, type Posting } from "@jobflow/core";
+import { formatSalary, postingAgeDays, type Match, type Posting } from "@jobflow/core";
 
 /** Render the §11.6 match card — the actual product surface. */
 export function renderMatchCard(m: Match & { posting: Posting }, idx: number): string {
@@ -39,12 +39,18 @@ function freshnessLine(p: Posting): string {
 
 function compLine(p: Posting): string | null {
   const s = p.salary;
-  if (s.min == null && s.max == null) return null;
-  const range =
-    s.min != null && s.max != null
-      ? `${fmt(s.min, s.currency)}–${fmt(s.max, s.currency)}`
-      : `${fmt((s.min ?? s.max)!, s.currency)}+`;
-  return `est. ${range} (${s.confidence} · ${s.source})`;
+  if (s.source !== "none" && (s.min != null || s.max != null)) {
+    const range =
+      s.min != null && s.max != null
+        ? `${fmt(s.min, s.currency)}–${fmt(s.max, s.currency)}`
+        : s.max != null
+          ? `up to ${fmt(s.max, s.currency)}`
+          : `${fmt(s.min!, s.currency)}+`;
+    return `${range} (stated · ${s.confidence})`;
+  }
+  const e = p.salaryEstimate;
+  if (!e) return null;
+  return `~${fmt(e.min, e.currency)}–${fmt(e.max, e.currency)} (estimate · ${Math.round(e.confidenceScore * 100)}% · ${e.basis})`;
 }
 
 function companyLine(p: Posting): string | null {
@@ -53,9 +59,7 @@ function companyLine(p: Posting): string | null {
 }
 
 function fmt(n: number, cur: string): string {
-  if (cur === "INR") return `₹${(n / 100000).toFixed(0)}L`;
-  if (cur === "USD") return `$${Math.round(n / 1000)}k`;
-  return `${Math.round(n / 1000)}k ${cur}`;
+  return formatSalary(n, cur);
 }
 
 function scoreBadge(s: number): string {

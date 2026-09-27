@@ -1,28 +1,36 @@
-import type { Posting, SalaryBand } from "@jobflow/core";
-import {
-  fetchLevelsComp,
-  familyMedianFor,
-  fetchAdzunaSalary,
-  hasAdzunaKeys,
-  slugFromName,
-  type LevelsComp,
-} from "@jobflow/adapters";
+import { salaryMarketOf } from "@jobflow/core";
+import { LEVELS_MARKET_SLUG, fetchLevelsComp, fetchLevelsCompanyMarket, slugFromName } from "@jobflow/adapters";
 import type { Repository } from "@jobflow/db";
+import {
+  ensureSalaryCalibration,
+  estimatePostingSalaries,
+  levelsCompanyBenchmark,
+  refreshSalaryBenchmarks,
+  type EstimateStats,
+} from "./salary.js";
 
 /**
- * Tier-1 enrichment cascade (§11.4). GATED ON MATCH SCORE — enrichment is
- * rate-limited and only worth it for roles you'd act on, so we enrich the top-N
- * matched companies/postings, not the whole corpus. Cloud-safe (no Tier-3).
+ * Tier-1 enrichment (§11.4). The NETWORK half is GATED ON MATCH SCORE — rate-limited
+ * sources are only worth spending on roles you'd act on — so it runs for the top-N matches;
+ * the estimate itself is offline and re-prices every posting. Cloud-safe (no Tier-3).
  *
- * Per company: levels.fyi comp benchmark (median + family breakdown), cached ~30d.
- * Per posting lacking direct comp: estimate via Adzuna (country-aware, preferred)
- * → else the company's levels.fyi family median, cached by (archetype, country).
+ *   1. per top company: levels.fyi comp benchmark (median + family breakdown), and its
+ *      level ladder in each market its top postings are in (company × country), ~30d
+ *   2. market benchmarks: levels.fyi market×level pages, Adzuna role×level×country (keyed)
+ *   3. recalibrate per-market confidence from a backtest when last week's has expired
+ *   4. estimate every active posting that states no pay → `posting.salaryEstimate`
+ *      (never written into `posting.salary`, which is only ever what the posting says)
  */
 
 export interface EnrichStats {
   companiesEnriched: number;
-  postingsEstimated: number;
+  /** employer level ladders fetched (levels.fyi company × country) */
+  companyLaddersFetched: number;
+  levelsMarketFetched: number;
+  adzunaFetched: number;
   adzunaUsed: boolean;
+  postingsEstimated: number;
+  estimate: EstimateStats;
 }
 
 export async function enrichTopMatches(
@@ -31,101 +39,64 @@ export async function enrichTopMatches(
 ): Promise<EnrichStats> {
   const limit = opts.limit ?? 40;
   const staleDays = opts.staleDays ?? 30;
-  const stats: EnrichStats = { companiesEnriched: 0, postingsEstimated: 0, adzunaUsed: hasAdzunaKeys() };
+  let companiesEnriched = 0;
+  let companyLaddersFetched = 0;
 
   const matches = await repo.listMatches(opts.tenantId, limit);
-  const seenCompanies = new Set<string>();
-  const levelsByCompany = new Map<string, LevelsComp | null>();
+  // the pay markets each top company is hiring in (among its top matches)
+  const marketsByCompany = new Map<string, Set<string>>();
+  for (const m of matches) {
+    const market = salaryMarketOf(m.posting.location);
+    if (!market || !LEVELS_MARKET_SLUG[market]) continue;
+    const set = marketsByCompany.get(m.posting.companyId) ?? new Set<string>();
+    set.add(market);
+    marketsByCompany.set(m.posting.companyId, set);
+  }
 
+  const seen = new Set<string>();
   for (const m of matches) {
     const posting = m.posting;
-    // ── company comp benchmark (once per company, cached) ──
-    if (!seenCompanies.has(posting.companyId)) {
-      seenCompanies.add(posting.companyId);
-      const company = await repo.getCompany(posting.companyId);
-      const fresh = company?.enrichedAt && daysSince(company.enrichedAt) < staleDays;
-      let levels: LevelsComp | null = null;
-      if (fresh && company?.compBreakdown) {
-        // reuse cached benchmark for posting estimates without re-fetch
-        levels = {
-          slug: "", currency: company.compCurrency ?? "USD", scopeLocation: "United States",
-          medianAll: company.compMedian, families: company.compBreakdown, source: "levelsfyi",
-          attribution: "Data source: Levels.fyi (https://www.levels.fyi)",
-        };
-      } else {
-        levels = await fetchLevelsComp(slugFromName(posting.companyName));
-        if (levels) {
-          await repo.saveCompanyEnrichment(posting.companyId, {
-            compMedian: levels.medianAll,
-            compCurrency: levels.currency,
-            compSource: "levelsfyi",
-            compBreakdown: levels.families.slice(0, 12),
-          });
-          stats.companiesEnriched++;
-        } else if (company && !company.enrichedAt) {
-          // mark attempted so we don't refetch a miss every run
-          await repo.saveCompanyEnrichment(posting.companyId, { compSource: "none" });
-        }
-      }
-      levelsByCompany.set(posting.companyId, levels);
+    if (seen.has(posting.companyId)) continue;
+    seen.add(posting.companyId);
+    const company = await repo.getCompany(posting.companyId);
+
+    // the employer's own ladder in each market it's hiring in here (verified offers)
+    for (const market of marketsByCompany.get(posting.companyId) ?? []) {
+      const prior = company?.compBenchmarks?.find((b) => b.source === "levelsfyi" && b.market === market);
+      if (prior && daysSince(prior.fetchedAt) < staleDays) continue;
+      const lv = await fetchLevelsCompanyMarket(slugFromName(posting.companyName), market);
+      await repo.saveCompanyEnrichment(posting.companyId, { compBenchmark: levelsCompanyBenchmark(lv, market) });
+      if (lv) companyLaddersFetched++;
     }
 
-    // ── posting-level estimate (only if no direct/high-confidence comp) ──
-    if (hasUsableSalary(posting)) continue;
-    const band = await estimateSalary(repo, posting, levelsByCompany.get(posting.companyId) ?? null);
-    if (band) {
-      await repo.updatePostingSalary(posting.id, band);
-      stats.postingsEstimated++;
-    }
-  }
-
-  return stats;
-}
-
-function hasUsableSalary(p: Posting): boolean {
-  return p.salary.source !== "none" && (p.salary.min != null || p.salary.max != null);
-}
-
-async function estimateSalary(
-  repo: Repository,
-  posting: Posting,
-  levels: LevelsComp | null,
-): Promise<SalaryBand | null> {
-  const loc = [posting.location.city, posting.location.country].filter(Boolean).join(", ") || posting.location.country || "";
-  const cacheKey = `adz:${posting.roleArchetype}:${posting.location.country ?? "unknown"}`;
-
-  // 1. Adzuna (country-aware) — preferred; cache by (archetype, country)
-  if (hasAdzunaKeys() && loc) {
-    const cached = await repo.getSalaryCache(cacheKey);
-    if (cached && cached.estMin != null) {
-      return { min: cached.estMin, max: cached.estMax, currency: cached.currency, source: "adzuna_cache", confidence: "medium" };
-    }
-    const adz = await fetchAdzunaSalary(posting.roleArchetype, loc);
-    if (adz) {
-      await repo.putSalaryCache({
-        key: cacheKey, roleArchetype: posting.roleArchetype, location: posting.location.country,
-        estMin: adz.min, estMax: adz.max, currency: adz.currency, source: "adzuna", confidence: "medium", ttlDays: 14,
+    if (company?.enrichedAt && daysSince(company.enrichedAt) < staleDays) continue;
+    const levels = await fetchLevelsComp(slugFromName(posting.companyName));
+    if (levels) {
+      await repo.saveCompanyEnrichment(posting.companyId, {
+        compMedian: levels.medianAll,
+        compCurrency: levels.currency,
+        compSource: "levelsfyi",
+        compBreakdown: levels.families.slice(0, 12),
       });
-      return { min: adz.min, max: adz.max, currency: adz.currency, source: "adzuna", confidence: "medium" };
+      companiesEnriched++;
+    } else if (company && !company.enrichedAt) {
+      // mark attempted so we don't refetch a miss every run
+      await repo.saveCompanyEnrichment(posting.companyId, { compSource: "none" });
     }
   }
 
-  // 2. levels.fyi family median (US comp). Honest confidence: medium if the role is
-  //    US-located, low otherwise (US comp is a weak proxy for India/EU).
-  if (levels) {
-    const median = familyMedianFor(levels, posting.roleArchetype);
-    if (median != null) {
-      const usLocated = posting.location.country == null || /united states|us/i.test(posting.location.country);
-      return {
-        min: Math.round(median * 0.85),
-        max: Math.round(median * 1.15),
-        currency: levels.currency,
-        source: "levelsfyi",
-        confidence: usLocated ? "medium" : "low",
-      };
-    }
-  }
-  return null;
+  const bench = await refreshSalaryBenchmarks(repo, { postings: matches.map((m) => m.posting) });
+  await ensureSalaryCalibration(repo);
+  const estimate = await estimatePostingSalaries(repo);
+  return {
+    companiesEnriched,
+    companyLaddersFetched,
+    levelsMarketFetched: bench.levelsFetched,
+    adzunaFetched: bench.adzunaFetched,
+    adzunaUsed: bench.adzunaEnabled,
+    postingsEstimated: estimate.estimated,
+    estimate,
+  };
 }
 
 function daysSince(t: string | Date): number {

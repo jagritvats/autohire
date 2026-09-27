@@ -9,6 +9,9 @@
     "poll": "tsx src/orchestrator.ts poll",
     "discover": "tsx src/orchestrator.ts discover",
     "rank": "tsx src/orchestrator.ts rank",
+    "enrich": "tsx src/orchestrator.ts enrich",
+    "salary": "tsx src/orchestrator.ts salary",
+    "salary-backtest": "tsx src/orchestrator.ts salary-backtest",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

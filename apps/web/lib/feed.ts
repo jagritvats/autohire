@@ -11,7 +11,7 @@ import {
   type RecheckStats,
 } from "@jobflow/pipeline";
 import type { Match, Posting } from "@jobflow/core";
-import { isIndiaWorkable, postingAgeDays, scoreSourceTrust } from "@jobflow/core";
+import { formatSalary, isIndiaWorkable, postingAgeDays, scoreSourceTrust } from "@jobflow/core";
 import { getRepo, ensureTenant } from "./repo.js";
 import { corpusEmbedder } from "./embedder.js";
 
@@ -41,7 +41,20 @@ export interface FeedCard {
   levelNote: string | null;
   stackNote: string | null;
   skills: string[];
-  comp: { label: string; confidence: string; source: string } | null;
+  /**
+   * Pay: what the posting states, else our estimate (§11.4). `estimate` is never blurred —
+   * the UI marks it "~ … est N%" with its basis; stated pay shows its parse confidence.
+   */
+  comp: {
+    label: string;
+    confidence: string;
+    source: string;
+    estimate: boolean;
+    /** 0..1, estimates only */
+    confidenceScore: number | null;
+    /** estimates only: "14 similar posted ranges in India (5 same level) · levels.fyi …" */
+    basis: string | null;
+  } | null;
   rating: { overall: number; reviews: number } | null;
   redFlags: string[];
   applyUrl: string | null;
@@ -252,13 +265,24 @@ export async function purgeOldFeed(opts: PurgeOptions): Promise<FeedData & { pur
   return { ...(await shape(repo, matches)), purged };
 }
 
-function compLabel(p: Posting) {
+function compLabel(p: Posting): FeedCard["comp"] {
   const s = p.salary;
-  if (s.min == null && s.max == null) return null;
-  const f = (n: number) =>
-    s.currency === "INR" ? `₹${(n / 100000).toFixed(0)}L` : s.currency === "USD" ? `$${Math.round(n / 1000)}k` : `${Math.round(n / 1000)}k`;
-  const label = s.min != null && s.max != null ? `${f(s.min)}–${f(s.max)}` : `${f((s.min ?? s.max)!)}+`;
-  return { label, confidence: s.confidence, source: s.source };
+  if (s.source !== "none" && (s.min != null || s.max != null)) {
+    const f = (n: number) => formatSalary(n, s.currency);
+    const label =
+      s.min != null && s.max != null ? `${f(s.min)}–${f(s.max)}` : s.max != null ? `up to ${f(s.max)}` : `${f(s.min!)}+`;
+    return { label, confidence: s.confidence, source: s.source, estimate: false, confidenceScore: null, basis: null };
+  }
+  const e = p.salaryEstimate;
+  if (!e) return null;
+  return {
+    label: `${formatSalary(e.min, e.currency)}–${formatSalary(e.max, e.currency)}`,
+    confidence: e.confidence,
+    source: e.sources.map((x) => x.source).join(" + "),
+    estimate: true,
+    confidenceScore: e.confidenceScore,
+    basis: e.basis,
+  };
 }
 
 function ratingOf(p: Posting): { overall: number; reviews: number } | null {

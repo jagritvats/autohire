@@ -38,10 +38,25 @@ export {
   parseLevelsMarkdown,
   familyMedianFor,
   slugFromName,
+  fetchLevelsMarket,
+  parseLevelsMarketMarkdown,
+  fetchLevelsCompanyMarket,
+  parseLevelsCompanyMarketMarkdown,
+  LEVELS_MARKET_SLUG,
   LEVELS_ATTRIBUTION,
   type LevelsComp,
+  type LevelsMarketComp,
+  type LevelsCompanyMarket,
+  type LevelsMarketLevel,
 } from "./enrich/levelsfyi.js";
-export { fetchAdzunaSalary, hasAdzunaKeys, type AdzunaSalary } from "./enrich/adzuna.js";
+export {
+  fetchAdzunaSalary,
+  hasAdzunaKeys,
+  adzunaQuery,
+  summarizeHistogram,
+  ADZUNA_MARKET,
+  type AdzunaSalary,
+} from "./enrich/adzuna.js";
 // Tier 3 — local agent only; deliberately NOT in the cloud `ADAPTERS` registry.
 export {
   NaukriAdapter,

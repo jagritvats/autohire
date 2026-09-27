@@ -18,6 +18,7 @@ import type {
   Profile,
   ProfilePrefs,
   SalaryBand,
+  SalaryEstimate,
   ScoreBreakdown,
   TenantConfig,
 } from "@jobflow/core";
@@ -97,6 +98,11 @@ export class PgRepository implements Repository {
          rating_source = coalesce($10, rating_source),
          culture_summary = coalesce($11, culture_summary),
          interview_difficulty = coalesce($12, interview_difficulty),
+         -- one entry per (source, market): drop that pair's previous entry, append the new one
+         comp_benchmarks = case when $13::jsonb is null then comp_benchmarks else
+           coalesce((select jsonb_agg(e) from jsonb_array_elements(comp_benchmarks) e
+                     where not (e->>'source' = $13::jsonb->>'source' and e->>'market' = $13::jsonb->>'market')),
+                    '[]'::jsonb) || jsonb_build_array($13::jsonb) end,
          enriched_at = now()
        where id = $1`,
       [
@@ -104,6 +110,7 @@ export class PgRepository implements Repository {
         p.compBreakdown ? JSON.stringify(p.compBreakdown) : null,
         p.ratingOverall ?? null, p.ratingWlb ?? null, p.ratingComp ?? null, p.reviewCount ?? null,
         p.ratingSource ?? null, p.cultureSummary ?? null, p.interviewDifficulty ?? null,
+        p.compBenchmark ? JSON.stringify(p.compBenchmark) : null,
       ],
     );
   }
@@ -157,8 +164,8 @@ export class PgRepository implements Repository {
          loc_mode, loc_city, loc_country, loc_tz, remote_geo, sponsorship, location_confidence,
          salary_min, salary_max, currency, salary_source, salary_confidence,
          experience_min, experience_max,
-         apply_url, jd_embedding, dedup_key, posted_at, posted_by_agency, embed_key)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33)
+         apply_url, jd_embedding, dedup_key, posted_at, posted_by_agency, embed_key, salary_raw)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34)
        on conflict (ats_type, ats_job_id) do update set
          title = excluded.title, title_norm = excluded.title_norm,
          role_archetype = excluded.role_archetype, level_band = excluded.level_band,
@@ -168,6 +175,8 @@ export class PgRepository implements Repository {
          location_confidence = excluded.location_confidence,
          salary_min = excluded.salary_min, salary_max = excluded.salary_max, currency = excluded.currency,
          salary_source = excluded.salary_source, salary_confidence = excluded.salary_confidence,
+         salary_raw = excluded.salary_raw,
+         -- salary_estimate is NOT touched: it belongs to the estimator's own pass (§11.4)
          experience_min = excluded.experience_min, experience_max = excluded.experience_max,
          apply_url = excluded.apply_url, jd_embedding = excluded.jd_embedding, embed_key = excluded.embed_key,
          posted_by_agency = excluded.posted_by_agency,
@@ -192,7 +201,7 @@ export class PgRepository implements Repository {
         p.salary.min, p.salary.max, p.salary.currency, p.salary.source, p.salary.confidence,
         p.experience.min, p.experience.max,
         p.applyUrl, p.jdEmbedding ? JSON.stringify(p.jdEmbedding) : null, p.dedupKey,
-        p.postedAt ?? null, p.postedByAgency ?? false, p.embedKey ?? null,
+        p.postedAt ?? null, p.postedByAgency ?? false, p.embedKey ?? null, p.salaryRaw ?? null,
       ],
     );
     return rowToPosting(rows[0]!);
@@ -216,11 +225,28 @@ export class PgRepository implements Repository {
   async setCanonical(postingId: string, canonicalId: string): Promise<void> {
     await this.q("update posting set canonical_id = $2 where id = $1", [postingId, canonicalId]);
   }
-  async updatePostingSalary(id: string, band: SalaryBand): Promise<void> {
+  async updatePostingSalary(id: string, band: SalaryBand, salaryRaw?: string | null): Promise<void> {
     await this.q(
-      `update posting set salary_min = $2, salary_max = $3, currency = $4, salary_source = $5, salary_confidence = $6 where id = $1`,
-      [id, band.min, band.max, band.currency, band.source, band.confidence],
+      `update posting set salary_min = $2, salary_max = $3, currency = $4, salary_source = $5, salary_confidence = $6,
+         salary_raw = case when $7::boolean then $8 else salary_raw end
+       where id = $1`,
+      [id, band.min, band.max, band.currency, band.source, band.confidence, salaryRaw !== undefined, salaryRaw ?? null],
     );
+  }
+  async saveSalaryEstimates(updates: Array<{ id: string; estimate: SalaryEstimate | null }>): Promise<number> {
+    let n = 0;
+    // one statement per chunk — thousands of single-row updates would be thousands of round trips
+    for (let i = 0; i < updates.length; i += 500) {
+      const chunk = updates.slice(i, i + 500);
+      const { rowCount } = await this.q(
+        `update posting p set salary_estimate = u.est
+           from jsonb_to_recordset($1::jsonb) as u(id uuid, est jsonb)
+          where p.id = u.id`,
+        [JSON.stringify(chunk.map((u) => ({ id: u.id, est: u.estimate })))],
+      );
+      n += rowCount ?? 0;
+    }
+    return n;
   }
   async markStale(companyId: string, seenAtsJobIds: string[]): Promise<number> {
     const { rowCount } = await this.q(
@@ -477,19 +503,24 @@ export class PgRepository implements Repository {
     const r = rows[0];
     return {
       key: r.key, roleArchetype: r.role_archetype, location: r.location,
-      estMin: num(r.est_min), estMax: num(r.est_max), currency: r.currency,
+      estMin: num(r.est_min), estMax: num(r.est_max), estMedian: num(r.est_median),
+      sampleCount: r.sample_count ?? null, currency: r.currency,
       source: r.source, confidence: r.confidence,
     };
   }
   async putSalaryCache(e: SalaryCacheEntry): Promise<void> {
     await this.q(
-      `insert into salary_cache (key, role_archetype, location, est_min, est_max, currency, source, confidence, fetched_at, ttl)
-       values ($1,$2,$3,$4,$5,$6,$7,$8, now(), ($9 || ' days')::interval)
+      `insert into salary_cache (key, role_archetype, location, est_min, est_max, currency, source, confidence, fetched_at, ttl, est_median, sample_count)
+       values ($1,$2,$3,$4,$5,$6,$7,$8, now(), ($9 || ' days')::interval, $10, $11)
        on conflict (key) do update set
          role_archetype = excluded.role_archetype, location = excluded.location,
          est_min = excluded.est_min, est_max = excluded.est_max, currency = excluded.currency,
-         source = excluded.source, confidence = excluded.confidence, fetched_at = now(), ttl = excluded.ttl`,
-      [e.key, e.roleArchetype ?? null, e.location ?? null, e.estMin, e.estMax, e.currency, e.source, e.confidence, String(e.ttlDays ?? 14)],
+         source = excluded.source, confidence = excluded.confidence, fetched_at = now(), ttl = excluded.ttl,
+         est_median = excluded.est_median, sample_count = excluded.sample_count`,
+      [
+        e.key, e.roleArchetype ?? null, e.location ?? null, e.estMin, e.estMax, e.currency, e.source, e.confidence,
+        String(e.ttlDays ?? 14), e.estMedian ?? null, e.sampleCount ?? null,
+      ],
     );
   }
 
@@ -679,6 +710,7 @@ function rowToCompany(r: pg.QueryResultRow): Company {
     cultureSummary: r.culture_summary, interviewDifficulty: r.interview_difficulty,
     compMedian: num(r.comp_median), compCurrency: r.comp_currency ?? null, compSource: r.comp_source ?? null,
     compBreakdown: parseJson(r.comp_breakdown, null), compUpdatedAt: r.comp_updated_at ?? null,
+    compBenchmarks: parseJson(r.comp_benchmarks, []),
     enrichedAt: r.enriched_at ?? null, createdAt: r.created_at,
   };
 }
@@ -698,6 +730,7 @@ function rowToPosting(r: pg.QueryResultRow): Posting {
     source: r.source, tier: r.tier, title: r.title, titleNorm: r.title_norm, roleArchetype: r.role_archetype,
     levelBand: r.level_band, jdText: r.jd_text, jdSkills: r.jd_skills ?? [], requirements: parseJson(r.requirements, []),
     location, salary, experience, applyUrl: r.apply_url, jdEmbedding: parseJson(r.jd_embedding, null),
+    salaryRaw: r.salary_raw ?? null, salaryEstimate: parseJson<SalaryEstimate | null>(r.salary_estimate, null),
     postedByAgency: r.posted_by_agency ?? false, embedKey: r.embed_key ?? null,
     postedAt: r.posted_at ?? null, // pre-migration rows → fall back to firstSeen downstream
     firstSeen: r.first_seen, lastSeen: r.last_seen, isActive: r.is_active, repostCount: r.repost_count,

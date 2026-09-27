@@ -64,6 +64,62 @@ export const SalaryBand = z.object({
 });
 export type SalaryBand = z.infer<typeof SalaryBand>;
 
+/**
+ * A MODELED salary for a posting that states none (§11.4) — never fact. It lives apart
+ * from `salary` (what the posting says) so a re-poll can't wipe it and nothing downstream
+ * can mistake one for the other. `min`/`max` are the p25–p75 band, annual, in the posting's
+ * market currency. `confidenceScore` (0..1) blends sample size, spread, how similar the
+ * comparables are, and whether independent sources agree; its bucket `confidence` is capped
+ * at "medium", so an estimate can never reach the hard salary floor (invariant #4).
+ */
+export const SalaryEstimate = z.object({
+  min: z.number(),
+  median: z.number(),
+  max: z.number(),
+  currency: z.string(),
+  confidence: SalaryConfidence,
+  confidenceScore: z.number().min(0).max(1),
+  /** comparable posted salaries that carried weight */
+  sampleCount: z.number().int(),
+  /** each evidence source's own median and the weight it got in the blend */
+  sources: z.array(
+    z.object({ source: z.string(), median: z.number(), weight: z.number(), detail: z.string() }),
+  ),
+  /** one human line: "14 similar posted ranges in India (5 same level) · levels.fyi India" */
+  basis: z.string(),
+  computedAt: z.string(),
+});
+export type SalaryEstimate = z.infer<typeof SalaryEstimate>;
+
+/**
+ * A company's own pay data from a comp/reviews site — levels.fyi's per-country level ladder,
+ * AmbitionBox CTC by designation (§11.5) — per role, so the estimator can price the matching
+ * level instead of an all-roles average. One entry per (source, market); `roles: []` records
+ * a miss so it isn't re-fetched every run.
+ */
+export const CompanyCompBenchmark = z.object({
+  source: z.string(),
+  currency: z.string(),
+  /** the SalaryMarket the figures describe ("IN") */
+  market: z.string(),
+  /** what the figures measure: India CTC, levels.fyi total comp, or base */
+  basis: z.enum(["ctc", "total_comp", "base"]),
+  /** share of these figures a posting would state (base ÷ total comp), when the source says */
+  postedShare: z.number().nullable().optional(),
+  roles: z.array(
+    z.object({
+      title: z.string(),
+      levelBand: LevelBand.nullable(),
+      median: z.number(),
+      lo: z.number().nullable(),
+      hi: z.number().nullable(),
+      n: z.number().int().nullable(),
+    }),
+  ),
+  fetchedAt: z.string(),
+});
+export type CompanyCompBenchmark = z.infer<typeof CompanyCompBenchmark>;
+
 // ── Company (shared global; the registry is the same for every tenant, §5) ──
 export const Company = z.object({
   id: uuid,
@@ -91,6 +147,8 @@ export const Company = z.object({
   compSource: z.string().nullable().default(null),
   compBreakdown: z.array(z.object({ family: z.string(), median: z.number() })).nullable().default(null),
   compUpdatedAt: ts.nullable().default(null),
+  /** per-role pay from comp/review sites, one entry per source (AmbitionBox, §11.5) */
+  compBenchmarks: z.array(CompanyCompBenchmark).optional(),
   enrichedAt: ts.nullable().default(null),
   createdAt: ts.optional(),
 });
@@ -157,6 +215,13 @@ export const Posting = z.object({
 
   location: ParsedLocation,
   salary: SalaryBand,
+  /**
+   * The source's own salary text as fetched (Lever/Ashby/Naukri pay strings), kept so an
+   * extractor fix can re-parse stored postings exactly instead of waiting for a re-poll.
+   */
+  salaryRaw: z.string().nullable().optional(),
+  /** modeled pay when the posting states none (§11.4) — see SalaryEstimate */
+  salaryEstimate: SalaryEstimate.nullable().optional(),
   /** years-of-experience the JD asks for (§11.2); {null,null} when unstated. */
   experience: ExperienceRange.default({ min: null, max: null }),
 

@@ -5,6 +5,7 @@ import { ingestCompany, ingestFromAdapter } from "./ingest.js";
 import { resolveDiscoveredCompanies } from "./discover.js";
 import { harvestLinks } from "./harvest.js";
 import { localEmbedder, type Embedder } from "./embedder.js";
+import { estimatePostingSalaries } from "./salary.js";
 
 /**
  * One discovery feed = a cloud-safe board adapter + the searches to run on it. These
@@ -139,6 +140,8 @@ export interface PollStats {
   feeds: Record<string, number>;
   resolved: string[];
   expired: number;
+  /** postings (re)priced by the offline salary estimator after the poll (§11.4) */
+  salaryEstimated?: number;
   errors: string[];
 }
 
@@ -150,6 +153,19 @@ export interface PollStats {
  * the tier is re-checked.
  */
 export async function pollAll(repo: Repository, opts: PollOptions = {}): Promise<PollStats> {
+  const stats = await pollSources(repo, opts);
+  // offline + cheap: re-price every posting that states no pay against the refreshed
+  // corpus, so estimates track new comparables without waiting for an enrich run (§11.4).
+  // Never fails the poll.
+  try {
+    stats.salaryEstimated = (await estimatePostingSalaries(repo)).estimated;
+  } catch (e) {
+    stats.errors.push(`salary estimate: ${(e as Error).message}`);
+  }
+  return stats;
+}
+
+async function pollSources(repo: Repository, opts: PollOptions): Promise<PollStats> {
   const embedder = opts.embedder ?? localEmbedder;
   const log = opts.log ?? (() => {});
   const stats: PollStats = { companiesPolled: 0, fetched: 0, staled: 0, feeds: {}, resolved: [], expired: 0, errors: [] };

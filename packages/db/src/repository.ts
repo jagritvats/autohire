@@ -2,6 +2,7 @@ import type {
   AgentHeartbeat,
   Application,
   Company,
+  CompanyCompBenchmark,
   ConnectedContext,
   Evidence,
   Generation,
@@ -15,6 +16,7 @@ import type {
   Posting,
   Profile,
   SalaryBand,
+  SalaryEstimate,
   TenantConfig,
 } from "@jobflow/core";
 
@@ -47,8 +49,13 @@ export interface Repository {
   listActivePostings(): Promise<Posting[]>;
   listPostingsByCompany(companyId: string): Promise<Posting[]>;
   setCanonical(postingId: string, canonicalId: string): Promise<void>;
-  /** fill an estimated salary band on a posting that lacks a direct one (§11.4). */
-  updatePostingSalary(id: string, band: SalaryBand): Promise<void>;
+  /**
+   * Rewrite a posting's STATED salary (a re-parse after an extractor fix, §11.4). Estimates
+   * never go here — they're `saveSalaryEstimates`.
+   */
+  updatePostingSalary(id: string, band: SalaryBand, salaryRaw?: string | null): Promise<void>;
+  /** set (or clear, with null) the modeled salary on many postings in one write. */
+  saveSalaryEstimates(updates: Array<{ id: string; estimate: SalaryEstimate | null }>): Promise<number>;
   /** soft-delete postings not seen in this poll of a company (role filled/pulled). */
   markStale(companyId: string, seenAtsJobIds: string[]): Promise<number>;
   /**
@@ -179,6 +186,8 @@ export interface CompanyEnrichmentPatch {
   ratingSource?: string | null;
   cultureSummary?: string | null;
   interviewDifficulty?: string | null;
+  /** per-role pay from one source for one market; replaces that pair's previous entry (§11.5) */
+  compBenchmark?: CompanyCompBenchmark | null;
 }
 
 export interface SalaryCacheEntry {
@@ -187,6 +196,10 @@ export interface SalaryCacheEntry {
   location?: string | null;
   estMin: number | null;
   estMax: number | null;
+  /** the benchmark's own median (p25/p75 are estMin/estMax) */
+  estMedian?: number | null;
+  /** how many salaries the benchmark summarizes */
+  sampleCount?: number | null;
   currency: string;
   source: string;
   confidence: string;

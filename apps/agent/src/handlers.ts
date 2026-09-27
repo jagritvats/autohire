@@ -374,6 +374,11 @@ async function enrichT3(repo: Repository, job: Job, ctx: HandlerCtx): Promise<Re
     ratingSource: source,
     cultureSummary: e.cultureSummary ?? null,
     interviewDifficulty: e.interviewDifficulty ?? null,
+    // India CTC per designation — the estimator prices a posting off the matching level
+    // at this employer (§11.4). Absent → the company's previous benchmark is kept.
+    compBenchmark: e.compRoles?.length
+      ? { source, currency: e.currency ?? "INR", market: "IN", basis: "ctc", roles: e.compRoles, fetchedAt: new Date().toISOString() }
+      : null,
   });
-  return { source, parsed: true, rating: e.ratingOverall };
+  return { source, parsed: true, rating: e.ratingOverall, compRoles: e.compRoles?.length ?? 0 };
 }

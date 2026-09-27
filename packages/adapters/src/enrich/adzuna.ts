@@ -2,33 +2,29 @@ import type { RoleArchetype } from "@jobflow/core";
 import { httpJson } from "../types.js";
 
 /**
- * Adzuna salary enrichment (Tier 1, free tier, country-aware incl. India §11.4).
- *   GET https://api.adzuna.com/v1/api/jobs/{country}/search/1
- *       ?app_id=&app_key=&what=&where=&results_per_page=50&content-type=application/json
- * Response: { count, mean, results: [{ salary_min, salary_max, salary_is_predicted }] }.
- * Gated on ADZUNA_APP_ID/ADZUNA_APP_KEY — returns null with no keys (cascade falls
- * through to levels.fyi). Confidence: medium.
+ * Adzuna salary benchmark (Tier 1, free tier, country-aware incl. India §11.4). Gated on
+ * ADZUNA_APP_ID/ADZUNA_APP_KEY — returns null without keys and the estimator simply has
+ * one source fewer.
+ *
+ * Level-aware: the query carries the seniority word ("senior backend engineer"), so a
+ * junior and a staff role no longer share one market figure.
+ *
+ * Primary: the salary histogram — the distribution over EVERY matching ad, not one page:
+ *   GET /v1/api/jobs/{country}/histogram?what=…  →  { histogram: { "<bucket floor>": "<count>" } }
+ * Fallback: one page of search results, using only ads that state pay
+ * (`salary_is_predicted: "0"` — Adzuna's own predictions are a model's guess, not a sample).
  */
 
-interface AdzunaResult {
-  salary_min?: number;
-  salary_max?: number;
-  salary_is_predicted?: string;
-}
-interface AdzunaResp {
-  count: number;
-  mean?: number;
-  results?: AdzunaResult[];
-}
-
-export interface AdzunaSalary {
-  min: number;
-  max: number;
-  currency: string;
-  source: "adzuna";
-  confidence: "medium";
-  sampleCount: number;
-}
+/** SalaryMarket → Adzuna country code + the currency its figures are in (annual). */
+export const ADZUNA_MARKET: Readonly<Record<string, { code: string; currency: string }>> = {
+  IN: { code: "in", currency: "INR" },
+  US: { code: "us", currency: "USD" },
+  GB: { code: "gb", currency: "GBP" },
+  EU: { code: "de", currency: "EUR" },
+  CA: { code: "ca", currency: "CAD" },
+  SG: { code: "sg", currency: "SGD" },
+  AU: { code: "au", currency: "AUD" },
+};
 
 const ARCHETYPE_QUERY: Record<RoleArchetype, string> = {
   backend: "backend engineer",
@@ -42,62 +38,111 @@ const ARCHETYPE_QUERY: Record<RoleArchetype, string> = {
   other: "software engineer",
 };
 
-// crude location → Adzuna country code + currency
-const COUNTRY: Array<[RegExp, { code: string; currency: string }]> = [
-  [/india|bengaluru|bangalore|mumbai|pune|hyderabad|delhi|gurgaon|noida|chennai/i, { code: "in", currency: "INR" }],
-  [/united states|\busa?\b|new york|san francisco|seattle|austin/i, { code: "us", currency: "USD" }],
-  [/united kingdom|london|\buk\b/i, { code: "gb", currency: "GBP" }],
-  [/germany|berlin|munich/i, { code: "de", currency: "EUR" }],
-  [/singapore/i, { code: "sg", currency: "SGD" }],
-  [/canada|toronto|vancouver/i, { code: "ca", currency: "CAD" }],
-  [/australia|sydney|melbourne/i, { code: "au", currency: "AUD" }],
-];
+/** Ladder index → the word recruiters put in titles at that level (none for mid). */
+const LEVEL_WORD = ["intern", "junior", "", "senior", "staff", "principal", "director"];
 
-function resolveCountry(location: string): { code: string; currency: string } {
-  for (const [re, c] of COUNTRY) if (re.test(location)) return c;
-  return { code: "us", currency: "USD" };
+export interface AdzunaSalary {
+  median: number;
+  p25: number;
+  p75: number;
+  currency: string;
+  sampleCount: number;
+  source: "adzuna";
+  /** "histogram" (all ads) or "search" (one page of stated-pay ads) */
+  method: "histogram" | "search";
+  query: string;
+}
+
+interface HistogramResp {
+  histogram?: Record<string, string | number>;
+}
+interface SearchResp {
+  count?: number;
+  results?: Array<{ salary_min?: number; salary_max?: number; salary_is_predicted?: string | number }>;
 }
 
 export function hasAdzunaKeys(): boolean {
   return !!(process.env.ADZUNA_APP_ID && process.env.ADZUNA_APP_KEY);
 }
 
+export function adzunaQuery(archetype: RoleArchetype, level: number | null): string {
+  const word = level == null ? "" : (LEVEL_WORD[Math.max(0, Math.min(6, level))] ?? "");
+  return `${word} ${ARCHETYPE_QUERY[archetype] ?? "software engineer"}`.trim();
+}
+
 export async function fetchAdzunaSalary(
+  market: string,
   archetype: RoleArchetype,
-  location: string,
+  level: number | null,
 ): Promise<AdzunaSalary | null> {
   if (!hasAdzunaKeys()) return null;
-  const { code, currency } = resolveCountry(location);
-  const what = ARCHETYPE_QUERY[archetype] ?? "software engineer";
-  const params = new URLSearchParams({
+  const m = ADZUNA_MARKET[market];
+  if (!m) return null; // no Adzuna country for this market (e.g. REMOTE) — never default to US
+  const what = adzunaQuery(archetype, level);
+  const base = new URLSearchParams({
     app_id: process.env.ADZUNA_APP_ID!,
     app_key: process.env.ADZUNA_APP_KEY!,
     what,
-    results_per_page: "50",
     "content-type": "application/json",
   });
-  if (location && code) params.set("where", location);
 
-  const data = await httpJson<AdzunaResp>(
-    `https://api.adzuna.com/v1/api/jobs/${code}/search/1?${params}`,
-  );
-  if (!data) return null;
+  const hist = await httpJson<HistogramResp>(`https://api.adzuna.com/v1/api/jobs/${m.code}/histogram?${base}`);
+  const fromHist = hist?.histogram ? summarizeHistogram(hist.histogram) : null;
+  if (fromHist && fromHist.n >= 8) {
+    return { median: fromHist.p50, p25: fromHist.p25, p75: fromHist.p75, currency: m.currency, sampleCount: fromHist.n, source: "adzuna", method: "histogram", query: what };
+  }
 
-  const salaries: number[] = [];
-  for (const r of data.results ?? []) {
-    if (r.salary_min && r.salary_max) salaries.push((r.salary_min + r.salary_max) / 2);
-    else if (r.salary_min) salaries.push(r.salary_min);
+  base.set("results_per_page", "50");
+  const data = await httpJson<SearchResp>(`https://api.adzuna.com/v1/api/jobs/${m.code}/search/1?${base}`);
+  const pays: number[] = [];
+  for (const r of data?.results ?? []) {
+    if (String(r.salary_is_predicted ?? "1") !== "0") continue;
+    if (r.salary_min && r.salary_max) pays.push(Math.sqrt(r.salary_min * r.salary_max));
+    else if (r.salary_min) pays.push(r.salary_min);
   }
-  if (salaries.length >= 4) {
-    salaries.sort((a, b) => a - b);
-    const min = Math.round(percentile(salaries, 0.25));
-    const max = Math.round(percentile(salaries, 0.75));
-    return { min, max, currency, source: "adzuna", confidence: "medium", sampleCount: salaries.length };
-  }
-  if (data.mean && data.mean > 0) {
-    return { min: Math.round(data.mean * 0.8), max: Math.round(data.mean * 1.2), currency, source: "adzuna", confidence: "medium", sampleCount: data.count };
-  }
-  return null;
+  if (pays.length < 4) return null;
+  pays.sort((a, b) => a - b);
+  return {
+    median: Math.round(percentile(pays, 0.5)),
+    p25: Math.round(percentile(pays, 0.25)),
+    p75: Math.round(percentile(pays, 0.75)),
+    currency: m.currency,
+    sampleCount: pays.length,
+    source: "adzuna",
+    method: "search",
+    query: what,
+  };
+}
+
+/**
+ * Percentiles from Adzuna's histogram. Keys are bucket FLOORS; a bucket's width is the gap
+ * to the next floor (the last bucket reuses the previous width). Linear within a bucket.
+ */
+export function summarizeHistogram(h: Record<string, string | number>): { p25: number; p50: number; p75: number; n: number } | null {
+  const buckets = Object.entries(h)
+    .map(([k, v]) => ({ floor: Number(k), count: Number(v) }))
+    .filter((b) => Number.isFinite(b.floor) && b.floor >= 0 && Number.isFinite(b.count) && b.count > 0)
+    .sort((a, b) => a.floor - b.floor);
+  if (!buckets.length) return null;
+  const n = buckets.reduce((s, b) => s + b.count, 0);
+  const width = (i: number): number => {
+    const next = buckets[i + 1];
+    if (next) return next.floor - buckets[i]!.floor;
+    const prev = buckets[i - 1];
+    return prev ? buckets[i]!.floor - prev.floor : Math.max(1, buckets[i]!.floor * 0.25);
+  };
+  const at = (q: number): number => {
+    const target = q * n;
+    let acc = 0;
+    for (let i = 0; i < buckets.length; i++) {
+      const b = buckets[i]!;
+      if (acc + b.count >= target) return Math.round(b.floor + ((target - acc) / b.count) * width(i));
+      acc += b.count;
+    }
+    const last = buckets.length - 1;
+    return Math.round(buckets[last]!.floor + width(last));
+  };
+  return { p25: at(0.25), p50: at(0.5), p75: at(0.75), n };
 }
 
 function percentile(sorted: number[], p: number): number {

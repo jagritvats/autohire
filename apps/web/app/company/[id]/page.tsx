@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LEVELS_ATTRIBUTION } from "@jobflow/adapters";
-import type { Posting } from "@jobflow/core";
+import { formatSalary, type Posting } from "@jobflow/core";
 import { getRepo } from "@/lib/repo";
 
 export const dynamic = "force-dynamic";
@@ -69,6 +69,23 @@ export default async function CompanyPage({ params }: { params: { id: string } }
           ) : (
             <div className="empty-note">No comp benchmark yet — run “Enrich comp” (levels.fyi, free).</div>
           )}
+          {(company.compBenchmarks ?? []).filter((b) => b.roles.length > 0).map((b) => (
+            <div key={`${b.source}:${b.market}`} style={{ marginTop: 12 }}>
+              <div className="comp-median-l">
+                {b.source === "ambitionbox" ? "AmbitionBox" : b.source === "levelsfyi" ? "levels.fyi" : b.source} · {b.market} ·{" "}
+                {b.basis === "ctc" ? "CTC by designation" : b.basis === "total_comp" ? "total comp by level" : "base by role"}
+              </div>
+              <div className="fam-table">
+                {b.roles.slice(0, 8).map((r) => (
+                  <div className="fam-row" key={r.title}>
+                    <span>{r.title}{r.levelBand ? ` · ${r.levelBand}` : ""}</span>
+                    <span className="fam-med">{fmt(r.median, b.currency)}</span>
+                  </div>
+                ))}
+              </div>
+              {b.source === "levelsfyi" && <div className="attribution">{LEVELS_ATTRIBUTION}</div>}
+            </div>
+          ))}
         </section>
 
         <section className="card-block">
@@ -110,13 +127,16 @@ export default async function CompanyPage({ params }: { params: { id: string } }
 }
 
 function fmt(n: number, cur: string): string {
-  if (cur === "INR") return `₹${(n / 100000).toFixed(1)}L`;
-  if (cur === "USD") return `$${Math.round(n / 1000)}k`;
-  return `${Math.round(n / 1000)}k ${cur}`;
+  return formatSalary(n, cur);
 }
 function compStr(p: Posting): string {
   const s = p.salary;
-  if (s.min == null && s.max == null) return "";
-  const range = s.min != null && s.max != null ? `${fmt(s.min, s.currency)}–${fmt(s.max, s.currency)}` : `${fmt((s.min ?? s.max)!, s.currency)}+`;
-  return `${range} · ${s.confidence}`;
+  if (s.source !== "none" && (s.min != null || s.max != null)) {
+    const range =
+      s.min != null && s.max != null ? `${fmt(s.min, s.currency)}–${fmt(s.max, s.currency)}` : s.max != null ? `up to ${fmt(s.max, s.currency)}` : `${fmt(s.min!, s.currency)}+`;
+    return `${range} · ${s.confidence}`;
+  }
+  const e = p.salaryEstimate;
+  if (!e) return "";
+  return `~${fmt(e.min, e.currency)}–${fmt(e.max, e.currency)} · est ${Math.round(e.confidenceScore * 100)}%`;
 }

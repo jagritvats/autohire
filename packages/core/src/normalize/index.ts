@@ -12,6 +12,7 @@ import { extractSkills, parseRequirements } from "./skills.js";
 import { parseLocation } from "./location.js";
 import { parseExperience } from "./experience.js";
 import { extractSalaryFromText } from "./salary.js";
+import { currencyHintFor } from "../salary/market.js";
 
 export * from "./titles.js";
 export * from "./skills.js";
@@ -46,6 +47,8 @@ export interface NormalizedPosting {
   requirements: Requirement[];
   location: ParsedLocation;
   salary: SalaryBand;
+  /** the source's own salary text, kept for exact re-parsing */
+  salaryRaw: string | null;
   experience: ExperienceRange;
   applyUrl: string | null;
   /** source publish date (ISO), sanity-checked; null when absent/untrustworthy (§3). */
@@ -69,11 +72,7 @@ export function normalizePosting(raw: RawPosting): NormalizedPosting {
       ? { min: hint.min ?? null, max: hint.max ?? null }
       : parseExperience(`${raw.title}\n${jd}`);
 
-  // salary cascade step 1 — direct from JD/explicit field; else null band to fill later
-  const salary: SalaryBand =
-    extractSalaryFromText(raw.salaryRaw ?? "") ??
-    extractSalaryFromText(jd) ??
-    { min: null, max: null, currency: "USD", source: "none", confidence: "low" };
+  const salary = parseStatedSalary(raw.salaryRaw ?? null, jd, location);
 
   const companyNameNorm = normCompany(raw.companyName);
 
@@ -94,12 +93,32 @@ export function normalizePosting(raw: RawPosting): NormalizedPosting {
     requirements,
     location,
     salary,
+    salaryRaw: raw.salaryRaw ?? null,
     experience,
     applyUrl: raw.applyUrl,
     postedAt: parsePostedAt(raw.postedAt),
     postedByAgency: raw.postedByAgency ?? false,
     dedupKey: canonicalKey(companyNameNorm, title.titleNorm, location),
   };
+}
+
+/**
+ * Salary cascade step 1 (§11.4): what the posting states — the source's own salary field
+ * first, then the JD. The location prices a bare "$" and an unlabeled salary field. No
+ * stated pay → an empty band; the estimator fills `salaryEstimate` separately.
+ */
+export function parseStatedSalary(salaryRaw: string | null, jdText: string, location: ParsedLocation): SalaryBand {
+  const currencyHint = currencyHintFor(location);
+  return (
+    extractSalaryFromText(salaryRaw ?? "", { structured: true, currencyHint }) ??
+    extractSalaryFromText(jdText, { currencyHint }) ?? {
+      min: null,
+      max: null,
+      currency: currencyHint ?? "USD",
+      source: "none",
+      confidence: "low",
+    }
+  );
 }
 
 /**

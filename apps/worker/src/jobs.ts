@@ -76,7 +76,16 @@ export async function handleJob(repo: Repository, job: Job, ctx: JobCtx): Promis
     case "enrich_t1": {
       const limit = (job.payload.limit as number | undefined) ?? 40;
       const r = await enrichTopMatches(repo, { tenantId: DEFAULT_TENANT, limit });
-      return { companiesEnriched: r.companiesEnriched, postingsEstimated: r.postingsEstimated, adzuna: r.adzunaUsed };
+      return {
+        companiesEnriched: r.companiesEnriched,
+        companyLaddersFetched: r.companyLaddersFetched,
+        levelsMarketFetched: r.levelsMarketFetched,
+        adzunaFetched: r.adzunaFetched,
+        adzuna: r.adzunaUsed,
+        postingsEstimated: r.postingsEstimated,
+        estimateUnchanged: r.estimate.unchanged,
+        estimateNoMarket: r.estimate.noMarket,
+      };
     }
     case "recheck": {
       // Re-verify postings by re-polling their boards (§3): refetch → bump lastSeen →

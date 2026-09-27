@@ -10,7 +10,8 @@
     "./schema": "./src/schema/index.ts",
     "./normalize": "./src/normalize/index.ts",
     "./dedup": "./src/dedup/index.ts",
-    "./match": "./src/match/index.ts"
+    "./match": "./src/match/index.ts",
+    "./salary": "./src/salary/index.ts"
   },
   "scripts": {
     "build": "tsc -b",

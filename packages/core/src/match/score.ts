@@ -1,6 +1,7 @@
 import type { Posting, Profile, ScoreBreakdown } from "../schema/entities.js";
 import { LevelBandOrder, type LevelBand, type RemoteGeo, type RoleArchetype } from "../schema/enums.js";
 import { cosine, clamp } from "../util/vector.js";
+import { convertCurrency, formatSalary } from "../salary/fx.js";
 import { stackAdjacency, type StackAdjacencyResult } from "./stack.js";
 import { EVERGREEN_TITLE_RE, REDATED_SOURCES, TALENT_POOL_JD_RE, scoreSourceTrust } from "./trust.js";
 
@@ -81,8 +82,9 @@ export function scorePosting(
   const { score: freshness, flags: freshFlags } = scoreFreshness(posting);
   for (const f of freshFlags) redFlags.push(f);
 
-  // ── component: salary fit ──
-  const salaryScore = scoreSalary(posting, profile);
+  // ── component: salary fit (stated pay, else the estimate scaled by its confidence) ──
+  const { score: salaryScore, flag: salaryFlag } = scoreSalary(posting, profile);
+  if (salaryFlag) redFlags.push(salaryFlag);
 
   // ── component: source trust (§3) — real, open, and likely to get a reply ──
   const trust = scoreSourceTrust(posting);
@@ -404,23 +406,64 @@ function scoreFreshness(posting: Posting): { score: number; flags: string[] } {
 }
 
 // ── salary ────────────────────────────────────────────────────────────────
-function scoreSalary(posting: Posting, profile: Profile): number {
+const SALARY_NEUTRAL = 0.6;
+/** how far a stated band of each confidence may move the score off neutral */
+const STATED_TRUST: Record<Posting["salary"]["confidence"], number> = { high: 1, medium_high: 0.8, medium: 0.5, low: 0.3 };
+
+/**
+ * Pay vs your floor (§11.4), converted into your currency (nominal FX — a USD offer pays
+ * USD wherever you sit). Stated pay moves the score by how sure the parse is; an ESTIMATE
+ * moves it by its confidenceScore, so a weak guess stays near neutral. A soft signal with an
+ * honest flag — the only hard gate is `hardExclude` on a stated, high-confidence ceiling.
+ */
+export function scoreSalary(posting: Posting, profile: Profile): { score: number; flag: string | null } {
   const floor = profile.prefs.salaryFloor;
-  if (!floor) return 0.7;
-  const top = posting.salary.max ?? posting.salary.min;
-  if (top == null) return 0.6; // unknown comp → neutral, never excluded on a guess
-  // normalize crudely by currency floor; this is a soft signal, not the hard gate
+  if (!floor) return { score: 0.7, flag: null };
+  const want = profile.prefs.currency;
+  const s = posting.salary;
+
+  const stated = s.source !== "none" ? (s.max ?? s.min) : null;
+  if (stated != null) {
+    const top = convertCurrency(stated, s.currency, want);
+    if (top == null) return { score: SALARY_NEUTRAL, flag: null };
+    const score = SALARY_NEUTRAL + STATED_TRUST[s.confidence] * (floorFit(top, floor) - SALARY_NEUTRAL);
+    // only a stated CEILING can be below the floor; a "from ₹X" says nothing about the top
+    const flag =
+      s.max != null && top < floor * 0.8
+        ? `Posted pay tops out at ~${formatSalary(top, want)}, below your floor (${formatSalary(floor, want)})`
+        : null;
+    return { score, flag };
+  }
+
+  const e = posting.salaryEstimate;
+  if (e) {
+    const top = convertCurrency(e.max, e.currency, want);
+    if (top == null) return { score: SALARY_NEUTRAL, flag: null };
+    const score = SALARY_NEUTRAL + e.confidenceScore * (floorFit(top, floor) - SALARY_NEUTRAL);
+    const flag =
+      e.confidenceScore >= 0.45 && top < floor * 0.8
+        ? `Estimated pay (~${formatSalary(top, want)} at the top, ${Math.round(e.confidenceScore * 100)}% confidence) likely below your floor`
+        : null;
+    return { score, flag };
+  }
+  return { score: SALARY_NEUTRAL, flag: null }; // unknown comp → neutral, never excluded on a guess
+}
+
+function floorFit(top: number, floor: number): number {
   return top >= floor ? 1 : top >= floor * 0.8 ? 0.6 : 0.3;
 }
 
 // ── the only two hard exclusions (§11.3) ────────────────────────────────────
 function hardExclude(posting: Posting, profile: Profile): string | null {
-  // 1. salary genuinely below floor — only when we have a HIGH-confidence direct number
+  // 1. salary genuinely below floor — only a HIGH-confidence STATED ceiling, in your own
+  //    currency (no FX guesswork at a hard gate). A floor-only band ("from ₹X") never
+  //    qualifies, and an estimate lives in `salaryEstimate`, never here.
   const floor = profile.prefs.salaryFloor;
-  const top = posting.salary.max ?? posting.salary.min;
+  const top = posting.salary.max;
   if (
     floor > 0 &&
     top != null &&
+    posting.salary.source !== "none" &&
     posting.salary.confidence === "high" &&
     posting.salary.currency === profile.prefs.currency &&
     top < floor * 0.7

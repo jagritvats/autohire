@@ -74,10 +74,20 @@ export function MatchCard({
             </span>
           )}
           {card.comp && (
-            <span className="tag comp" title={`source: ${card.comp.source}`}>
-              {isEstimate(card.comp.source) ? "~" : ""}
+            <span
+              className="tag comp"
+              data-estimate={card.comp.estimate || undefined}
+              title={
+                card.comp.estimate
+                  ? `Estimated — the posting states no pay. ${card.comp.basis ?? ""}`
+                  : `Stated in the posting (parse confidence: ${card.comp.confidence})`
+              }
+            >
+              {card.comp.estimate ? "~" : ""}
               {card.comp.label}{" "}
-              <span className="conf">· {card.comp.confidence}{isEstimate(card.comp.source) ? " est" : ""}</span>
+              <span className="conf">
+                · {card.comp.estimate ? `est ${Math.round((card.comp.confidenceScore ?? 0) * 100)}%` : card.comp.confidence}
+              </span>
             </span>
           )}
         </div>
@@ -180,8 +190,4 @@ function expLabel(e: { min: number | null; max: number | null }): string | null 
 }
 function isLangNote(note: string) {
   return /primary language/i.test(note);
-}
-function isEstimate(source: string) {
-  // a modeled comp (adzuna/levels.fyi) is never shown as fact — mark it "~ … est".
-  return source !== "jd_direct" && source !== "none";
 }

@@ -43,6 +43,7 @@ core  ←  adapters  ←  pipeline  →  apps
 - **Add an ATS to the detector:** add a URL pattern + a `probe()` case in `packages/adapters/src/detector/index.ts`.
 - **Tune matching:** weights + components in `packages/core/src/match/score.ts`; stack adjacency graph in `match/stack.ts`. Keep components in `[0,1]`; weights sum ≈ 1.
 - **Improve normalization:** `packages/core/src/normalize/` (titles, skills, location, salary). This is where quality is won — add tests when you touch it.
+- **Salary:** `posting.salary` is only what the posting STATES (`normalize/salary.ts`; `high` needs an attached currency + a range/cap + a pay word or a salary field — it's what the hard floor acts on). Modeled pay lives in `posting.salaryEstimate`, never in `salary`: pure math in `core/src/salary/` (market ladders, FX, blend, calibration), evidence + persistence in `pipeline/src/salary.ts`. After changing either, run `pnpm --filter @jobflow/worker salary` (re-parse + re-estimate, idempotent) and `pnpm --filter @jobflow/worker salary-backtest` (leave-one-out error by confidence bucket — keep it monotonic).
 - **Swap/add an LLM provider:** implement `LlmProvider` in `packages/llm/src/providers/`, wire in `factory.ts`. Keep `embed()` falling back to `localEmbed`.
 - **Wire real persistence:** implement `Repository` (`packages/db/src/repository.ts`) as `SupabaseRepository`; migrations are in `packages/db/migrations/`. Then flip `apps/worker/src/repo.ts`.
 

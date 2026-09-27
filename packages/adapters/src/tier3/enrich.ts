@@ -1,4 +1,5 @@
-import type { Enrichment } from "../types.js";
+import { parseTitle } from "@jobflow/core";
+import type { Enrichment, EnrichmentCompRole } from "../types.js";
 import {
   asNumber,
   collectObjects,
@@ -52,7 +53,9 @@ export function parseAmbitionBox(html: string): Enrichment | null {
   const reviewCount = intOrNull(ratings?.reviewCount ?? ldCount);
   if (overall == null && reviewCount == null) return null; // nothing usable parsed
 
-  const comp = next ? softwareComp(next) : null;
+  const roles = next ? softwareCompRoles(next) : [];
+  const ctcs = roles.flatMap((r) => [r.hi ?? r.median]);
+  const comp = ctcs.length ? { min: Math.min(...ctcs), max: Math.max(...ctcs) } : null;
 
   return {
     source: "ambitionbox",
@@ -64,25 +67,44 @@ export function parseAmbitionBox(html: string): Enrichment | null {
     salaryMin: comp?.min,
     salaryMax: comp?.max,
     currency: comp ? "INR" : undefined,
+    compRoles: roles.length ? roles : undefined,
   };
 }
 
-/** Deep-find a software/SDE salary benchmark (avgCtc is absolute INR, not LPA). */
-function softwareComp(root: unknown): { min: number; max: number } | null {
+/**
+ * Per-designation software CTC (absolute INR, not LPA) — kept PER ROLE so the estimator can
+ * price a senior posting off "Senior Software Engineer" rather than an all-titles spread.
+ * The level comes from the designation title via the same title parser the postings use.
+ */
+function softwareCompRoles(root: unknown): EnrichmentCompRole[] {
   const nodes = collectObjects(
     root,
     (o) =>
       (o.avgCtc != null || o.typicalMaxCtc != null || o.medianCtc != null) &&
-      /engineer|sde|developer|software|programmer|technical/i.test(
-        String(o.title ?? o.designation ?? o.jobProfile ?? o.name ?? o.designationName ?? ""),
-      ),
+      /engineer|sde|developer|software|programmer|technical/i.test(roleTitle(o)),
     400,
   );
-  const ctcs = nodes
-    .map((o) => asNumber(pick(o, "typicalMaxCtc", "avgCtc", "medianCtc", "maximumCtc")))
-    .filter((n): n is number => n != null && n >= 100_000); // ≥ 1 LPA sanity
-  if (!ctcs.length) return null;
-  return { min: Math.min(...ctcs), max: Math.max(...ctcs) };
+  const inr = (v: unknown) => {
+    const n = asNumber(v);
+    return n != null && n >= 100_000 ? n : null; // ≥ 1 LPA sanity; an LPA-unit field is never scaled up
+  };
+  const seen = new Set<string>();
+  const out: EnrichmentCompRole[] = [];
+  for (const o of nodes) {
+    const title = roleTitle(o).trim();
+    const lo = inr(pick(o, "typicalMinCtc", "minCtc", "minimumCtc"));
+    const hi = inr(pick(o, "typicalMaxCtc", "maxCtc", "maximumCtc"));
+    const median = inr(pick(o, "avgCtc", "medianCtc")) ?? (lo != null && hi != null ? Math.sqrt(lo * hi) : hi);
+    if (!title || median == null || seen.has(title.toLowerCase())) continue;
+    seen.add(title.toLowerCase());
+    const n = asNumber(pick(o, "salariesCount", "salaryCount", "dataPoints", "count"));
+    out.push({ title, levelBand: parseTitle(title).levelBand, median, lo, hi, n: n != null ? Math.round(n) : null });
+  }
+  return out.sort((a, b) => a.median - b.median); // the JSON walk order is arbitrary
+}
+
+function roleTitle(o: Record<string, unknown>): string {
+  return String(o.title ?? o.designation ?? o.jobProfile ?? o.name ?? o.designationName ?? "");
 }
 
 // ── Glassdoor ───────────────────────────────────────────────────────────────────

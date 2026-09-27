@@ -3,6 +3,7 @@ export * from "./ingest.js";
 export * from "./match.js";
 export * from "./discover.js";
 export * from "./enrich.js";
+export * from "./salary.js";
 export * from "./import.js";
 export * from "./seed.js";
 export * from "./poll.js";

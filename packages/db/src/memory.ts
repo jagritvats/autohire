@@ -15,6 +15,7 @@ import type {
   Posting,
   Profile,
   SalaryBand,
+  SalaryEstimate,
   TenantConfig,
 } from "@jobflow/core";
 import type {
@@ -119,6 +120,15 @@ export class InMemoryRepository implements Repository {
       ...(patch.ratingSource !== undefined ? { ratingSource: patch.ratingSource } : {}),
       ...(patch.cultureSummary !== undefined ? { cultureSummary: patch.cultureSummary } : {}),
       ...(patch.interviewDifficulty !== undefined ? { interviewDifficulty: patch.interviewDifficulty } : {}),
+      ...(patch.compBenchmark
+        ? {
+            // one entry per (source, market): the new one replaces that pair's previous entry
+            compBenchmarks: [
+              ...(c.compBenchmarks ?? []).filter((b) => !(b.source === patch.compBenchmark!.source && b.market === patch.compBenchmark!.market)),
+              patch.compBenchmark,
+            ],
+          }
+        : {}),
       compUpdatedAt: new Date(),
       enrichedAt: new Date(),
     });
@@ -177,6 +187,7 @@ export class InMemoryRepository implements Repository {
         isActive: true,
         repostCount: existing.repostCount + (reposted ? 1 : 0),
         canonicalId: existing.canonicalId,
+        salaryEstimate: existing.salaryEstimate ?? null, // the estimator's, not the poll's
         // re-seen → clear staleness, but a manual `invalidated` decision persists (§3).
         status: existing.status === "stale" ? "active" : existing.status,
         invalidReason: existing.invalidReason,
@@ -219,9 +230,21 @@ export class InMemoryRepository implements Repository {
     const p = this.postings.get(postingId);
     if (p) p.canonicalId = canonicalId;
   }
-  async updatePostingSalary(id: string, band: SalaryBand): Promise<void> {
+  async saveSalaryEstimates(updates: Array<{ id: string; estimate: SalaryEstimate | null }>): Promise<number> {
+    let n = 0;
+    for (const u of updates) {
+      const p = this.postings.get(u.id);
+      if (!p) continue;
+      p.salaryEstimate = u.estimate;
+      n++;
+    }
+    return n;
+  }
+  async updatePostingSalary(id: string, band: SalaryBand, salaryRaw?: string | null): Promise<void> {
     const p = this.postings.get(id);
-    if (p) p.salary = band;
+    if (!p) return;
+    p.salary = band;
+    if (salaryRaw !== undefined) p.salaryRaw = salaryRaw;
   }
 
   async markStale(companyId: string, seenAtsJobIds: string[]): Promise<number> {

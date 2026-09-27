@@ -3,6 +3,12 @@ import {
   pollAll,
   rebuildMatches,
   enrichTopMatches,
+  estimatePostingSalaries,
+  refreshSalaryBenchmarks,
+  reparseStatedSalaries,
+  backtestSalaryEstimates,
+  calibrateSalaryConfidence,
+  type BacktestReport,
   DEFAULT_TENANT,
   SEED_COMPANIES,
   defaultProfile,
@@ -20,7 +26,7 @@ loadRootEnv();
  * ever runs Tier 1-2 adapters. Tier 3 (Naukri/Glassdoor/AmbitionBox/LinkedIn) is
  * never touched here — it runs exclusively on the local agent (§7.1).
  *
- * Subcommands: discover | poll | rank | (default: all).
+ * Subcommands: discover | poll | rank | enrich | salary | salary-backtest | (default: all).
  */
 
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a);
@@ -54,7 +60,54 @@ async function rank(): Promise<void> {
 async function enrich(): Promise<void> {
   const repo = await makeRepository();
   const r = await enrichTopMatches(repo, { tenantId: DEFAULT_TENANT, limit: 40 });
-  log(`enrich: ${r.companiesEnriched} companies (comp benchmark), ${r.postingsEstimated} postings estimated · adzuna=${r.adzunaUsed}`);
+  log(
+    `enrich: ${r.companiesEnriched} companies (comp benchmark), ${r.companyLaddersFetched} employer level ladders, ` +
+      `${r.levelsMarketFetched} levels.fyi market pages, ` +
+      `${r.adzunaFetched} Adzuna queries (adzuna=${r.adzunaUsed}) → ${r.estimate.estimated} estimated, ` +
+      `${r.estimate.unchanged} unchanged, ${r.estimate.cleared} cleared, ${r.estimate.noEvidence} no evidence, ${r.estimate.noMarket} no pay market`,
+  );
+}
+
+/**
+ * Salary maintenance (§11.4): re-parse stated salaries with the current extractor (the
+ * backfill after a parser fix), refresh market benchmarks, then re-price every posting that
+ * states no pay. Idempotent — safe to run any time.
+ */
+async function salary(): Promise<void> {
+  const repo = await makeRepository();
+  const re = await reparseStatedSalaries(repo);
+  log(`salary: re-parsed ${re.scanned} → ${re.changed} changed (${re.removed} bogus bands removed, ${re.capped} unverifiable field bands capped at medium)`);
+  const b = await refreshSalaryBenchmarks(repo);
+  log(`salary: ${b.levelsFetched} levels.fyi market pages fetched · adzuna=${b.adzunaEnabled}`);
+  const cal = await calibrateSalaryConfidence(repo);
+  log(`salary: confidence calibration ${[...cal].map(([m, c]) => `${m} ×${c.factor} (n=${c.n})`).join(", ") || "— (not enough stated ranges yet)"}`);
+  const e = await estimatePostingSalaries(repo);
+  log(
+    `salary: ${e.considered} without stated pay → ${e.estimated} (re)estimated, ${e.unchanged} unchanged, ` +
+      `${e.cleared} cleared, ${e.noEvidence} no evidence, ${e.noMarket} no pay market`,
+  );
+}
+
+/**
+ * Leave-one-out backtest of the estimator on postings that DO state pay (§11.4): is the
+ * error small, and does a higher confidence score actually mean a smaller error?
+ */
+async function salaryBacktest(): Promise<void> {
+  const repo = await makeRepository();
+  printBacktest(await backtestSalaryEstimates(repo, { withoutEmployerEvidence: false }));
+  // leak-free, before and after the per-market calibration
+  printBacktest(await backtestSalaryEstimates(repo, { withoutEmployerEvidence: true, calibrated: false }));
+  printBacktest(await backtestSalaryEstimates(repo, { withoutEmployerEvidence: true }));
+}
+
+function printBacktest(r: BacktestReport): void {
+  const pct = (x: number) => `${Math.round(x * 100)}%`.padStart(5);
+  console.log(`\n── ${r.mode}${r.calibrated ? "" : " (uncalibrated)"}: ${r.answered}/${r.evaluated} stated ranges re-estimated ──`);
+  console.log("  bucket        n   median err   true mid in p25–p75   ranges overlap");
+  for (const b of [r.overall, ...r.byConfidence, ...r.byMarket]) {
+    if (!b.n) continue;
+    console.log(`  ${b.label.padEnd(10)} ${String(b.n).padStart(5)}   ${pct(b.medianError)}        ${pct(b.inBand)}               ${pct(b.overlap)}`);
+  }
 }
 
 async function main(): Promise<void> {
@@ -84,6 +137,8 @@ async function main(): Promise<void> {
   if (cmd === "poll" || cmd === "all") await poll();
   if (cmd === "rank" || cmd === "all") await rank();
   if (cmd === "enrich" || cmd === "all") await enrich();
+  if (cmd === "salary") await salary();
+  if (cmd === "salary-backtest") await salaryBacktest();
 }
 
 main().catch((e) => {

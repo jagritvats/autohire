@@ -273,6 +273,8 @@ input[type="range"] { width: 100%; accent-color: var(--signal); }
 .tag.tier3 { color: var(--amber); border-color: var(--amber-dim); }
 .tag.comp { color: var(--ink); }
 .tag.comp .conf { color: var(--ink-faint); }
+/* a modeled salary never reads as a stated one */
+.tag.comp[data-estimate] { border-style: dashed; }
 
 .notes { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
 .note { font-size: 12px; color: var(--ink-dim); display: flex; gap: 8px; }

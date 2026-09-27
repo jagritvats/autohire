@@ -2,6 +2,7 @@ export * from "./schema/index.js";
 export * from "./normalize/index.js";
 export * from "./dedup/index.js";
 export * from "./match/index.js";
+export * from "./salary/index.js";
 export * from "./util/vector.js";
 export * from "./util/embed.js";
 export * from "./util/latex.js";

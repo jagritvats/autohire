@@ -1,4 +1,4 @@
-import type { ExecutionTier, RawPosting, SourceKind } from "@jobflow/core";
+import type { ExecutionTier, LevelBand, RawPosting, SourceKind } from "@jobflow/core";
 
 /**
  * The one interface every source implements (§ Source Adapters). The orchestrator
@@ -143,11 +143,24 @@ export interface EnrichmentInput {
   location?: string;
 }
 
+/** One designation's pay at a company (AmbitionBox CTC, absolute INR). */
+export interface EnrichmentCompRole {
+  title: string;
+  levelBand: LevelBand | null;
+  median: number;
+  lo: number | null;
+  hi: number | null;
+  /** salaries reported for this designation, when the source says */
+  n: number | null;
+}
+
 export interface Enrichment {
   source: SourceKind;
   salaryMin?: number;
   salaryMax?: number;
   currency?: string;
+  /** per-designation pay, so a posting is priced at its own level (§11.4) */
+  compRoles?: EnrichmentCompRole[];
   ratingOverall?: number;
   ratingWlb?: number;
   ratingComp?: number;

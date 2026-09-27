@@ -256,6 +256,7 @@ export async function toNewPosting(
     requirements: n.requirements,
     location: n.location,
     salary: n.salary,
+    salaryRaw: n.salaryRaw,
     experience: n.experience,
     applyUrl: n.applyUrl,
     postedAt: n.postedAt,
