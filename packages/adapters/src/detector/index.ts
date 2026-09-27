@@ -2,6 +2,8 @@ import type { AtsType } from "@jobflow/core";
 import { slugify } from "@jobflow/core";
 import { httpJson, httpText } from "../types.js";
 import { parseWorkdaySlug } from "../ats/workday.js";
+import { parseEightfoldSlug } from "../ats/eightfold.js";
+import { talentBrewQuery } from "../ats/talentbrew.js";
 
 /**
  * ATS Detector (§ ATS Detector). Given a careers URL and/or company name, identify
@@ -41,6 +43,8 @@ const URL_PATTERNS: Array<{ ats: AtsType; re: RegExp; group: number }> = [
   { ats: "keka", re: /([a-z0-9-]+)\.keka\.com/i, group: 1 },
   { ats: "zoho", re: /([a-z0-9-]+\.zohorecruit\.(?:com|in|eu))/i, group: 1 },
   { ats: "freshteam", re: /([a-z0-9-]+)\.freshteam\.com/i, group: 1 },
+  // tenant subdomain = slug; local-agent-only board (see probe) — not a CDN/help host
+  { ats: "darwinbox", re: /(?<![a-z0-9.-])(?!(?:cdn|help|docs|blog|status)\.)([a-z0-9-]+)\.darwinbox\.in/i, group: 1 },
 ];
 
 /** path segments that are never a board slug (script/embed/API paths in page HTML). */
@@ -52,7 +56,7 @@ const RESERVED_SLUG = /^(embed|js|css|api|static|assets|v\d+|www|app|apply|wday|
  * "{host}/{domain}". In HTML a capture can run past the closing quote, so each slug is
  * cut at the first character that can't be part of one.
  */
-export function atsCandidates(text: string): Array<{ ats: AtsType; slug: string }> {
+export function atsCandidates(text: string, pageUrl?: string): Array<{ ats: AtsType; slug: string }> {
   const out: Array<{ ats: AtsType; slug: string }> = [];
   const seen = new Set<string>();
   const add = (ats: AtsType, slug: string | undefined) => {
@@ -81,6 +85,11 @@ export function atsCandidates(text: string): Array<{ ats: AtsType; slug: string 
       if (slug && !RESERVED_SLUG.test(slug)) add(ats, slug);
     }
   }
+  // career-site platforms on the employer's own domain: the board IS the page's host, and
+  // its assets give the platform away. Last, so a linked ATS board (richer) wins.
+  const pageHost = pageUrl?.match(/^https?:\/\/([a-z0-9.-]+)/i)?.[1]?.toLowerCase();
+  if (pageHost && /\bjibecdn\.com\//i.test(text)) add("jibe", pageHost);
+  if (pageHost && /\btbcdn\.talentbrew\.com\//i.test(text)) add("talentbrew", pageHost);
   return out;
 }
 
@@ -134,12 +143,26 @@ async function probe(ats: AtsType, slug: string): Promise<boolean> {
       return Array.isArray(r?.jobPostings);
     }
     case "eightfold": {
-      const [host, domain] = slug.split("/");
+      const s = parseEightfoldSlug(slug);
+      if (!s) return false;
+      const { host, domain } = s;
+      if (s.api === "v2") {
+        const v2 = await httpJson<{ positions?: unknown[] }>(`https://${host}/api/apply/v2/jobs?domain=${domain}&location=&start=0&num=1`, { timeoutMs: 15_000 });
+        return Array.isArray(v2?.positions);
+      }
       const r = await httpJson<{ data?: { positions?: unknown[] } }>(
         `https://${host}/api/pcsx/search?domain=${domain}&query=&location=&start=0&num=1`,
         { timeoutMs: 15_000 },
       );
       return Array.isArray(r?.data?.positions);
+    }
+    case "jibe": {
+      const r = await httpJson<{ jobs?: unknown[]; totalCount?: number }>(`https://${slug}/api/jobs?page=1&limit=1`, { timeoutMs: 15_000 });
+      return Array.isArray(r?.jobs) && typeof r?.totalCount === "number";
+    }
+    case "talentbrew": {
+      const r = await httpJson<{ results?: string }>(`https://${slug}/search-jobs/results?${talentBrewQuery(1, undefined, 1)}`, { timeoutMs: 15_000 });
+      return typeof r?.results === "string" && /data-total-results="/.test(r.results);
     }
     case "recruitee": {
       const r = await httpJson<{ offers?: unknown[] }>(`https://${slug}.recruitee.com/api/offers/`, { timeoutMs: 12_000 });
@@ -190,6 +213,12 @@ async function probe(ats: AtsType, slug: string): Promise<boolean> {
     case "amazon":
     case "atlassian":
       return true; // single well-known boards; nothing to resolve
+    case "darwinbox":
+      // NEVER probed from here: Cloudflare blocks non-browser clients, and this code runs
+      // in the cloud, which must not touch a local-only board (invariant #1). A
+      // {tenant}.darwinbox.in URL names the board outright; the local agent's first poll
+      // is the real check (an empty/blocked fetch just returns no postings).
+      return true;
     default:
       return false;
   }
@@ -199,8 +228,21 @@ async function probe(ats: AtsType, slug: string): Promise<boolean> {
 export async function detectFromUrl(url: string): Promise<DetectResult> {
   const first = atsCandidates(url)[0];
   if (!first) return { atsType: "unknown", atsSlug: null, confidence: "none" };
-  const ok = await probe(first.ats, first.slug).catch(() => false);
-  return { atsType: first.ats, atsSlug: first.slug, confidence: ok ? "confirmed" : "guessed" };
+  const confirmed = await confirmSlug(first.ats, first.slug);
+  return { atsType: first.ats, atsSlug: confirmed ?? first.slug, confidence: confirmed ? "confirmed" : "guessed" };
+}
+
+/**
+ * Probe a candidate; an Eightfold tenant still on the older API refuses PCSX (403), so
+ * that one retries as its "…/v2" slug — the URL alone can't tell the two apart.
+ */
+async function confirmSlug(ats: AtsType, slug: string): Promise<string | null> {
+  if (await probe(ats, slug).catch(() => false)) return slug;
+  if (ats === "eightfold" && parseEightfoldSlug(slug)?.api === "pcsx") {
+    const legacy = `${slug}/v2`;
+    if (await probe(ats, legacy).catch(() => false)) return legacy;
+  }
+  return null;
 }
 
 /**
@@ -245,10 +287,10 @@ export async function detectFromCareersPage(url: string): Promise<DetectResult> 
   )?.slice(0, 2_000_000);
   if (!html) return { atsType: "unknown", atsSlug: null, confidence: "none" };
   let tried = 0;
-  for (const { ats, slug } of atsCandidates(html)) {
+  for (const { ats, slug } of atsCandidates(html, url)) {
     if (tried++ >= 6) break;
-    const ok = await probe(ats, slug).catch(() => false);
-    if (ok) return { atsType: ats, atsSlug: slug, confidence: "confirmed" };
+    const confirmed = await confirmSlug(ats, slug);
+    if (confirmed) return { atsType: ats, atsSlug: confirmed, confidence: "confirmed" };
   }
   return { atsType: "unknown", atsSlug: null, confidence: "none" };
 }

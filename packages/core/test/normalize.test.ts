@@ -144,3 +144,16 @@ describe("direct salary extraction (cascade step 1)", () => {
     expect(extractSalaryFromText("Join our mission-driven team in 2024.")).toBeNull();
   });
 });
+
+describe("multi-word cities keep every word", () => {
+  it.each([
+    ["San Francisco, CA", "San Francisco"],
+    ["New York City", "New York City"],
+    ["Tel Aviv, Israel", "Tel Aviv"],
+    ["Los Angeles (Hybrid)", "Los Angeles"],
+    ["London, UK", "London"],
+    ["Bengaluru, Karnataka, India", "Bengaluru"],
+  ])("%s → %s", (raw, city) => {
+    expect(parseLocation(raw).city).toBe(city);
+  });
+});

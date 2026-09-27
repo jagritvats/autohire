@@ -12,6 +12,8 @@ import { OracleHcmAdapter } from "./ats/oracle.js";
 import { RipplingAdapter } from "./ats/rippling.js";
 import { JobviteAdapter } from "./ats/jobvite.js";
 import { AtlassianAdapter } from "./ats/atlassian.js";
+import { JibeAdapter } from "./ats/jibe.js";
+import { TalentBrewAdapter } from "./ats/talentbrew.js";
 import { KekaAdapter } from "./ats/keka.js";
 import { ZohoRecruitAdapter } from "./ats/zoho.js";
 import { FreshteamAdapter } from "./ats/freshteam.js";
@@ -25,6 +27,9 @@ import { WellfoundAdapter } from "./india/wellfound.js";
 import { RedditHiringAdapter } from "./india/reddit.js";
 import { RemotiveAdapter } from "./aggregators/remotive.js";
 import { ArbeitnowAdapter } from "./aggregators/arbeitnow.js";
+import { AdzunaSearchAdapter } from "./aggregators/adzuna.js";
+import { CareerjetAdapter } from "./aggregators/careerjet.js";
+import { JSearchAdapter } from "./aggregators/jsearch.js";
 import { HnWhoIsHiringAdapter } from "./hn/whoishiring.js";
 
 /** Singleton adapters keyed by source. Add a source = register one line here. */
@@ -42,6 +47,8 @@ export const ADAPTERS: Record<string, SourceAdapter> = {
   rippling: new RipplingAdapter(),
   jobvite: new JobviteAdapter(),
   atlassian: new AtlassianAdapter(),
+  jibe: new JibeAdapter(),
+  talentbrew: new TalentBrewAdapter(),
   // India-market ATSes (tier 2: the public JSON their career pages call)
   keka: new KekaAdapter(),
   zoho: new ZohoRecruitAdapter(),
@@ -51,6 +58,10 @@ export const ADAPTERS: Record<string, SourceAdapter> = {
   arbeitnow: new ArbeitnowAdapter(),
   hn_whoishiring: new HnWhoIsHiringAdapter(),
   himalayas: new HimalayasAdapter(),
+  // key-gated search APIs: return [] (no request) until their env keys are set
+  adzuna: new AdzunaSearchAdapter(),
+  careerjet: new CareerjetAdapter(),
+  jsearch: new JSearchAdapter(), // paid — see docs/SETUP.md "Optional sources"
   // India tech boards (tier 2: public, no login)
   hirist: new HiristAdapter(),
   cutshort: new CutshortAdapter(),

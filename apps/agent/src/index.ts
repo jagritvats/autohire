@@ -5,6 +5,7 @@ import type { AgentHeartbeat } from "@jobflow/core";
 import { effectiveFlags } from "./flags.js";
 import { AgentSession } from "./session.js";
 import { handleLocalJob } from "./handlers.js";
+import { localPollEveryHours, maybeScheduleLocalPolls } from "./schedule.js";
 
 loadRootEnv();
 
@@ -53,6 +54,12 @@ async function main(): Promise<void> {
   await heartbeat(repo).catch((e) => log("heartbeat error:", (e as Error).message));
   setInterval(() => heartbeat(repo).catch(() => {}), 30_000);
 
+  // unattended schedule (env JOBFLOW_LOCAL_POLL_EVERY_HOURS, 0 = off) — only acts while the
+  // browser gates are on, so it inherits the default-OFF opt-in
+  const everyHours = localPollEveryHours();
+  log(`local poll schedule: ${everyHours > 0 ? `every ${everyHours}h per opted-in source (when the browser is on)` : "off"}`);
+  let lastScheduleCheck = 0;
+
   // drain loop — claim local jobs sequentially, run in the user's session
   let idleLogged = false;
   for (;;) {
@@ -60,6 +67,11 @@ async function main(): Promise<void> {
     if (!job) {
       if (!idleLogged) {
         idleLogged = true;
+      }
+      if (everyHours > 0 && Date.now() - lastScheduleCheck > 60_000) {
+        lastScheduleCheck = Date.now();
+        const flags = effectiveFlags(await repo.getConfig(DEFAULT_TENANT).catch(() => null));
+        await maybeScheduleLocalPolls(repo, everyHours, flags, log).catch((e) => log("schedule check failed:", (e as Error).message));
       }
       await sleep(3000);
       continue;

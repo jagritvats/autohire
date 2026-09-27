@@ -25,11 +25,16 @@ export const AtsType = z.enum([
   "rippling",
   "jobvite",
   "atlassian",
+  "jibe", // iCIMS Jibe career sites (PepsiCo, Keysight)
+  "talentbrew", // Radancy TalentBrew career sites (UnitedHealth/Optum, Intuit)
   // India-market ATSes (Indian startups rarely use Greenhouse/Lever)
   "keka",
   "zoho",
   "freshteam",
   "kula",
+  // LOCAL-AGENT-ONLY board: Cloudflare blocks non-browser clients, so there is no cloud
+  // adapter — the agent polls it in the user's browser (invariant #1)
+  "darwinbox",
   "unknown",
 ]);
 export type AtsType = z.infer<typeof AtsType>;
@@ -51,6 +56,8 @@ export const SourceKind = z.enum([
   "rippling",
   "jobvite",
   "atlassian",
+  "jibe",
+  "talentbrew",
   "keka",
   "zoho",
   "freshteam",
@@ -64,6 +71,7 @@ export const SourceKind = z.enum([
   "levelsfyi",
   "yc",
   "himalayas",
+  "careerjet",
   // tier 2
   "linkedin_guest",
   "hirist",
@@ -77,9 +85,14 @@ export const SourceKind = z.enum([
   "ambitionbox",
   "glassdoor",
   "linkedin",
+  "darwinbox", // board ATS (Rapido/Porter/Upstox…) — the agent's local_board_poll
+  "peerlist", // discovery feed
+  // a page you captured with the browser extension that isn't on a known board
+  "capture",
   // tier 4 (paid, optional)
   "serpapi",
   "apify",
+  "jsearch", // paid + key-gated; its adapter runs as tier2 (a cloud-safe API) so feeds can use it
 ]);
 export type SourceKind = z.infer<typeof SourceKind>;
 
@@ -166,10 +179,12 @@ export const JobType = z.enum([
   "enrich_t1", // Tier-1 enrichment (Adzuna / levels.fyi) — cloud
   "recheck", // re-poll a set of postings via Tier 1-2 adapters (freshness/staleness) — cloud
   "purge", // bulk soft/hard-remove postings older than a threshold — cloud
+  "liveness", // re-probe the top cards' own job pages between polls (dead-link check) — cloud
   "tier3_poll", // Naukri/Glassdoor/etc — LOCAL agent only
   "enrich_t3", // ratings/India comp — LOCAL agent only
   "form_fill", // Playwright fill to review gate — LOCAL agent only
   "import_yc", // import your YC/Work-at-a-Startup profile — LOCAL agent only (auth-gated)
+  "local_board_poll", // poll boards with no cloud adapter (Darwinbox) in your browser — LOCAL agent only
 ]);
 export type JobType = z.infer<typeof JobType>;
 
@@ -187,10 +202,12 @@ export const JOB_RUNTIME: Record<z.infer<typeof JobType>, z.infer<typeof JobRunt
   enrich_t1: "cloud",
   recheck: "cloud",
   purge: "cloud",
+  liveness: "cloud",
   tier3_poll: "local",
   enrich_t3: "local",
   form_fill: "local",
   import_yc: "local",
+  local_board_poll: "local",
 };
 
 export const RoleArchetype = z.enum([

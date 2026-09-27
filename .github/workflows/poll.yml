@@ -29,6 +29,12 @@ jobs:
       XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
       ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
       ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+      # optional discovery APIs — each feed is a no-op until its secret exists
+      CAREERJET_API_KEY: ${{ secrets.CAREERJET_API_KEY }}
+      # PAID: every cron run is a fresh process, so JSearch's once-per-JSEARCH_MIN_HOURS
+      # guard doesn't carry over — with a key set it's called on every 6-hourly run
+      JSEARCH_API_KEY: ${{ secrets.JSEARCH_API_KEY }}
+      JSEARCH_RAPIDAPI_KEY: ${{ secrets.JSEARCH_RAPIDAPI_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

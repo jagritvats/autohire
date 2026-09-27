@@ -162,7 +162,9 @@ function naukriTupleToRaw(t: unknown): RawPosting | null {
   const skills = asString(pick(job, "tagsAndSkills")) ?? "";
   const rel = asString(pick(job, "jdURL", "staticUrl", "jobUrl"));
   const applyUrl = rel ? (rel.startsWith("http") ? rel : `${ORIGIN}${rel}`) : `${ORIGIN}/job-listings-${jobId}`;
-  const postedAt = createdIso(pick(job, "createdDate", "footerPlaceholderLabel"));
+  const displayed = createdIso(pick(job, "createdDate")) ?? relativeLabelIso(asString(pick(job, "footerPlaceholderLabel")));
+  const postedAt = originalPostedAt(jobId, displayed);
+  const postedByAgency = consultantFlag(job);
 
   const jdText = [
     `${title} at ${companyName}.`,
@@ -188,10 +190,33 @@ function naukriTupleToRaw(t: unknown): RawPosting | null {
     applyUrl,
     salaryRaw: salaryLabel,
     postedAt,
+    ...(postedByAgency !== undefined ? { postedByAgency } : {}),
     fetchedAt: new Date(),
-    // keep the free AmbitionBox rating (§11.5) for later enrichment without a re-fetch
-    raw: { jobId, ambitionBox: pick(job, "ambitionBoxData") ?? null } as Record<string, unknown>,
+    // keep the free AmbitionBox rating (§11.5) for later enrichment without a re-fetch;
+    // the displayed date is kept beside the id-derived one so the rule can be audited
+    raw: { jobId, ambitionBox: pick(job, "ambitionBoxData") ?? null, displayedPostedAt: displayed } as Record<string, unknown>,
   };
+}
+
+/**
+ * Naukri's "posted by a consultant" marker on a job tuple. UNVERIFIED key: the search
+ * tuples couldn't be inspected live (Naukri's bot wall answered 403 on 2026-09-27), and
+ * the job-detail JSON is known to carry a boolean `consultant`. So only explicit
+ * booleans under the plausible keys count; absent → undefined (the trust score's prose
+ * and poster-name checks still apply), never a guess.
+ */
+export function consultantFlag(job: Record<string, unknown>): boolean | undefined {
+  for (const key of ["consultant", "isConsultant", "consultantJob", "postedByConsultant"]) {
+    const v = job[key];
+    if (v === true || v === 1) return true;
+    if (v === false || v === 0) return false;
+    if (typeof v === "string") {
+      const s = v.trim().toLowerCase();
+      if (s === "true" || s === "1" || s === "y" || s === "yes") return true;
+      if (s === "false" || s === "0" || s === "n" || s === "no") return false;
+    }
+  }
+  return undefined;
 }
 
 /** Extract the {type,label} placeholder trio Naukri uses for loc/exp/salary. */
@@ -247,7 +272,9 @@ export function parseNaukriHtml(html: string, limit = 25): RawPosting[] {
       .map((s) => stripTags(s))
       .filter(Boolean)
       .join(", ");
-    const postedAt = readClassText(/job-post-day/, card);
+    const postedLabel = readClassText(/job-post-day/, card);
+    const displayed = relativeLabelIso(postedLabel) ?? postedLabel;
+    const postedAt = originalPostedAt(jobId, displayed);
     const applyUrl = href ? (href.startsWith("http") ? href : `${ORIGIN}${href}`) : `${ORIGIN}/job-listings-${jobId}`;
 
     const jdText = [
@@ -275,7 +302,7 @@ export function parseNaukriHtml(html: string, limit = 25): RawPosting[] {
       salaryRaw: sal,
       postedAt: postedAt ?? null,
       fetchedAt: new Date(),
-      raw: { jobId } as Record<string, unknown>,
+      raw: { jobId, displayedPostedAt: displayed ?? null } as Record<string, unknown>,
     });
   }
   return out;
@@ -303,6 +330,74 @@ function normalizeSalaryLabel(label: string | null | undefined): string | null {
   const s = decodeEntities(label).trim();
   if (!s || /not\s*disclosed|not\s*mentioned|unpaid/i.test(s)) return null;
   return s;
+}
+
+// ── original post date from the job id ─────────────────────────────────────────
+
+const DAY_MS = 86_400_000;
+/** IST = UTC+5:30 — Naukri stamps ids with the Indian calendar day. */
+const IST_OFFSET_MS = 5.5 * 3_600_000;
+/** the id date must beat the displayed one by more than this to count as a refresh */
+const REFRESH_MIN_GAP_MS = 2 * DAY_MS;
+/** ids older than this are not trusted as a date (the pattern is unverified that far back) */
+const ID_DATE_MAX_AGE_MS = 365 * DAY_MS;
+
+/**
+ * Decode the DDMMYY prefix of a Naukri job id ("100726919408" → 10 Jul 2026, 00:00 IST).
+ * Null unless it's a real calendar date (no 31 Feb) with a 12+ digit numeric id.
+ *
+ * Evidence (2026-09-27): a third-party claim says ids start with the date the job was
+ * FIRST posted, so a "refreshed" listing shows a recent date but keeps its old id. Live
+ * verification through a browser was blocked (Naukri answered 403 Access Denied to the
+ * first page load; we stopped there, per policy). Search-index data corroborates the
+ * STRUCTURE: 14/14 indexed job-listing ids decode to valid dates, and 9 carry an
+ * independently indexed post date — 7 match exactly, 2 are one day apart (IST vs UTC).
+ * The refresh behaviour itself is NOT verified, hence the guards in `originalPostedAt`.
+ */
+export function naukriIdDate(jobId: string | null | undefined): Date | null {
+  const m = /^(\d{2})(\d{2})(\d{2})\d{6,}$/.exec((jobId ?? "").trim());
+  if (!m) return null;
+  const dd = Number(m[1]);
+  const mm = Number(m[2]);
+  const yyyy = 2000 + Number(m[3]);
+  if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+  const utc = Date.UTC(yyyy, mm - 1, dd);
+  const check = new Date(utc);
+  if (check.getUTCDate() !== dd || check.getUTCMonth() !== mm - 1) return null; // 31 Feb etc.
+  return new Date(utc - IST_OFFSET_MS);
+}
+
+/**
+ * The date to report as `postedAt`: the id-derived first-posted date when it is
+ * plausible AND clearly earlier than the displayed ("refreshed") date; else the
+ * displayed date unchanged. Guards (the claim is unverified live, so err towards the
+ * displayed date): valid calendar date, not in the future, within the last year, and
+ * more than 2 days before the displayed date. No parseable displayed date → no change.
+ */
+export function originalPostedAt(jobId: string, displayed: string | null, now = Date.now()): string | null {
+  const shown = displayed ? Date.parse(displayed) : NaN;
+  if (!Number.isFinite(shown)) return displayed;
+  const id = naukriIdDate(jobId);
+  if (!id) return displayed;
+  const t = id.getTime();
+  if (t > now + DAY_MS) return displayed; // future — not a date after all
+  if (now - t > ID_DATE_MAX_AGE_MS) return displayed; // too old to trust the pattern
+  if (shown - t <= REFRESH_MIN_GAP_MS) return displayed; // same posting day (± timezone)
+  return id.toISOString();
+}
+
+/**
+ * Naukri's relative footer label → an ISO date ("3 Days Ago", "Just Now", "Today",
+ * "30+ Days Ago", "Few Hours Ago"). "30+" reads as 30 — a lower bound on age, which is
+ * the honest direction for freshness. Null for anything else.
+ */
+export function relativeLabelIso(label: string | null | undefined, now = Date.now()): string | null {
+  const s = (label ?? "").trim().toLowerCase();
+  if (!s) return null;
+  if (/^(just now|today|few hours ago|\d+\s*hours? ago|\d+\s*min(ute)?s? ago)$/.test(s)) return new Date(now).toISOString();
+  const m = /^(\d+)\+?\s*days?\s*ago$/.exec(s);
+  if (m) return new Date(now - Number(m[1]) * DAY_MS).toISOString();
+  return null;
 }
 
 /** epoch-ms number → ISO string; a "3 Days Ago" label passes through as-is (nullable). */

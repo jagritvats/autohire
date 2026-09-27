@@ -3,6 +3,7 @@ import type { Evidence, Profile } from "@jobflow/core";
 import { normCompany } from "@jobflow/core";
 import type { SeedCompany } from "./discover.js";
 import { INDIA_EMPLOYER_BOARDS, INDIA_SERVICES_BOARDS } from "./seeds-employers.js";
+import { LOCAL_BOARD_SEEDS } from "./seeds-local.js";
 
 export const DEFAULT_TENANT = "00000000-0000-0000-0000-000000000001";
 
@@ -143,6 +144,7 @@ export const SEED_COMPANIES: SeedCompany[] = dedupeSeeds([
   ...INDIA_EMPLOYER_BOARDS,
   ...INDIA_SERVICES_BOARDS,
   ...GLOBAL_TARGETS,
+  ...LOCAL_BOARD_SEEDS, // last: a cloud-pollable board for the same company wins the dedupe
 ]);
 
 /** first entry wins when two groups list the same company (by normalized name or board URL) */

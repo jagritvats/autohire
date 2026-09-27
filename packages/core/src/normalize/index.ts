@@ -20,6 +20,7 @@ export * from "./experience.js";
 export * from "./salary.js";
 export * from "./links.js";
 export * from "./chat.js";
+export * from "./reposts.js";
 
 /**
  * The canonical fields derived from a RawPosting. The persistence layer combines
@@ -48,6 +49,8 @@ export interface NormalizedPosting {
   applyUrl: string | null;
   /** source publish date (ISO), sanity-checked; null when absent/untrustworthy (§3). */
   postedAt: string | null;
+  /** the source flagged the poster as a consultancy / staffing intermediary. */
+  postedByAgency: boolean;
   dedupKey: string;
 }
 
@@ -93,6 +96,7 @@ export function normalizePosting(raw: RawPosting): NormalizedPosting {
     experience,
     applyUrl: raw.applyUrl,
     postedAt: parsePostedAt(raw.postedAt),
+    postedByAgency: raw.postedByAgency ?? false,
     dedupKey: canonicalKey(companyNameNorm, title.titleNorm, location),
   };
 }

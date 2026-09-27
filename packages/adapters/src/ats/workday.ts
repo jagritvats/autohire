@@ -1,5 +1,5 @@
 import type { RawPosting } from "@jobflow/core";
-import { COUNTRY_NAMES, DETAIL_CAP, pickForDetail, htmlToText, httpJson, mapPool, type FetchTarget, type SourceAdapter } from "../types.js";
+import { COUNTRY_NAMES, DETAIL_CAP, pickForDetail, htmlToText, httpJson, mapPool, httpStatus, liveFromStatus, type FetchTarget, type SourceAdapter, type LivenessTarget } from "../types.js";
 
 /**
  * Workday CXS (Tier 2: the public JSON the careers site itself calls, no auth). The
@@ -60,6 +60,17 @@ export class WorkdayAdapter implements SourceAdapter {
   readonly source = "workday" as const;
   readonly tier = "tier2" as const;
 
+  /**
+   * The CXS detail call for the posting's own path (taken from its apply URL): 404
+   * "not found: Job_Posting_Anchor_ID" once the req is removed (verified 2026-09).
+   */
+  async isLive(job: LivenessTarget): Promise<boolean | null> {
+    const t = job.slug ? parseWorkdaySlug(job.slug) : null;
+    const path = job.applyUrl?.match(/(\/job\/[^?#]+)/)?.[1];
+    if (!t || !path) return null;
+    return liveFromStatus(await httpStatus(`https://${t.host}/wday/cxs/${t.tenant}/${t.site}${path}`));
+  }
+
   async fetch(target: FetchTarget): Promise<RawPosting[]> {
     const t = target.slug ? parseWorkdaySlug(target.slug) : null;
     if (!t) return [];
@@ -77,8 +88,10 @@ export class WorkdayAdapter implements SourceAdapter {
     if (countryName) {
       const first = await post({ appliedFacets: {}, offset: 0 });
       const facet = findCountryFacet(first?.facets ?? [], countryName);
-      if (!facet) return []; // no roles in that country (or facet missing) — nothing to poll
-      appliedFacets = { [facet.param]: [facet.id] };
+      // some tenants (Comcast) have no country facet, only sites named "India - Chennai, …"
+      const sites = facet ? null : findCountrySites(first?.facets ?? [], countryName);
+      if (!facet && !sites) return []; // no roles in that country (or facet missing) — nothing to poll
+      appliedFacets = facet ? { [facet.param]: [facet.id] } : { [sites!.param]: sites!.ids };
     }
 
     const jobs: WdJob[] = [];
@@ -143,6 +156,26 @@ export function findCountryFacet(facets: WdFacet[], country: string): { param: s
     if (hit) return hit;
   }
   return null;
+}
+
+/**
+ * Fallback for tenants without a country facet: every location value NAMED for the
+ * country — "India - Chennai, …", "India – Virtual – Karnataka", "Pune, India" — under
+ * one facet. Anchored on separators so "IN - Indianapolis" / "Indiana" never match.
+ */
+export function findCountrySites(facets: WdFacet[], country: string): { param: string; ids: string[] } | null {
+  const c = country.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const named = new RegExp(`^${c}\\s*[-–—,:]|[-–—,]\\s*${c}\\s*$`, "i");
+  const hits = new Map<string, string[]>();
+  const walk = (param: string, values: WdFacetValue[] | undefined) => {
+    for (const v of values ?? []) {
+      if (v.values) walk(v.facetParameter ?? param, v.values);
+      else if (v.id && named.test(v.descriptor?.trim() ?? "")) hits.set(param, [...(hits.get(param) ?? []), v.id]);
+    }
+  };
+  for (const f of facets) walk(f.facetParameter, f.values);
+  const best = [...hits.entries()].sort((a, b) => b[1].length - a[1].length)[0];
+  return best ? { param: best[0], ids: best[1] } : null;
 }
 
 /** "Posted Today" / "Posted Yesterday" / "Posted 14 Days Ago" / "Posted 30+ Days Ago" → ISO. */

@@ -1,4 +1,4 @@
-import { localEmbed } from "@jobflow/core";
+import { LOCAL_EMBEDDER_ID, localEmbed } from "@jobflow/core";
 import type { CompletionRequest, LlmProvider, ProviderConfig } from "../provider.js";
 import { fetchWithTimeout, mapProviderError, retryAfterMs, withRetry } from "../http.js";
 
@@ -13,6 +13,11 @@ export class OpenAICompatibleProvider implements LlmProvider {
   private strongModel: string;
   private baseUrl: string;
   private embedModel: string;
+
+  /** local when there's no embedding model/key — embed() then falls back to localEmbed */
+  get embedderId(): string {
+    return this.embedModel && this.apiKey ? `${this.name}:${this.embedModel}` : LOCAL_EMBEDDER_ID;
+  }
 
   constructor(kind: "grok" | "openai", cfg: ProviderConfig) {
     this.name = kind;

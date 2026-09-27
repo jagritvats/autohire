@@ -13,7 +13,9 @@ const SKILL_OPTIONS = [
 const ARCHETYPES = ["backend", "platform", "infra_devops", "fullstack", "data_ml", "sre", "frontend", "mobile"];
 const GEOS = ["worldwide", "india_ok", "apac_ok", "us_only", "eu_only"];
 const LEVELS = ["junior", "mid", "senior", "staff", "lead"];
-const TIER3 = ["naukri", "ambitionbox", "glassdoor", "linkedin"];
+const TIER3 = ["naukri", "linkedin", "wellfound", "peerlist", "darwinbox", "ambitionbox", "glassdoor"];
+/** job feeds the local agent can sweep on demand (the rest are enrichment / boards) */
+const BROWSABLE = new Set(["naukri", "linkedin", "wellfound", "peerlist"]);
 const LLM_PROVIDERS: { value: string; label: string; model: string; key: string }[] = [
   { value: "echo", label: "echo (offline stub)", model: "—", key: "" },
   { value: "anthropic", label: "Claude (Anthropic)", model: "claude-opus-4-8", key: "ANTHROPIC_API_KEY" },
@@ -284,6 +286,15 @@ export function SettingsForm({
       body: JSON.stringify({ type: "tier3_poll", payload: { source } }),
     });
     setSaved(`Queued a ${source} browse for good-paying software/engineering roles in India — your local agent will run it in your session (if online + enabled) and re-rank the feed.`);
+  };
+
+  const dispatchLocalBoards = async () => {
+    await fetch("/api/jobs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ type: "local_board_poll", payload: {} }),
+    });
+    setSaved("Queued a poll of the Darwinbox boards (Porter, Upstox, Seclore…) — your local agent will open them in your browser and re-rank the feed.");
   };
 
   const saveConfig = () =>
@@ -765,12 +776,17 @@ export function SettingsForm({
           <div className="chip-row" style={{ marginTop: 8 }}>
             <span className="hint">Browse good-paying software/eng roles in India (local agent):</span>
             {config.automationFlags.tier3Sources
-              .filter((s) => s === "naukri" || s === "linkedin")
+              .filter((s) => BROWSABLE.has(s))
               .map((s) => (
                 <button key={s} className="cmd" onClick={() => dispatchTier3(s)}>
                   browse {s} →
                 </button>
               ))}
+            {config.automationFlags.tier3Sources.includes("darwinbox") && (
+              <button className="cmd" onClick={dispatchLocalBoards}>
+                poll darwinbox boards →
+              </button>
+            )}
           </div>
         )}
         <button className="save ghost" onClick={saveConfig} disabled={pending} style={{ marginTop: 12 }}>

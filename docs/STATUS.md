@@ -32,7 +32,7 @@ The four ATS/discovery sources were probed live and return real data: **Greenhou
 - ✅ The only two hard exclusions (salary floor, impossible location).
 - ✅ LLM re-ranker → `{whyFit, gap, redFlags, scoreAdjust}` (honest-voice, evidence-aware).
 - ✅ Match card render (CLI + web).
-- 🟡 Re-rank currently enriches but is not yet persisted back onto `match` rows in the loop (function exists; wire into `rebuildMatches`/worker).
+- ✅ Re-rank narratives persist onto `match` rows: the worker's rank job narrates the top N (`JOBFLOW_RERANK_TOP`, default 15; never with the echo provider), cached per posting in `generation` (kind `rerank`) under a hash of the posting + profile/evidence, so every rank — including the web's settings re-rank — reapplies them and a paid model only sees new or changed top cards.
 
 ### Enrichment + CRM (control-plane Phase 3) — ✅ done & verified on local Supabase
 - ✅ **Tier-1 comp cascade** (§11.4): `levels.fyi` `.md` enricher (free, no key, **attribution surfaced**) — parses all-roles median + per-job-family table; `Adzuna` enricher (country-aware incl. India, key-gated). Cascade `direct → adzuna → levels`, **gated on match score** (top-N only), cached in `salary_cache` (TTL), with **honest confidence** (US levels comp → `low` for non-US roles).
@@ -65,7 +65,8 @@ The four ATS/discovery sources were probed live and return real data: **Greenhou
 - ✅ Web dispatch: local jobs enqueue-able (guarded); **"fill"** on CRM rows, **"browse {source}"** in Settings; **Contact** settings section for the filler.
 - ✅ MV3 extension: manifest, content script (capture + inline match panel), service worker, popup.
 - ⬜ Per-site Tier-3 selectors (Naukri/LinkedIn/Glassdoor/AmbitionBox) — best-effort; tune on your session/locale (see docs/SETUP.md).
-- ⬜ Extension ↔ app endpoints (`/api/score`, `/api/capture`); local cron for unattended Tier-3 sync.
+- ✅ Extension ↔ app endpoints: `/api/score` (the stored match when the page is already in the feed, else a transient score) and `/api/capture` (stores + bookmarks + scores it; a Greenhouse/Lever/Ashby page also registers its board). Calls go through the extension's service worker; the app accepts only the extension's / its own Origin (no login yet). Panel text is now HTML-escaped.
+- ✅ Local cron for unattended Tier-3 sync: the agent self-schedules each opted-in local source (`JOBFLOW_LOCAL_POLL_EVERY_HOURS`, default 12), only while both browser gates are on.
 
 ### Bug fixes (this round)
 - ✅ `/api/jobs` infinite re-render (ActivityPanel effect depended on the state it set) → stable mount-once self-scheduling poller.
@@ -121,18 +122,22 @@ Diagnosed on the live corpus (513 active postings, last polled 82 days earlier):
 - ✅ **Verified registry**: 66 seed boards confirmed live (India product cos, global cos with India eng centres, 15 Workday/Eightfold/Amazon big employers). Many Indian startups use ATSes with no public API (Darwinbox, Keka, Kula, TurboHire, MyNextHire) — they reach the feed via Hirist/Cutshort/Telegram instead. Name-guessed boards must now list a recent India role before they are accepted (Greenhouse `porter` is a café).
 - ✅ **Source trust** component (source prior × listing signals: ATS apply link, stated salary, consultancy/staffing language or poster name, unnamed employer, repeated reposts, thin JD). Priors from a 2026-09 source review: boards 0.85, HN 0.75, Hirist/Cutshort 0.55, Himalayas 0.35 (re-dates listings — its recency is capped), Jobicy 0.25. Evergreen/talent-pool titles are flagged.
 
-### Feed-quality follow-ups (researched 2026-09, not yet built)
-- **More India volume:** r/developersIndia monthly hiring megathread via RSS (first-party, pay stated, JSON API is 403); Instahyre public job-search JSON (stale-heavy — needs detail dates); Darwinbox via the local agent (Rapido, Porter, Upstox — Cloudflare TLS-fingerprint block).
-- **Local-agent only (anti-bot):** Wellfound, Darwinbox (Rapido, Porter, Upstox, CleverTap…), LinkedIn guest search with the new YoE-matched `f_E`.
-- **Naukri:** original post date from the job-id prefix (third-party claim, verify) to defeat "refreshed" listings; consultancy flag from the card.
-- **Dead-link check:** Workday detail returns 403/422 once a req is removed — a cheap liveness probe for top-N cards between polls.
-- **Cost:** re-polls re-embed every unchanged posting; skip the embed when the JD hash is unchanged.
+### Feed-quality follow-ups (2026-09-27) — ✅
+- ✅ **Local-agent sources** (`apps/agent`, Tier 3 — never in the cloud registry): Darwinbox as a local-only board ATS (`local_board_poll` → the shared `ingestCompany` diff; verified live: Porter 123, Upstox 24, Seclore 15; Rapido's board is empty; CleverTap has Darwinbox recruiting off), Peerlist (SSR pages, 50/page; Cloudflare-challenges fast repeat loads, so one page per role), a Wellfound local path (same parser), LinkedIn via the existing adapter — all on the agent's own schedule. The cloud poll skips boards with no cloud adapter; the web routes their "poll now" to the agent.
+- ✅ **Dead-link check** (`checkLiveness`, `liveness` cloud job every `JOBFLOW_LIVENESS_EVERY_HOURS`, default 2): re-probes the top 40 cards on their source's own per-job endpoint — Greenhouse/Lever/SmartRecruiters/Workday/Amazon/Cutshort 404, Instahyre `is_active`, TimesJobs `expiresAt` (its API keeps serving closed jobs with 200). Definitive "gone" retires the posting; "live" re-verifies it; an error changes nothing. Dry run on the live top 40: 31 covered, 0 false positives. Not covered: Hirist (client-rendered — same page live or dead), Wellfound, Zoho, Oracle, Himalayas.
+- ✅ **Reposted dates**: the upsert keeps the EARLIEST publish date (`least()`), a source re-dating a job we already hold counts once as a repost, and age is capped by `firstSeen`. For id-ordered boards that re-stamp (Oracle, Keka, Atlassian, Jibe, TalentBrew) an old req with a fresh date is bounded by the second-earliest date among higher ids (30-day slack for approval lag). A dateless board (Atlassian) dates jobs we watch appear between polls; on a first poll the age is "unknown", not "new".
+- 🟡 **Naukri**: job-id → original date implemented behind guards (real date, not future, ≤1 yr, >2 days earlier than shown); the id format checks out on 14/14 indexed ids, but "refreshes keep the old id" is UNVERIFIED (Naukri 403'd the first headless load; we stopped rather than evade). Consultancy: `postedByAgency` (new column, migration 0012) feeds the trust penalty; the Naukri field name is unconfirmed, so it's only set from an explicit boolean.
+- ✅ **Low-quality listings**: AI-training gigs (Mercor, micro1, Outlier, Alignerr… by name, or new brands by their pitch: rate model output + paid hourly/contract) are flagged, lose trust, and are dampened like a non-target role (never hidden, invariant #4). JD-level talent-pool language ("no immediate opening… future consideration") is flagged like an evergreen title.
+- ✅ **More employers** (+10, detection confirmed live): Comcast + Lilly (Workday, moved to wd115), Lam Research + Infineon (Eightfold PCSX), HSBC + Bayer + NetApp (Eightfold's older v2 API, now supported), PepsiCo + Keysight (new `jibe` adapter — iCIMS Jibe), Optum/UHG (new `talentbrew` adapter — Radancy). Not added: Intuit (India roles all Staff/Senior), John Deere (0 India roles), EA (Avature, no JSON endpoint). HSBC is below the keep bar by title (IC roles are titled "Consultant Specialist").
+- ✅ **Optional sources** (key-gated, no request without a key): Adzuna India search (reuses the salary keys), Careerjet v4 (`CAREERJET_API_KEY`), JSearch (paid; `JSEARCH_API_KEY` or `JSEARCH_RAPIDAPI_KEY`). Remote Rocketship not built: its terms forbid scraping and its paid API allows only 24h caching.
+- ✅ **Cost**: each posting stores `embed_key` (embedder id + text hash); an unchanged posting reuses its vector, a model switch re-embeds, and a provider's silent local fallback is keyed "local" so it's replaced later. The profile embedding is recomputed when its size no longer matches the corpus.
+- ✅ **Small fixes**: HN company names (location/role/prose ledes, URL parentheticals, hyphenated names — 43 of 256 live posts changed, all checked), `pnpm -r test` exits clean (+ a never-submits invariant test for autofill), multi-word cities ("San Francisco", not "San"), web feed filters for IT-services employers and a minimum source trust (+ card badges).
 
 ## Recommended next steps (highest leverage first)
 
 1. **SupabaseRepository** — unlocks durability, the web feed reading real data, and the cron actually accumulating a corpus. Everything else compounds on this.
-2. **Persist re-rank narratives** into `match` rows in `rebuildMatches` (gate LLM calls to top-N for cost).
-3. **Web `/api/score` + `/api/capture`** so the extension closes the loop.
+2. ~~Persist re-rank narratives~~ ✅ (2026-09-27)
+3. ~~Web `/api/score` + `/api/capture`~~ ✅ (2026-09-27)
 4. **Tests** for `normalize` (titles/skills/location/salary) and `match` (stack adjacency, hard exclusions, geo down-weight) — these are the quality-critical, pure, easily-tested units.
 5. **Enrichment cascade** (Adzuna + levels.fyi) — cheap, free, improves comp confidence on the feed.
 6. **Application CRM UI** + don't-double-apply surfaced in the feed.

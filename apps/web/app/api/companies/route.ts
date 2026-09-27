@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { normCompany } from "@jobflow/core";
-import { detect } from "@jobflow/adapters";
+import { atsAdapter, detect } from "@jobflow/adapters";
 import { DEFAULT_TENANT } from "@jobflow/pipeline";
 import { getRepo } from "@/lib/repo";
 
@@ -46,7 +46,10 @@ export async function POST(req: Request) {
   // if resolved, poll it now via a job
   let job = null;
   if (company.atsType !== "unknown" && company.atsSlug) {
-    job = await repo.enqueueJob({ tenantId: DEFAULT_TENANT, type: "poll", runtime: "cloud", payload: { companyId: company.id } });
+    // a board with no cloud adapter (Darwinbox) is polled by the local agent (invariant #1)
+    job = atsAdapter(company.atsType)
+      ? await repo.enqueueJob({ tenantId: DEFAULT_TENANT, type: "poll", runtime: "cloud", payload: { companyId: company.id } })
+      : await repo.enqueueJob({ tenantId: DEFAULT_TENANT, type: "local_board_poll", runtime: "local", payload: { companyId: company.id } });
   }
   return NextResponse.json({ company, detection: det, job });
 }

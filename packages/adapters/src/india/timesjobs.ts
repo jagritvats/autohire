@@ -1,5 +1,5 @@
 import type { RawPosting } from "@jobflow/core";
-import { htmlToText, httpJson, mapPool, type FetchTarget, type SourceAdapter } from "../types.js";
+import { htmlToText, httpJson, mapPool, httpStatus, liveFromStatus, type FetchTarget, type SourceAdapter, type LivenessTarget } from "../types.js";
 
 /**
  * TimesJobs (Tier 2: the JSON its own search page calls, no auth). Its value is the
@@ -45,6 +45,22 @@ interface TjDetail {
 export class TimesJobsAdapter implements SourceAdapter {
   readonly source = "timesjobs" as const;
   readonly tier = "tier2" as const;
+
+  /**
+   * The public job JSON keeps serving long-closed jobs (a 2025 id still returns 200), so
+   * the listing's own `expiresAt` decides; a 404 is gone too (verified 2026-09).
+   */
+  async isLive(job: LivenessTarget): Promise<boolean | null> {
+    const r = await httpStatus(`https://tjapi.timesjobs.com/job-api/api/jobs/public/${encodeURIComponent(job.jobId)}`);
+    if (r?.status !== 200) return liveFromStatus(r);
+    try {
+      const expires = (JSON.parse(r.body) as { expiresAt?: string }).expiresAt;
+      const t = expires ? Date.parse(`${expires}T23:59:59+05:30`) : NaN; // a date, IST end of day
+      return Number.isFinite(t) ? t >= Date.now() : true;
+    } catch {
+      return null;
+    }
+  }
 
   async fetch(target: FetchTarget): Promise<RawPosting[]> {
     const limit = target.limit ?? 60;

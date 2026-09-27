@@ -1,5 +1,5 @@
 import type { RawPosting } from "@jobflow/core";
-import { htmlToText, httpJson, type FetchTarget, type SourceAdapter } from "../types.js";
+import { htmlToText, httpJson, httpStatus, liveFromStatus, type FetchTarget, type SourceAdapter, type LivenessTarget } from "../types.js";
 
 /**
  * Greenhouse board API (Tier 1, free, no auth). Richest free source — full JD +
@@ -26,6 +26,12 @@ interface GhResponse {
 export class GreenhouseAdapter implements SourceAdapter {
   readonly source = "greenhouse" as const;
   readonly tier = "tier1" as const;
+
+  /** per-job endpoint: 404 "Job not found" once the req is closed (verified 2026-09) */
+  async isLive(job: LivenessTarget): Promise<boolean | null> {
+    if (!job.slug) return null;
+    return liveFromStatus(await httpStatus(`https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(job.slug)}/jobs/${encodeURIComponent(job.jobId)}`));
+  }
 
   async fetch(target: FetchTarget): Promise<RawPosting[]> {
     const slug = target.slug;

@@ -1,5 +1,5 @@
 import type { RawPosting } from "@jobflow/core";
-import { htmlToText, type FetchTarget, type SourceAdapter } from "../types.js";
+import { htmlToText, httpStatus, liveFromStatus, type FetchTarget, type SourceAdapter, type LivenessTarget } from "../types.js";
 
 /**
  * Cutshort (Tier 2: public, server-rendered, no login) — Indian startup/product-company
@@ -28,6 +28,12 @@ interface CsJob {
 export class CutshortAdapter implements SourceAdapter {
   readonly source = "cutshort" as const;
   readonly tier = "tier2" as const;
+
+  /** the public job page: 404 once removed (verified 2026-09) */
+  async isLive(job: LivenessTarget): Promise<boolean | null> {
+    if (!job.applyUrl?.startsWith("https://cutshort.io/")) return null;
+    return liveFromStatus(await httpStatus(job.applyUrl, { headers: { Accept: "text/html" } }));
+  }
 
   async fetch(target: FetchTarget): Promise<RawPosting[]> {
     const slug = (target.query ?? "backend-developer-jobs-in-bangalore-bengaluru").replace(/[^a-z0-9-]/gi, "");

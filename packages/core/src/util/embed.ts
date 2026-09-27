@@ -11,6 +11,26 @@
 
 const DIM = 256;
 
+/**
+ * Identity of the local embedder, stored in `Posting.embedKey` so a re-poll can reuse an
+ * unchanged vector. Bump the version if the hashing scheme ever changes.
+ */
+export const LOCAL_EMBEDDER_ID = "local-v1";
+
+/**
+ * Which embedder actually produced a vector. `localEmbed` tags its output (a
+ * non-enumerable property, gone once serialized) because LLM providers fall back to it
+ * silently — a fallback vector must be keyed "local", not as the model that failed.
+ */
+export function embedOrigin(vec: number[]): string | undefined {
+  return (vec as number[] & { embedOrigin?: string }).embedOrigin;
+}
+
+function tagLocal(vec: number[]): number[] {
+  Object.defineProperty(vec, "embedOrigin", { value: LOCAL_EMBEDDER_ID, enumerable: false });
+  return vec;
+}
+
 function tokenize(text: string): string[] {
   return text
     .toLowerCase()
@@ -30,7 +50,7 @@ function hash(token: string): number {
 
 export function localEmbed(text: string, dim = DIM): number[] {
   const vec = new Array<number>(dim).fill(0);
-  if (!text) return vec;
+  if (!text) return tagLocal(vec);
   const counts = new Map<string, number>();
   for (const tok of tokenize(text)) counts.set(tok, (counts.get(tok) ?? 0) + 1);
   for (const [tok, c] of counts) {
@@ -42,5 +62,5 @@ export function localEmbed(text: string, dim = DIM): number[] {
   let n = 0;
   for (const v of vec) n += v * v;
   n = Math.sqrt(n) || 1;
-  return vec.map((v) => v / n);
+  return tagLocal(vec.map((v) => v / n));
 }

@@ -56,6 +56,14 @@ export interface Repository {
    * boards whose poll returned a lite listing (no JD) for already-stored postings.
    */
   touchSeen(companyId: string, atsJobIds: string[]): Promise<void>;
+  /** stored postings for these (atsType, atsJobId) keys — any status (embedding reuse). */
+  findPostingsByAtsIds(atsType: Posting["atsType"], atsJobIds: string[]): Promise<Posting[]>;
+  /**
+   * Soft-delete specific postings their source DEFINITIVELY reported gone (a per-job
+   * 404/410 from the liveness check) — the per-posting twin of `markStale`, never driven
+   * by an error or a partial fetch (§3). Invalidated postings keep their status. Returns count.
+   */
+  retirePostings(ids: string[]): Promise<number>;
 
   // ── posting lifecycle (manual, shared-global; §3) ──
   /** manually mark a posting invalid (spam/dupe/fake) with a reason — reversible. */

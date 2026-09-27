@@ -2,9 +2,11 @@ import type { SeedCompany } from "./discover.js";
 
 /**
  * Employers with India engineering centres, verified live 2026-09-27 against their
- * public boards (Workday CXS / Eightfold PCSX / Oracle HCM / SmartRecruiters /
- * Greenhouse / Lever / Ashby). Comments: India engineering roles / of those with
- * junior-or-mid titles at verification time — a yardstick, not a promise.
+ * public boards (Workday CXS / Eightfold PCSX + older apply-v2 / Oracle HCM / iCIMS Jibe /
+ * Radancy TalentBrew / SmartRecruiters / Greenhouse / Lever / Ashby). Comments: India
+ * engineering roles / of those with junior-or-mid titles at verification time — a
+ * yardstick, not a promise. Numbered ladders (Engineer 3/4/5) pass the title check; where
+ * they dominate, the count without them is noted and the board polls weekly.
  *
  * Kept: ≥3 junior/mid India engineering roles, or ≥20 India engineering roles overall.
  * Boards with ≥20 junior/mid roles poll daily; the rest weekly (pollAll bounds how many
@@ -60,6 +62,9 @@ export const INDIA_EMPLOYER_BOARDS: SeedCompany[] = [
   { name: "BlackRock", careersUrl: "https://blackrock.wd1.myworkdayjobs.com/BlackRock_Professional", tags: ["global", "india", "fintech", "gcc"] }, // 25 / 8
   { name: "Maersk", careersUrl: "https://maersk.wd3.myworkdayjobs.com/Maersk_Careers", tags: ["global", "india", "gcc"] }, // 25 / 6
   { name: "Thomson Reuters", careersUrl: "https://thomsonreuters.wd5.myworkdayjobs.com/External_Career_Site", tags: ["global", "india"] }, // 25 / 4
+  { name: "Eli Lilly", careersUrl: "https://lilly.wd115.myworkdayjobs.com/LLY", tags: ["global", "india", "health", "gcc"] }, // 23 / 8
+  // no country facet on this tenant — the adapter filters by its "India - Chennai, …" sites
+  { name: "Comcast", careersUrl: "https://comcast.wd115.myworkdayjobs.com/Comcast_Careers", tags: ["global", "india", "consumer", "gcc"] }, // 22 / 21 (10 without Engineer 3–5)
   { name: "Dexcom", careersUrl: "https://dexcom.wd1.myworkdayjobs.com/Dexcom", tags: ["global", "india", "health"] }, // 22 / 9
   { name: "First Citizens India", careersUrl: "https://svb.wd5.myworkdayjobs.com/firstcitizensindia", tags: ["global", "india", "fintech", "gcc"] }, // 22 / 6
   { name: "CrowdStrike", careersUrl: "https://crowdstrike.wd5.myworkdayjobs.com/crowdstrikecareers", tags: ["global", "india", "security"] }, // 21 / 13
@@ -98,8 +103,22 @@ export const INDIA_EMPLOYER_BOARDS: SeedCompany[] = [
 
   // ── Eightfold PCSX ──
   { name: "Vodafone (VOIS)", careersUrl: "https://vodafone.eightfold.ai/careers?domain=vodafone.com", tags: ["global", "india", "gcc"], pollCadence: d }, // 115 / 78
+  { name: "Infineon", careersUrl: "https://jobs.infineon.com/careers?domain=infineon.com", tags: ["global", "india", "hardware"] }, // 90 / 8
+  { name: "Lam Research", careersUrl: "https://careers.lamresearch.com/careers?domain=lamresearch.com", tags: ["global", "india", "hardware"] }, // 52 / 21 (8 without Engineer 3–4; mostly mechanical/electrical)
   { name: "Fortive", careersUrl: "https://fortive.eightfold.ai/careers?domain=fortive.com", tags: ["global", "india"] }, // 17 / 11
   { name: "Amdocs", careersUrl: "https://amdocs.eightfold.ai/careers?domain=amdocs.com", tags: ["global", "india", "saas"] }, // 3 / 3
+
+  // ── Eightfold, older /api/apply/v2 (PCSX answers 403; the detector resolves "…/v2") ──
+  { name: "NetApp", careersUrl: "https://netapp.eightfold.ai/careers?domain=netapp.com", tags: ["global", "india", "infra"] }, // 34 / 12
+  { name: "Bayer", careersUrl: "https://talent.bayer.com/careers?domain=bayer.com", tags: ["global", "india", "health"] }, // 10 / 4
+  { name: "HSBC", careersUrl: "https://portal.careers.hsbc.com/careers?domain=hsbc.com", tags: ["global", "india", "fintech", "gcc"] }, // 4 / 0 by title (159 India roles, 15 in Technology; ICs are titled "Consultant Specialist")
+
+  // ── iCIMS Jibe (the careers site's own /api/jobs) ──
+  { name: "PepsiCo", careersUrl: "https://www.pepsicojobs.com/main/jobs", tags: ["global", "india", "consumer", "gcc"] }, // 26 / 7 (232 India roles; the junior ones are "R&D Digital Platforms Analyst")
+  { name: "Keysight", careersUrl: "https://jobs.keysight.com/external/jobs", tags: ["global", "india", "hardware"] }, // 20 / 18 by title, but ~1 below "Engineer 4" (ladder runs 1–6; posts Engineer 1 roles at times)
+
+  // ── Radancy TalentBrew (the careers site's own search endpoint) ──
+  { name: "Optum", careersUrl: "https://careers.unitedhealthgroup.com/search-jobs", tags: ["global", "india", "health", "gcc"], pollCadence: d }, // 148 / 23 (UnitedHealth Group board; 252 India roles)
 
   // ── Oracle HCM (CX site numbers resolved from recruitingCESites, never aliases) ──
   { name: "Honeywell", careersUrl: "https://ibqbjb.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1", tags: ["global", "india"], pollCadence: d }, // 165 / 145

@@ -85,8 +85,9 @@ All in the root `.env`. Grouped by what they unlock.
 | `JOBFLOW_BROWSER_MODE` | `capture` | `capture` \| `fill`. `fill` is required for the form-filler. |
 | `JOBFLOW_AUTOSUBMIT` | `false` | Hard-coded false. Flipping requires a code change + per-app opt-in — by design it stays off. |
 | `JOBFLOW_RATE` | `human` | `human` (jittered 0.5–2s) \| `fast`. Keep `human`. |
-| `JOBFLOW_TIER3_SOURCES` | _(empty)_ | Optional env allow-list (csv: `naukri,linkedin,glassdoor,ambitionbox`). If set, restricts which sources the web can enable. |
+| `JOBFLOW_TIER3_SOURCES` | _(empty)_ | Optional env allow-list (csv: `naukri,linkedin,peerlist,wellfound,darwinbox,glassdoor,ambitionbox`). If set, restricts which sources the web can enable. |
 | `JOBFLOW_BROWSER_PROFILE` | `.jobflow/browser-profile` | Path to the Chromium user-data dir the agent drives — point it at a profile **logged into** LinkedIn/Naukri/etc. |
+| `JOBFLOW_LOCAL_POLL_EVERY_HOURS` | `12` | Unattended schedule: when the last run of an opted-in source is older than this, the agent enqueues it itself (`tier3_poll` for naukri/linkedin/peerlist/wellfound, `local_board_poll` for darwinbox), then drains them one at a time, human-paced. Only while the browser gates are on (both `JOBFLOW_BROWSER=on` and the web master switch), so it's off by default. `0` = off (click-to-run only). |
 
 #### Tier-3 poll targeting — the "good-paying software/engineering in India" sweep
 
@@ -100,6 +101,18 @@ All **optional**; unset → curated defaults (`INDIA_SWE_QUERIES` × Indian tech
 | `JOBFLOW_TIER3_FRESHNESS_DAYS` | `15` | recency window for the search facet. |
 | `JOBFLOW_TIER3_LIMIT` | `25` | cards pulled per (query × location) cell. |
 | `JOBFLOW_TIER3_MAX_TARGETS` | `8` | politeness cap on total cells per browse (sequential, human-paced). |
+
+Peerlist and Wellfound have no city/CTC facets, so they ignore the hub/CTC knobs: the query list is mapped onto each site's role families (e.g. `java developer` → `backend-engineer`), deduped, and at most 3 role listings are read per run (Peerlist: 1 page of 50 newest; Wellfound: 2 pages of `/role/l/{role}/india`). Override per run with the job payload (`queries`, `maxTargets`, `maxPages`, `limit`, `location` for Wellfound).
+
+#### Local-only sources (bot-walled from servers)
+
+Some sources sit behind Cloudflare, which turns away anything but a real browser, so the cloud can't read them. They run **only** on the agent, in your browser (invariant #1). None needs a login.
+
+| Source | Opt-in name | Job | What it reads |
+|---|---|---|---|
+| **Darwinbox** careers boards (Porter, Upstox, Seclore, Rapido) | `darwinbox` | `local_board_poll` | A board ATS. Every active registered company with `atsType=darwinbox` is polled through the same `ingestCompany` the cloud uses: idempotent upserts, and staleness is diffed against the **full** board (a failed or partial fetch returns nothing, so nothing is marked stale). The detector turns a `{tenant}.darwinbox.in` URL into `(darwinbox, tenant)` **without** a network probe. The cloud poll skips these boards. Seeds: `packages/pipeline/src/seeds-local.ts`. |
+| **Peerlist** | `peerlist` | `tier3_poll` | A discovery feed of startup and big-company roles: the server-rendered `/jobs/role/{role}` pages (50 per page, newest first). Cloudflare challenged a burst of 3 quick loads during testing, so reads are spaced out and capped. The agent never tries to solve a challenge: a challenge page parses as "no data". |
+| **Wellfound** (local path) | `wellfound` | `tier3_poll` | The same pages and parser as the cloud Wellfound adapter, loaded in your browser. The cloud adapter can be challenged from datacenter IPs. Postings keep the same id (`wellfound:<id>`) whichever side fetched them, so they never duplicate. |
 
 ### Polling & discovery (cloud-safe)
 | Var | Default | What it does |
@@ -125,6 +138,23 @@ All **optional**; unset → curated defaults (`INDIA_SWE_QUERIES` × Indian tech
 
 ---
 
+## Optional sources
+
+Extra discovery feeds for more India coverage. They're wired into `DEFAULT_DISCOVERY_FEEDS` (`packages/pipeline/src/poll.ts`) but **key-gated**: until the key is in `.env`, the adapter returns nothing and makes **no network call**, so a fresh install is unaffected. All of them are cloud-safe documented APIs (Tier 1–2). None holds a user session.
+
+| Source | Env vars | Cost | What it adds |
+|---|---|---|---|
+| **Adzuna India search** | `ADZUNA_APP_ID`, `ADZUNA_APP_KEY` (the same keys as salary enrichment) | free key (developer.adzuna.com; ~250 calls/day, shared with the enricher) | A broad India aggregator. Feed: title-only `backend` / `software engineer`, `max_days_old=14`, newest first. Pay is kept only when the ad states it; Adzuna's own *predicted* salaries are dropped. |
+| **Careerjet** | `CAREERJET_API_KEY`, optional `CAREERJET_USER_IP` | free publisher account (careerjet.co.in → Partners → Job search API) | The careerjet.co.in (`en_IN`) index, newest first. Uses the v4 API (`search.api.careerjet.net/v4/query`, Basic auth with the key; the old `affid` endpoint is superseded). Careerjet requires the searching user's IP + user agent: set `CAREERJET_USER_IP` to your public IP (default `127.0.0.1`). Links go through Careerjet's `jobviewtrack.com` redirect, and descriptions are 500-char excerpts. |
+| **JSearch** (paid) | `JSEARCH_API_KEY` (OpenWeb Ninja) **or** `JSEARCH_RAPIDAPI_KEY` (RapidAPI), `JSEARCH_MIN_HOURS` (default `24`) | paid; free trial tiers are small | The Google-for-Jobs index: Indian boards and employer career sites in one call (up to 100 jobs per request). Prefers the employer's own ATS link when one is listed. **Spend guard:** each feed target is called at most once per `JSEARCH_MIN_HOURS` per worker process. A cron that starts a fresh process per run gets no carry-over, so budget for one call per run. |
+
+Notes:
+- **Freshness.** These sources stamp a listing when *they* index it, not when the employer published it, so treat their "posted" dates as approximate.
+- **Salary honesty.** Only stated, annual (or monthly ×12) pay with an explicit currency is passed on. A stated salary is high-confidence and can trigger the salary-floor exclusion, so estimates and hourly/daily rates are never used.
+- **Not built: Remote Rocketship.** Its Terms (§5) prohibit scraping. The official API (`POST /api/openclaw/jobs`) needs a paid subscription and limits caching of responses to 24 hours (§4), which conflicts with JobFlow storing postings for up to 14 days. Himalayas already covers India-eligible remote roles.
+
+---
+
 ## Enabling the local agent (the deliberate, multi-step opt-in)
 
 The agent is the only part that touches your logged-in sessions, so turning it on is intentional and spans env + UI + a running process. **Do all of these; any one missing keeps it off.**
@@ -140,12 +170,16 @@ The agent is the only part that touches your logged-in sessions, so turning it o
    JOBFLOW_BROWSER_MODE=fill          # only if you want form-fill; else leave 'capture'
    JOBFLOW_BROWSER_PROFILE=C:\Users\you\jobflow-chrome   # a profile logged into LinkedIn/Naukri
    ```
-3. **Opt in from the UI:** Settings → Automation → toggle "browser automation (master)" on, and select the Tier-3 sources you want (`naukri`, `linkedin`, …). Save.
+3. **Opt in from the UI:** Settings → Automation → toggle "browser automation (master)" on, and select the Tier-3 sources you want (`naukri`, `linkedin`, `peerlist`, `wellfound`, `darwinbox`, …). Save.
 4. **Run the agent:** `pnpm --filter @jobflow/agent start`. It heartbeats every 30s → the feed's "local agent" pill goes green and shows the enabled sources.
-5. **Use it:** the feed/CRM "fill" buttons enqueue `form_fill` (the agent opens the form in your browser, fills it, **stops at review** — you submit); Settings "browse {source}" buttons enqueue `tier3_poll`, which runs the good-paying-India-SWE sweep (query × tech-hub × CTC floor) in your session and then enqueues a `rank` so the new postings surface in the feed. Override the sweep per-run via the job payload (`queries`, `locations`, `minLpa`, `limit`, `maxTargets`) or globally via the `JOBFLOW_TIER3_*` env vars above.
+5. **Use it:** the feed/CRM "fill" buttons enqueue `form_fill` (the agent opens the form in your browser, fills it, **stops at review** — you submit); Settings "browse {source}" buttons enqueue `tier3_poll`, which runs the good-paying-India-SWE sweep (query × tech-hub × CTC floor) in your session and then enqueues a `rank` so the new postings surface in the feed. Override the sweep per-run via the job payload (`queries`, `locations`, `minLpa`, `limit`, `maxTargets`) or globally via the `JOBFLOW_TIER3_*` env vars above. `local_board_poll` (payload `{}` for every local-only board, or `{ "companyId": "…" }` for one) polls the Darwinbox boards.
+6. **Unattended (optional):** leave the agent running. Every `JOBFLOW_LOCAL_POLL_EVERY_HOURS` (default 12), it enqueues one job per opted-in source whose last run is older than that, skipping sources that already have a job queued. Each run of jobs ends with a single `rank`. Set `0` to keep it click-only.
 
 **Honest caveats:**
 - Tier-3 site selectors (Naukri/LinkedIn/Glassdoor/AmbitionBox) are **best-effort and need tuning** for your session/locale — the framework (your-session fetch, flag-guard, normalize→upsert) is built; the per-site parsing is the part to refine on your machine.
+- **Naukri "posted" dates:** a Naukri job id starts with `DDMMYY`, reportedly the date the job was *first* posted. A "refreshed" listing then shows a recent date but keeps its old id. When the id date is a real date, is within the last year, and is more than 2 days older than the displayed date, it's used as `postedAt` (both are kept in `raw` for audit). Search-index data supports the id format. The refresh behaviour itself was **not** verified live: Naukri answered `403 Access Denied` to an automated browser, and we stopped rather than work around it. If you see odd dates, check `raw.displayedPostedAt`.
+- **Naukri consultancy flag:** `postedByAgency` is set only when a tuple carries an explicit boolean (`consultant` / `isConsultant` / …). The exact key in search results is unverified, so check a few in your session.
+- The anti-bot sources (Darwinbox, Peerlist, Wellfound) use no stealth tricks. If a site challenges your browser, that run returns nothing and the next scheduled run tries again. Solve challenges yourself in the agent's browser if you like; the agent never does.
 - Form-fill **never submits** — there is no code path that clicks submit (`assertNeverSubmits`), and `JOBFLOW_AUTOSUBMIT` is hard-false.
 - This runs against your real accounts at human pace; it's your risk to accept, which is why it's off by default and isolated.
 

@@ -107,7 +107,12 @@ export function parseLocation(locationRaw: string | null, jdText = ""): ParsedLo
           ? "Europe"
           : null;
   const locForCity = loc.replace(/\b(remote|hybrid|on[ -]?site|in[ -]?office|anywhere|worldwide|global)\b/gi, " ");
-  const cityMatch = locForCity.match(INDIA_CITIES) ?? locForCity.match(/\b([A-Z][a-zA-Z]+)(?:,|\s|$)/);
+  // up to three capitalised words ending at a separator: "San Francisco, CA", "New York
+  // City", "Tel Aviv" — not just their first word
+  const cityMatch =
+    locForCity.match(INDIA_CITIES) ??
+    locForCity.match(/\b[A-Z][a-zA-Z.'-]+(?:\s+[A-Z][a-zA-Z.'-]+){0,2}(?=\s*(?:[,(|/;]|\s-\s|$))/) ??
+    locForCity.match(/\b([A-Z][a-zA-Z]+)(?:,|\s|$)/);
   const city = cityMatch ? cityMatch[0].replace(/,$/, "").trim() : null;
 
   // 3. remote geo — the load-bearing signal (§11.3)

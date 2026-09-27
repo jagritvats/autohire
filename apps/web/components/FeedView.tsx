@@ -30,6 +30,8 @@ export function FeedView({ initial }: { initial: FeedData }) {
   const [minScore, setMinScore] = useState(0);
   const [maxYears, setMaxYears] = useState(0); // 0 = any; caps the role's minimum required YoE
   const [hideUsOnly, setHideUsOnly] = useState(false);
+  const [hideServices, setHideServices] = useState(false);
+  const [minTrust, setMinTrust] = useState(0); // 0..90 (%), source trust floor
   // India-onsite "allowed" view filter — server-fetched (UI → api → feed → query).
   const [indiaOnly, setIndiaOnly] = useState(false);
   const [indiaCards, setIndiaCards] = useState<FeedCard[] | null>(null);
@@ -58,9 +60,11 @@ export function FeedView({ initial }: { initial: FeedData }) {
       if (modes.size && !modes.has(c.location.mode)) return false;
       if (geos.size && c.location.mode === "remote" && !geos.has(c.location.remoteGeo)) return false;
       if (hideUsOnly && c.location.remoteGeo === "us_only") return false;
+      if (hideServices && c.services) return false;
+      if (minTrust > 0 && c.trust * 100 < minTrust) return false;
       return true;
     });
-  }, [baseCards, arch, modes, geos, minScore, maxYears, hideUsOnly]);
+  }, [baseCards, arch, modes, geos, minScore, maxYears, hideUsOnly, hideServices, minTrust]);
 
   // India-onsite "allowed" filter: fetch the India-workable feed on first toggle-on.
   const toggleIndia = () => {
@@ -301,7 +305,30 @@ export function FeedView({ initial }: { initial: FeedData }) {
             <button className="chip" data-on={hideUsOnly} onClick={() => setHideUsOnly((v) => !v)}>
               hide us-only “remote”
             </button>
+            <button
+              className="chip"
+              data-on={hideServices}
+              onClick={() => setHideServices((v) => !v)}
+              title="Hide IT-services / outsourcing employers (companies tagged 'services')"
+            >
+              hide IT services
+            </button>
           </div>
+        </div>
+
+        <div className="rail-group">
+          <h4>
+            min source trust <span className="slider-val">{minTrust === 0 ? "any" : `≥${minTrust}%`}</span>
+          </h4>
+          <input
+            type="range"
+            min={0}
+            max={90}
+            step={5}
+            value={minTrust}
+            onChange={(e) => setMinTrust(+e.target.value)}
+            title="Source trust: how likely a listing is real, still open and answered (ATS boards ~85%, re-dating aggregators ~35%, gigs and agency posts lower)"
+          />
         </div>
 
         <div className="rail-group">

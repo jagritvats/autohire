@@ -22,7 +22,10 @@ import { getRepo, ensureTenant } from "./repo.js";
  */
 
 /** Canonical questions for the fixed kinds — kept stable so the cache slot is stable. */
-export const KIND_QUESTION: Record<Exclude<GenerationKind, "answer" | "resume" | "resume_latex" | "resume_md">, string> = {
+/** kinds the tailoring UI drafts — "rerank" is the ranker's cached match write-up, not a draft */
+export type DraftKind = Exclude<GenerationKind, "rerank">;
+
+export const KIND_QUESTION: Record<Exclude<DraftKind, "answer" | "resume" | "resume_latex" | "resume_md">, string> = {
   why_here: "Why do you want to work here?",
   interesting_problem: "Describe a unique or interesting problem you've solved, and how.",
   about_blurb: "Write a short 'about me' for a job application.",
@@ -30,7 +33,7 @@ export const KIND_QUESTION: Record<Exclude<GenerationKind, "answer" | "resume" |
 
 export interface GenerateInput {
   postingId?: string | null;
-  kind: GenerationKind;
+  kind: DraftKind;
   /** free-form question (only for kind='answer'); otherwise the canonical one is used. */
   question?: string;
   force?: boolean;
@@ -50,7 +53,7 @@ export interface GenerationDTO {
 }
 
 /** Resolve the slot prompt for a kind (free-form answers carry their own question). */
-function slotPrompt(kind: GenerationKind, question?: string): string {
+function slotPrompt(kind: DraftKind, question?: string): string {
   if (kind === "answer") return (question ?? "").trim();
   if (kind === "resume" || kind === "resume_latex" || kind === "resume_md") return "";
   return KIND_QUESTION[kind];
@@ -196,7 +199,7 @@ export async function listTailored(postingId?: string | null): Promise<Generatio
   const repo = await getRepo();
   await ensureTenant(repo);
   const rows = await repo.listGenerations(DEFAULT_TENANT, postingId);
-  return rows.map((g) => toDTO(g, true));
+  return rows.filter((g) => g.kind !== "rerank").map((g) => toDTO(g, true));
 }
 
 /** Force-refresh: drop cached drafts (all, or one posting's). */

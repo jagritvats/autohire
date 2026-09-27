@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { JobType, JOB_RUNTIME } from "@jobflow/core";
+import { atsAdapter } from "@jobflow/adapters";
+import type { Repository } from "@jobflow/db";
 import { DEFAULT_TENANT } from "@jobflow/pipeline";
 import { getRepo } from "@/lib/repo";
 
@@ -27,7 +29,19 @@ export async function POST(req: Request) {
   const { type, payload } = await req.json();
   const parsed = JobType.safeParse(type);
   if (!parsed.success) return NextResponse.json({ error: "invalid job type" }, { status: 400 });
-  const runtime = JOB_RUNTIME[parsed.data];
-  const job = await repo.enqueueJob({ tenantId: DEFAULT_TENANT, type: parsed.data, runtime, payload: payload ?? {} });
+  const jobType = await routePoll(repo, parsed.data, payload);
+  const job = await repo.enqueueJob({ tenantId: DEFAULT_TENANT, type: jobType, runtime: JOB_RUNTIME[jobType], payload: payload ?? {} });
   return NextResponse.json(job);
+}
+
+/**
+ * "Poll this company" for a board with no cloud adapter (Darwinbox is Cloudflare-blocked
+ * for servers) goes to the local agent's `local_board_poll` instead — the cloud poll
+ * could only fail on it (invariant #1: the cloud never gets a local-only adapter).
+ */
+async function routePoll(repo: Repository, type: JobType, payload: Record<string, unknown> | undefined): Promise<JobType> {
+  const companyId = payload?.companyId;
+  if (type !== "poll" || typeof companyId !== "string") return type;
+  const company = await repo.getCompany(companyId);
+  return company && company.atsType !== "unknown" && !atsAdapter(company.atsType) ? "local_board_poll" : type;
 }

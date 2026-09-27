@@ -1,5 +1,5 @@
 import type { RawPosting } from "@jobflow/core";
-import { htmlToText, httpJson, type FetchTarget, type SourceAdapter } from "../types.js";
+import { htmlToText, httpJson, httpStatus, liveFromStatus, type FetchTarget, type SourceAdapter, type LivenessTarget } from "../types.js";
 
 /**
  * Amazon Jobs (Tier 2: the public JSON amazon.jobs' own search calls, no auth). One
@@ -39,6 +39,11 @@ const MAX_LIST = 500;
 export class AmazonJobsAdapter implements SourceAdapter {
   readonly source = "amazon" as const;
   readonly tier = "tier2" as const;
+
+  /** the job page: 302 to its slug URL while open, 404 once removed (verified 2026-09) */
+  async isLive(job: LivenessTarget): Promise<boolean | null> {
+    return liveFromStatus(await httpStatus(`https://www.amazon.jobs/en/jobs/${encodeURIComponent(job.jobId)}`, { headers: { Accept: "text/html" } }));
+  }
 
   async fetch(target: FetchTarget): Promise<RawPosting[]> {
     const query = target.slug && target.slug !== "amazon" ? target.slug : "software";

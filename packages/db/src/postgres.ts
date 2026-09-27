@@ -157,8 +157,8 @@ export class PgRepository implements Repository {
          loc_mode, loc_city, loc_country, loc_tz, remote_geo, sponsorship, location_confidence,
          salary_min, salary_max, currency, salary_source, salary_confidence,
          experience_min, experience_max,
-         apply_url, jd_embedding, dedup_key, posted_at)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31)
+         apply_url, jd_embedding, dedup_key, posted_at, posted_by_agency, embed_key)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33)
        on conflict (ats_type, ats_job_id) do update set
          title = excluded.title, title_norm = excluded.title_norm,
          role_archetype = excluded.role_archetype, level_band = excluded.level_band,
@@ -169,12 +169,21 @@ export class PgRepository implements Repository {
          salary_min = excluded.salary_min, salary_max = excluded.salary_max, currency = excluded.currency,
          salary_source = excluded.salary_source, salary_confidence = excluded.salary_confidence,
          experience_min = excluded.experience_min, experience_max = excluded.experience_max,
-         apply_url = excluded.apply_url, jd_embedding = excluded.jd_embedding,
-         posted_at = coalesce(excluded.posted_at, posting.posted_at),
+         apply_url = excluded.apply_url, jd_embedding = excluded.jd_embedding, embed_key = excluded.embed_key,
+         posted_by_agency = excluded.posted_by_agency,
+         -- keep the ORIGINAL publish date: boards re-stamp reposts with a new one (§3).
+         -- least() ignores nulls, so a source that stops sending a date keeps ours.
+         posted_at = least(posting.posted_at, excluded.posted_at),
          last_seen = now(), is_active = true,
          -- re-seen: clear staleness; a manual invalidated decision persists (§3)
          status = case when posting.status = 'stale' then 'active' else posting.status end,
-         repost_count = posting.repost_count + case when posting.title_norm <> excluded.title_norm then 1 else 0 end
+         -- a repost: the title changed, or the source re-dated a job we already held (its
+         -- new date is after our last sighting — counted once — and well after first_seen,
+         -- so a relative "Posted 30+ Days Ago" drifting forward doesn't count)
+         repost_count = posting.repost_count + case
+           when posting.title_norm <> excluded.title_norm then 1
+           when excluded.posted_at > posting.last_seen and excluded.posted_at > posting.first_seen + interval '2 days' then 1
+           else 0 end
        returning *`,
       [
         p.companyId, p.companyName, p.atsType, p.atsJobId, p.source, p.tier, p.title, p.titleNorm,
@@ -183,7 +192,7 @@ export class PgRepository implements Repository {
         p.salary.min, p.salary.max, p.salary.currency, p.salary.source, p.salary.confidence,
         p.experience.min, p.experience.max,
         p.applyUrl, p.jdEmbedding ? JSON.stringify(p.jdEmbedding) : null, p.dedupKey,
-        p.postedAt ?? null,
+        p.postedAt ?? null, p.postedByAgency ?? false, p.embedKey ?? null,
       ],
     );
     return rowToPosting(rows[0]!);
@@ -231,6 +240,22 @@ export class PgRepository implements Repository {
        where company_id = $1 and ats_job_id = any($2)`,
       [companyId, atsJobIds],
     );
+  }
+
+  async findPostingsByAtsIds(atsType: Posting["atsType"], atsJobIds: string[]): Promise<Posting[]> {
+    if (!atsJobIds.length) return [];
+    const { rows } = await this.q("select * from posting where ats_type = $1 and ats_job_id = any($2)", [atsType, atsJobIds]);
+    return rows.map(rowToPosting);
+  }
+  async retirePostings(ids: string[]): Promise<number> {
+    if (!ids.length) return 0;
+    const { rowCount } = await this.q(
+      `update posting set is_active = false,
+         status = case when status = 'invalidated' then status else 'stale' end
+       where id = any($1) and is_active = true`,
+      [ids],
+    );
+    return rowCount ?? 0;
   }
 
   // ── posting lifecycle (manual, global) ──
@@ -673,6 +698,7 @@ function rowToPosting(r: pg.QueryResultRow): Posting {
     source: r.source, tier: r.tier, title: r.title, titleNorm: r.title_norm, roleArchetype: r.role_archetype,
     levelBand: r.level_band, jdText: r.jd_text, jdSkills: r.jd_skills ?? [], requirements: parseJson(r.requirements, []),
     location, salary, experience, applyUrl: r.apply_url, jdEmbedding: parseJson(r.jd_embedding, null),
+    postedByAgency: r.posted_by_agency ?? false, embedKey: r.embed_key ?? null,
     postedAt: r.posted_at ?? null, // pre-migration rows → fall back to firstSeen downstream
     firstSeen: r.first_seen, lastSeen: r.last_seen, isActive: r.is_active, repostCount: r.repost_count,
     status: r.status ?? "active", invalidReason: r.invalid_reason ?? null, invalidatedAt: r.invalidated_at ?? null,

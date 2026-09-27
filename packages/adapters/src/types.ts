@@ -14,6 +14,59 @@ export interface SourceAdapter {
    * resilient — return [] on a recoverable error rather than throwing the pipeline.
    */
   fetch(target: FetchTarget): Promise<RawPosting[]>;
+  /**
+   * Optional per-job liveness probe for the dead-link check (§3): `true` = still listed,
+   * `false` = the source DEFINITIVELY says it's gone (a per-job 404/410, or the board's own
+   * closed/expired flag), `null` = couldn't tell (network error, rate limit, 5xx, a page
+   * that renders the same either way). A posting is only ever retired on `false`.
+   */
+  isLive?(job: LivenessTarget): Promise<boolean | null>;
+}
+
+export interface LivenessTarget {
+  /** the company's board slug (ATS boards), null for feed sources */
+  slug: string | null;
+  /** the source's own job id (unscoped — no "source:" prefix) */
+  jobId: string;
+  applyUrl: string | null;
+}
+
+/**
+ * Status of a GET without following redirects — for liveness probes, where a 404 is the
+ * answer rather than a failure. null on a network error or timeout (unknown, not gone).
+ */
+export async function httpStatus(
+  url: string,
+  init: RequestInit & { timeoutMs?: number } = {},
+): Promise<{ status: number; body: string } | null> {
+  const { timeoutMs = 15_000, ...rest } = init;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      redirect: "manual",
+      ...rest,
+      signal: ctrl.signal,
+      headers: {
+        "User-Agent": "JobFlow/0.1 (+personal job-search; contact via app)",
+        Accept: "application/json",
+        ...(rest.headers ?? {}),
+      },
+    });
+    return { status: res.status, body: await res.text() };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** 404/410 = gone; 2xx/3xx = there; anything else (403/429/5xx) = can't tell. */
+export function liveFromStatus(r: { status: number } | null): boolean | null {
+  if (!r) return null;
+  if (r.status === 404 || r.status === 410) return false;
+  if (r.status >= 200 && r.status < 400) return true;
+  return null;
 }
 
 export interface FetchTarget {

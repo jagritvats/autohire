@@ -2,7 +2,7 @@ import type { Posting, Profile, ScoreBreakdown } from "../schema/entities.js";
 import { LevelBandOrder, type LevelBand, type RemoteGeo, type RoleArchetype } from "../schema/enums.js";
 import { cosine, clamp } from "../util/vector.js";
 import { stackAdjacency, type StackAdjacencyResult } from "./stack.js";
-import { EVERGREEN_TITLE_RE, REDATED_SOURCES, scoreSourceTrust } from "./trust.js";
+import { EVERGREEN_TITLE_RE, REDATED_SOURCES, TALENT_POOL_JD_RE, scoreSourceTrust } from "./trust.js";
 
 /**
  * Soft-weighted match scoring (§11). Almost NOTHING is a hard filter — a hard
@@ -122,7 +122,9 @@ export function scorePosting(
   // restricted remote, a non-engineering "Risk Analyst" at a great India office). Scale by
   // the weakest "is this even my role" signal — soft (≥0.6×): it re-orders, it never
   // hides (invariant #4).
-  const feasibility = Math.min(seniority, locResult.score, archetype);
+  // An AI-training gig ("Software Engineer | $50/hr", rating model output) is a non-target
+  // role wearing an engineering title — dampened like one, and flagged, never hidden.
+  const feasibility = Math.min(seniority, locResult.score, archetype, trust.aiTrainingGig ? 0.2 : 1);
   const damp = feasibility >= 0.5 ? 1 : 0.6 + 0.8 * feasibility;
   const score = Math.round(raw * damp * 100);
 
@@ -364,10 +366,14 @@ const EVERGREEN_AFTER_DAYS = 60;
  * Two questions (§3): how old is the ROLE (source publish date, falling back to when
  * we first saw it), and how recently did we CONFIRM it's still up (lastSeen)? A
  * posting nobody has re-polled in weeks is unverified no matter how new it looked.
+ * A role can't be newer than our first sighting of it: boards that re-stamp reposts
+ * (Oracle, Keka, Jibe, Himalayas) report a later date than the one we saw it under, so
+ * the earlier of the two wins.
  */
 export function postingAgeDays(posting: Pick<Posting, "postedAt" | "firstSeen">, now = Date.now()): number {
-  const t = new Date((posting.postedAt ?? posting.firstSeen) as string | Date).getTime();
-  return Math.max(0, (now - t) / 86_400_000);
+  const seen = new Date(posting.firstSeen as string | Date).getTime();
+  const posted = posting.postedAt ? new Date(posting.postedAt as string | Date).getTime() : Infinity;
+  return Math.max(0, (now - Math.min(seen, posted)) / 86_400_000);
 }
 
 function scoreFreshness(posting: Posting): { score: number; flags: string[] } {
@@ -379,7 +385,10 @@ function scoreFreshness(posting: Posting): { score: number; flags: string[] } {
   if (posting.atsType !== "unknown") score += 0.1;
   // a board that re-stamps dates can't prove recency — cap what its "posted today" earns
   if (REDATED_SOURCES.has(posting.source)) score = Math.min(score, 0.55);
-  if (EVERGREEN_TITLE_RE.test(posting.title)) {
+  // no publish date at all (a dateless board's first poll): "first seen today" only means
+  // we just started looking, so its age is unknown — not new
+  if (!posting.postedAt) score = Math.min(score, 0.55);
+  if (EVERGREEN_TITLE_RE.test(posting.title) || TALENT_POOL_JD_RE.test(posting.jdText.slice(0, 2000))) {
     score = Math.min(score, 0.15);
     flags.push("Talent-pool / evergreen req — not a specific open seat");
   } else if (ageDays > EVERGREEN_AFTER_DAYS) {

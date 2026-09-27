@@ -1,5 +1,5 @@
 import { AtsType, SourceKind } from "@jobflow/core";
-import { fetchTelegramChannel, getAdapter, type FetchTarget } from "@jobflow/adapters";
+import { atsAdapter, fetchTelegramChannel, getAdapter, type FetchTarget } from "@jobflow/adapters";
 import type { Repository } from "@jobflow/db";
 import { ingestCompany, ingestFromAdapter } from "./ingest.js";
 import { resolveDiscoveredCompanies } from "./discover.js";
@@ -60,6 +60,19 @@ export const DEFAULT_DISCOVERY_FEEDS: DiscoveryFeed[] = [
   { source: "reddit", slow: true, targets: [{ limit: 100, params: { subreddit: "developersIndia" } }] }, // monthly hiring thread
   { source: "remotive", targets: [{ query: "backend", limit: 60 }] },
   { source: "hn_whoishiring", targets: [{ query: "india", limit: 60 }, { query: "backend", limit: 60 }] },
+  // key-gated search APIs: no-ops (no request) until their keys are set — docs/SETUP.md "Optional sources"
+  {
+    source: "adzuna", // broad India aggregator; same free keys as the salary enricher
+    targets: [
+      { query: "backend", limit: 50, params: { titleOnly: true, maxDaysOld: 14 } },
+      { query: "software engineer", limit: 50, params: { titleOnly: true, maxDaysOld: 14 } },
+    ],
+  },
+  { source: "careerjet", targets: [{ query: "backend developer", limit: 50 }, { query: "software engineer", limit: 50 }] }, // en_IN index
+  {
+    source: "jsearch", // PAID: each target is called at most once per JSEARCH_MIN_HOURS (default 24h)
+    targets: [{ query: "backend developer", location: "India", limit: 50, params: { country: "in", datePosted: "week" } }],
+  },
 ];
 
 /**
@@ -145,7 +158,9 @@ export async function pollAll(repo: Repository, opts: PollOptions = {}): Promise
   const companies = opts.companyId
     ? (await repo.listCompanies()).filter((c) => c.id === opts.companyId)
     : (await repo.listCompanies({ status: "active", dueForPoll: !opts.allCompanies }))
-        .filter((c) => c.atsType !== "unknown" && c.atsSlug)
+        // boards with no CLOUD adapter (Darwinbox & co. are local-agent only, invariant #1)
+        // are polled by the agent; here they'd only burn the per-run board budget
+        .filter((c) => c.atsType !== "unknown" && c.atsSlug && atsAdapter(c.atsType))
         .sort((a, b) => polledAt(a) - polledAt(b))
         .slice(0, opts.maxBoards ?? DEFAULT_MAX_BOARDS);
   for (const c of companies) {

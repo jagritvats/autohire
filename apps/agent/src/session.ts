@@ -1,4 +1,5 @@
 import { launchUserContext, type PwContext, type PwPage } from "@jobflow/autofill";
+import type { LocalFetchInit } from "@jobflow/adapters";
 
 /**
  * Owns the single logged-in browser context for the local agent. Lazily launched on
@@ -41,24 +42,26 @@ export class AgentSession {
    * is the reliable way to read a client-rendered board (§11.5) — far more robust than
    * scraping a virtualized/lazy DOM. Returns the raw response body (JSON text), or ""
    * on any failure (callers treat that as "no data", never throwing the pipeline).
+   * `init` covers SPAs whose listing is a POST (Darwinbox) and lets the caller land on
+   * the exact page that makes the call (the careers SPA) instead of the bare origin.
    */
-  async localFetchJson(url: string, headers: Record<string, string> = {}): Promise<string> {
-    const origin = safeOrigin(url);
+  async localFetchJson(url: string, headers: Record<string, string> = {}, init: LocalFetchInit = {}): Promise<string> {
+    const landing = init.landingUrl && sameOrigin(init.landingUrl, url) ? init.landingUrl : safeOrigin(url);
     const page = await (await this.ctx()).newPage();
     try {
-      // land on the first-party origin first → same-origin fetch gets cookies + CF cookie
-      await page.goto(origin, { waitUntil: "domcontentloaded" });
+      // land on the first-party page first → same-origin fetch gets cookies + CF cookie
+      await page.goto(landing, { waitUntil: "domcontentloaded" });
       await sleep(600 + Math.random() * 900);
-      return await page.evaluate<string, { u: string; h: Record<string, string> }>(
-        async ({ u, h }) => {
+      return await page.evaluate<string, { u: string; h: Record<string, string>; m: string; b: string | null }>(
+        async ({ u, h, m, b }) => {
           try {
-            const res = await fetch(u, { headers: h, credentials: "include" });
+            const res = await fetch(u, { method: m, headers: h, body: b ?? undefined, credentials: "include" });
             return await res.text();
           } catch {
             return "";
           }
         },
-        { u: url, h: headers },
+        { u: url, h: headers, m: init.method ?? "GET", b: init.method === "POST" ? (init.body ?? "") : null },
       );
     } catch {
       return "";
@@ -75,6 +78,15 @@ export class AgentSession {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+/** A landing page is only honoured on the request's own origin (same-origin fetch). */
+function sameOrigin(a: string, b: string): boolean {
+  try {
+    return new URL(a).origin === new URL(b).origin;
+  } catch {
+    return false;
+  }
 }
 
 /** Origin of a URL, or the URL itself if it can't be parsed (defensive). */

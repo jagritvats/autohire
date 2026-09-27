@@ -23,6 +23,12 @@ export interface CompletionRequest {
 
 export interface LlmProvider {
   readonly name: string;
+  /**
+   * Identity of the embedding model `embed()` uses ("openai:text-embedding-3-small"),
+   * stored with each posting vector so unchanged postings reuse theirs and vectors from
+   * different models never mix. Providers that embed locally use LOCAL_EMBEDDER_ID.
+   */
+  readonly embedderId?: string;
   complete(req: CompletionRequest): Promise<string>;
   embed(texts: string[]): Promise<number[][]>;
 }

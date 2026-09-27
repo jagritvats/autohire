@@ -1,4 +1,5 @@
-import type { Job } from "@jobflow/core";
+import type { Job, Profile } from "@jobflow/core";
+import { rerankMatch, type LlmProvider } from "@jobflow/llm";
 import { JOB_RUNTIME } from "@jobflow/core";
 import type { Repository } from "@jobflow/db";
 import {
@@ -10,8 +11,10 @@ import {
   rebuildMatches,
   enrichTopMatches,
   recheckPostings,
+  checkLiveness,
   type SeedCompany,
   type Embedder,
+  type Narrator,
 } from "@jobflow/pipeline";
 
 /**
@@ -21,6 +24,24 @@ import {
  */
 export interface JobCtx {
   embedder: Embedder;
+  /** the configured LLM — writes the re-rank narratives for the top matches */
+  llm?: LlmProvider;
+}
+
+/**
+ * The LLM re-ranker for a rank run (§11.6): top-N only (JOBFLOW_RERANK_TOP, default 15,
+ * 0 = off), never with the offline echo provider (its "[echo]" text isn't a write-up).
+ * Narratives are cached per posting, so a paid model only sees new or changed top cards.
+ */
+export async function narratorFor(repo: Repository, llm: LlmProvider | undefined, profile: Profile): Promise<Narrator | undefined> {
+  const top = Number(process.env.JOBFLOW_RERANK_TOP ?? 15);
+  if (!llm || llm.name === "echo" || !(top > 0)) return undefined;
+  const evidence = await repo.listEvidence(profile.tenantId);
+  return {
+    model: llm.name,
+    top,
+    narrate: (posting, prior) => rerankMatch(llm, profile, evidence, { posting, priorNotes: prior }),
+  };
 }
 
 export async function handleJob(repo: Repository, job: Job, ctx: JobCtx): Promise<Record<string, unknown>> {
@@ -48,8 +69,9 @@ export async function handleJob(repo: Repository, job: Job, ctx: JobCtx): Promis
     }
     case "rank": {
       const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? defaultProfile();
-      const r = await rebuildMatches(repo, profile, { embedder: ctx.embedder });
-      return { scored: r.scored, ranked: r.ranked, excluded: r.excluded };
+      const narrator = await narratorFor(repo, ctx.llm, profile);
+      const r = await rebuildMatches(repo, profile, { embedder: ctx.embedder, narrator });
+      return { scored: r.scored, ranked: r.ranked, excluded: r.excluded, narrated: r.narrated, narratedFresh: r.narratedFresh };
     }
     case "enrich_t1": {
       const limit = (job.payload.limit as number | undefined) ?? 40;
@@ -70,6 +92,13 @@ export async function handleJob(repo: Repository, job: Job, ctx: JobCtx): Promis
       }
       const stats = await recheckPostings(repo, ids, { embedder: ctx.embedder });
       return { ...stats };
+    }
+    case "liveness": {
+      // dead-link check on the top cards between polls (§3); retired cards leave the feed
+      // at once (listMatches only returns active postings), so no re-rank is needed
+      const limit = (job.payload.limit as number | undefined) ?? 40;
+      const r = await checkLiveness(repo, { tenantId: DEFAULT_TENANT, limit });
+      return { ...r };
     }
     case "purge": {
       // Bulk soft-delete (markStale) / hard-delete postings older than a threshold.
@@ -92,7 +121,14 @@ export async function handleJob(repo: Repository, job: Job, ctx: JobCtx): Promis
 export async function runLoop(
   repo: Repository,
   ctx: JobCtx,
-  opts: { intervalMs?: number; once?: boolean; scheduleEveryHours?: number; log?: (m: string) => void } = {},
+  opts: {
+    intervalMs?: number;
+    once?: boolean;
+    scheduleEveryHours?: number;
+    /** dead-link check on the top cards every N hours between polls (0 = off). */
+    livenessEveryHours?: number;
+    log?: (m: string) => void;
+  } = {},
 ): Promise<void> {
   const intervalMs = opts.intervalMs ?? 3000;
   const log = opts.log ?? ((m) => console.log(new Date().toISOString(), m));
@@ -104,6 +140,9 @@ export async function runLoop(
       if (opts.scheduleEveryHours && Date.now() - lastScheduleCheck > 60_000) {
         lastScheduleCheck = Date.now();
         await maybeSchedulePoll(repo, opts.scheduleEveryHours, log).catch((e) => log(`schedule check failed: ${(e as Error).message}`));
+        if (opts.livenessEveryHours) {
+          await maybeScheduleLiveness(repo, opts.livenessEveryHours, log).catch((e) => log(`liveness schedule failed: ${(e as Error).message}`));
+        }
       }
       await sleep(intervalMs);
       continue;
@@ -141,4 +180,19 @@ async function maybeSchedulePoll(repo: Repository, everyHours: number, log: (m: 
   }
   const ago = Number.isFinite(ageMs) ? `${Math.round(ageMs / 3_600_000)}h ago` : "never";
   log(`⏰ scheduled discover → poll → rank (last full poll: ${ago})`);
+}
+
+/**
+ * Between full polls, re-check the top cards' own job pages every `everyHours` so a
+ * filled role drops out within hours rather than at the next board poll (or the feed TTL).
+ * Cheap: one GET per card, top 40 only.
+ */
+async function maybeScheduleLiveness(repo: Repository, everyHours: number, log: (m: string) => void): Promise<void> {
+  const recent = await repo.listJobs(DEFAULT_TENANT, 50);
+  if (recent.some((j) => (j.type === "poll" || j.type === "liveness") && (j.status === "queued" || j.status === "running"))) return;
+  const last = recent.find((j) => j.type === "liveness");
+  const ageMs = last ? Date.now() - new Date(last.createdAt as string | Date).getTime() : Infinity;
+  if (ageMs < everyHours * 3_600_000) return;
+  await repo.enqueueJob({ tenantId: DEFAULT_TENANT, type: "liveness", runtime: JOB_RUNTIME.liveness, payload: { scheduled: true } });
+  log("⏰ scheduled liveness check on the top cards");
 }

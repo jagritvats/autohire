@@ -124,6 +124,12 @@ export const RawPosting = z.object({
    * time education").
    */
   experienceHint: ExperienceRange.optional(),
+  /**
+   * The source's own structured "posted by a consultancy / staffing intermediary" flag
+   * (Naukri marks these). Prose regexes in the trust score catch the rest; this is the
+   * version that doesn't depend on how the JD is worded.
+   */
+  postedByAgency: z.boolean().optional(),
   fetchedAt: ts.default(() => new Date()),
   /** raw source-specific payload, kept for re-parsing without re-fetch */
   raw: z.record(z.unknown()).default({}),
@@ -155,8 +161,16 @@ export const Posting = z.object({
   experience: ExperienceRange.default({ min: null, max: null }),
 
   applyUrl: z.string().nullable().default(null),
+  /** a source flagged the poster as a consultancy / staffing intermediary (§11 trust). */
+  postedByAgency: z.boolean().optional(),
   // embeddings live in pgvector; in JS we carry the array (or null until embedded)
   jdEmbedding: z.array(z.number()).nullable().default(null),
+  /**
+   * `{embedder id}:{hash of the embedded text}` for `jdEmbedding`. A re-poll whose key is
+   * unchanged reuses the stored vector instead of paying for a new one; a different
+   * embedder (switching LLM_PROVIDER) changes the key, so vectors never mix models.
+   */
+  embedKey: z.string().nullable().optional(),
 
   // lifecycle / freshness (§3)
   /**
@@ -253,6 +267,8 @@ export const GenerationKind = z.enum([
   "interesting_problem",
   "about_blurb",
   "answer",
+  /** the LLM re-rank write-up for a top match (§11.6), JSON — cached per posting, not a draft */
+  "rerank",
 ]);
 export type GenerationKind = z.infer<typeof GenerationKind>;
 

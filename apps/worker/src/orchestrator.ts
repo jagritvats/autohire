@@ -11,7 +11,7 @@ import {
 import { createProvider, providerEmbedder } from "@jobflow/llm";
 import { loadRootEnv } from "@jobflow/db";
 import { makeRepository } from "./repo.js";
-import { runLoop } from "./jobs.js";
+import { narratorFor, runLoop } from "./jobs.js";
 
 loadRootEnv();
 
@@ -46,8 +46,9 @@ async function rank(): Promise<void> {
     await repo.saveProfile(profile);
     for (const e of seedEvidence()) await repo.saveEvidence(e);
   }
-  const r = await rebuildMatches(repo, profile, { embedder: providerEmbedder(createProvider()) });
-  log(`rank: ${r.scored} scored → ${r.ranked} ranked, ${r.excluded} excluded`);
+  const llm = createProvider();
+  const r = await rebuildMatches(repo, profile, { embedder: providerEmbedder(llm), narrator: await narratorFor(repo, llm, profile) });
+  log(`rank: ${r.scored} scored → ${r.ranked} ranked, ${r.excluded} excluded, ${r.narrated} narrated (${r.narratedFresh} new)`);
 }
 
 async function enrich(): Promise<void> {
@@ -62,13 +63,20 @@ async function main(): Promise<void> {
   // `runner --once` drains the current backlog and exits (good for cron + CI).
   if (cmd === "runner") {
     const repo = await makeRepository();
-    const ctx = { embedder: providerEmbedder(createProvider()) };
+    const llm = createProvider();
+    const ctx = { embedder: providerEmbedder(llm), llm };
     const once = process.argv.includes("--once");
     log(`job runner started${once ? " (once)" : ""}`);
     // self-schedule discover → poll → rank so a self-hosted stack stays fresh without an
     // external cron (0 disables; the GitHub Actions cron covers hosted DBs).
     const everyHours = Number(process.env.JOBFLOW_POLL_EVERY_HOURS ?? 6);
-    await runLoop(repo, ctx, { once, scheduleEveryHours: once ? 0 : everyHours, log: (m) => log(m) });
+    const livenessEveryHours = Number(process.env.JOBFLOW_LIVENESS_EVERY_HOURS ?? 2);
+    await runLoop(repo, ctx, {
+      once,
+      scheduleEveryHours: once ? 0 : everyHours,
+      livenessEveryHours: once ? 0 : livenessEveryHours,
+      log: (m) => log(m),
+    });
     return;
   }
   // one-shot orchestration (the cron path)

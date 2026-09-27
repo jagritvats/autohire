@@ -11,8 +11,9 @@ import {
   type RecheckStats,
 } from "@jobflow/pipeline";
 import type { Match, Posting } from "@jobflow/core";
-import { isIndiaWorkable, postingAgeDays } from "@jobflow/core";
+import { isIndiaWorkable, postingAgeDays, scoreSourceTrust } from "@jobflow/core";
 import { getRepo, ensureTenant } from "./repo.js";
+import { corpusEmbedder } from "./embedder.js";
 
 /** Serializable match-card DTO for the client UI (§11.6). */
 export interface FeedCard {
@@ -32,6 +33,10 @@ export interface FeedCard {
   experience: { min: number | null; max: number | null; fit: "ok" | "stretch" | "far" | null };
   /** true when the role is workable from India (onsite/hybrid IN, or IN-ok/worldwide remote). */
   indiaWorkable: boolean;
+  /** the employer is an IT-services / outsourcing firm (company tagged "services"). */
+  services: boolean;
+  /** source trust 0..1 (§11): source prior × listing signals — real, open, answered. */
+  trust: number;
   level: string | null;
   levelNote: string | null;
   stackNote: string | null;
@@ -97,7 +102,7 @@ export async function refreshFeed(): Promise<FeedData> {
 export async function rerankOnly(): Promise<FeedData> {
   const repo = await getRepo();
   const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? defaultProfile();
-  await rebuildMatches(repo, profile);
+  await rebuildMatches(repo, profile, { embedder: corpusEmbedder() });
   const matches = await repo.listMatches(DEFAULT_TENANT, 80);
   return shape(repo, matches);
 }
@@ -105,9 +110,10 @@ export async function rerankOnly(): Promise<FeedData> {
 async function ingestAndRank(repo: Repository): Promise<void> {
   await discoverCompanies(repo, SEED_COMPANIES);
   // the same poll routine the worker runs; boards not yet due are skipped
-  await pollAll(repo, { limitPerCompany: 50, maxBoards: 25, skipSlowFeeds: true, telegramChannels: [] }); // a request-bound refresh stays small; the runner does the sweep
+  // a request-bound refresh stays small; the runner does the sweep
+  await pollAll(repo, { embedder: corpusEmbedder(), limitPerCompany: 50, maxBoards: 25, skipSlowFeeds: true, telegramChannels: [] });
   const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? defaultProfile();
-  await rebuildMatches(repo, profile);
+  await rebuildMatches(repo, profile, { embedder: corpusEmbedder() });
 }
 
 /** Card context — the per-user overlays needed to render correct action state. */
@@ -117,6 +123,25 @@ interface CardCtx {
   appliedKeys: Set<string>;
   bookmarked: Set<string>;
   archived: Set<string>;
+  /** companies tagged "services" (IT-services / outsourcing employers). */
+  servicesCompanyIds: Set<string>;
+}
+
+/** Everything `buildCard` needs beyond the posting, loaded once per request. */
+async function cardCtx(repo: Repository, companies?: Awaited<ReturnType<Repository["listCompanies"]>>): Promise<CardCtx> {
+  const [appliedKeys, userState, profile, cos] = await Promise.all([
+    repo.appliedDedupKeys(DEFAULT_TENANT),
+    repo.getPostingUserState(DEFAULT_TENANT),
+    repo.getProfile(DEFAULT_TENANT),
+    companies ?? repo.listCompanies(),
+  ]);
+  return {
+    yoe: (profile ?? defaultProfile()).yoe,
+    appliedKeys,
+    bookmarked: userState.bookmarked,
+    archived: userState.archived,
+    servicesCompanyIds: new Set(cos.filter((c) => c.tags.includes("services")).map((c) => c.id)),
+  };
 }
 
 /** Build one card from a posting + its (optional) match. Single source of card shape. */
@@ -147,6 +172,8 @@ function buildCard(
     },
     experience: { min: p.experience.min, max: p.experience.max, fit: experienceFit(p.experience.min, ctx.yoe) },
     indiaWorkable: isIndiaWorkable(p.location),
+    services: ctx.servicesCompanyIds.has(p.companyId),
+    trust: Math.round(scoreSourceTrust(p).score * 100) / 100,
     level: p.levelBand,
     levelNote: m?.levelNote ?? null,
     stackNote: m?.stackNote ?? null,
@@ -164,15 +191,10 @@ function buildCard(
 }
 
 async function shape(repo: Repository, matches: Awaited<ReturnType<Repository["listMatches"]>>): Promise<FeedData> {
-  const [appliedKeys, userState] = await Promise.all([
-    repo.appliedDedupKeys(DEFAULT_TENANT),
-    repo.getPostingUserState(DEFAULT_TENANT),
-  ]);
-  const yoe = ((await repo.getProfile(DEFAULT_TENANT)) ?? defaultProfile()).yoe;
-  const ctx: CardCtx = { yoe, appliedKeys, bookmarked: userState.bookmarked, archived: userState.archived };
+  const companies = await repo.listCompanies();
+  const ctx = await cardCtx(repo, companies);
   const cards: FeedCard[] = matches.map((m) => buildCard(m.posting, m, ctx));
   const allActive = await repo.listActivePostings();
-  const companies = await repo.listCompanies();
   const polled = companies.map((c) => (c.lastPolled ? new Date(c.lastPolled as string | Date).getTime() : 0));
   const lastPolled = Math.max(0, ...polled);
   return {
@@ -193,12 +215,7 @@ async function shape(repo: Repository, matches: Awaited<ReturnType<Repository["l
 export async function getPostingsView(view: PostingView): Promise<{ cards: FeedCard[]; view: PostingView }> {
   const repo = await getRepo();
   await ensureTenant(repo);
-  const [appliedKeys, userState] = await Promise.all([
-    repo.appliedDedupKeys(DEFAULT_TENANT),
-    repo.getPostingUserState(DEFAULT_TENANT),
-  ]);
-  const yoe = ((await repo.getProfile(DEFAULT_TENANT)) ?? defaultProfile()).yoe;
-  const ctx: CardCtx = { yoe, appliedKeys, bookmarked: userState.bookmarked, archived: userState.archived };
+  const ctx = await cardCtx(repo);
 
   const postings =
     view === "bookmarks"
@@ -219,9 +236,9 @@ export async function getPostingsView(view: PostingView): Promise<{ cards: FeedC
 export async function recheckFeed(postingIds: string[]): Promise<FeedData & { recheck: RecheckStats }> {
   const repo = await getRepo();
   await ensureTenant(repo);
-  const recheck = await recheckPostings(repo, postingIds, { limit: 50 });
+  const recheck = await recheckPostings(repo, postingIds, { limit: 50, embedder: corpusEmbedder() });
   const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? defaultProfile();
-  await rebuildMatches(repo, profile);
+  await rebuildMatches(repo, profile, { embedder: corpusEmbedder() });
   const matches = await repo.listMatches(DEFAULT_TENANT, 80);
   return { ...(await shape(repo, matches)), recheck };
 }

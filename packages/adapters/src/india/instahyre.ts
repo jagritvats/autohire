@@ -1,5 +1,5 @@
 import type { RawPosting } from "@jobflow/core";
-import { htmlToText, httpJson, httpText, mapPool, type FetchTarget, type SourceAdapter } from "../types.js";
+import { htmlToText, httpJson, httpText, mapPool, httpStatus, liveFromStatus, type FetchTarget, type SourceAdapter, type LivenessTarget } from "../types.js";
 
 /**
  * Instahyre (Tier 2: the public JSON its search page calls, no login to browse) —
@@ -39,6 +39,17 @@ const PAGE = 35;
 export class InstahyreAdapter implements SourceAdapter {
   readonly source = "instahyre" as const;
   readonly tier = "tier2" as const;
+
+  /** the public job JSON: 404 once removed, or `is_active: false` while still served (verified 2026-09) */
+  async isLive(job: LivenessTarget): Promise<boolean | null> {
+    const r = await httpStatus(`https://www.instahyre.com/api/v1/employer_public_jobs/${encodeURIComponent(job.jobId)}`);
+    if (r?.status !== 200) return liveFromStatus(r);
+    try {
+      return (JSON.parse(r.body) as { is_active?: boolean }).is_active !== false;
+    } catch {
+      return null;
+    }
+  }
 
   async fetch(target: FetchTarget): Promise<RawPosting[]> {
     const limit = target.limit ?? 40;

@@ -19,7 +19,7 @@ export async function GET(req: Request) {
 
 const Body = z.object({
   postingId: z.string().uuid().nullable().optional(),
-  kind: GenerationKind,
+  kind: GenerationKind.exclude(["rerank"]), // the ranker's cached write-up isn't a draft
   question: z.string().optional(),
   force: z.boolean().optional(),
 });

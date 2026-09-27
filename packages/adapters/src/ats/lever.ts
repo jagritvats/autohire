@@ -1,5 +1,5 @@
 import type { RawPosting } from "@jobflow/core";
-import { htmlToText, httpJson, type FetchTarget, type SourceAdapter } from "../types.js";
+import { htmlToText, httpJson, httpStatus, liveFromStatus, type FetchTarget, type SourceAdapter, type LivenessTarget } from "../types.js";
 
 /**
  * Lever postings API (Tier 1, free, no auth). Verified live:
@@ -23,6 +23,12 @@ interface LeverJob {
 export class LeverAdapter implements SourceAdapter {
   readonly source = "lever" as const;
   readonly tier = "tier1" as const;
+
+  /** per-job endpoint: 404 "Document not found" once the posting is removed (verified 2026-09) */
+  async isLive(job: LivenessTarget): Promise<boolean | null> {
+    if (!job.slug) return null;
+    return liveFromStatus(await httpStatus(`https://api.lever.co/v0/postings/${encodeURIComponent(job.slug)}/${encodeURIComponent(job.jobId)}`));
+  }
 
   async fetch(target: FetchTarget): Promise<RawPosting[]> {
     const slug = target.slug?.toLowerCase();

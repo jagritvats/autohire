@@ -1,4 +1,4 @@
-import { localEmbed } from "@jobflow/core";
+import { LOCAL_EMBEDDER_ID, localEmbed } from "@jobflow/core";
 import type { CompletionRequest, LlmProvider } from "../provider.js";
 
 /**
@@ -8,6 +8,7 @@ import type { CompletionRequest, LlmProvider } from "../provider.js";
  */
 export class EchoProvider implements LlmProvider {
   readonly name = "echo";
+  readonly embedderId = LOCAL_EMBEDDER_ID;
 
   async complete(req: CompletionRequest): Promise<string> {
     if (req.json) {

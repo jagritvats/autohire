@@ -1,10 +1,11 @@
-import { localEmbed } from "@jobflow/core";
+import { LOCAL_EMBEDDER_ID, localEmbed } from "@jobflow/core";
 import type { CompletionRequest, LlmProvider, ProviderConfig } from "../provider.js";
 import { fetchWithTimeout, mapProviderError, retryAfterMs, withRetry } from "../http.js";
 
 /** Claude via the Messages API. Strong model for re-rank/answers; cheap for normalize. */
 export class AnthropicProvider implements LlmProvider {
   readonly name = "anthropic";
+  readonly embedderId = LOCAL_EMBEDDER_ID; // no embeddings endpoint — embed() is local
   private apiKey: string;
   private cheapModel: string;
   private strongModel: string;

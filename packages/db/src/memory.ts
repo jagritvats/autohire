@@ -165,10 +165,12 @@ export class InMemoryRepository implements Repository {
     const now = new Date();
     if (existingId) {
       const existing = this.postings.get(existingId)!;
-      const reposted = existing.titleNorm !== p.titleNorm; // title changed → likely a repost
+      const reposted = existing.titleNorm !== p.titleNorm || isRedated(existing, p.postedAt); // same rules as PgRepository
       const updated: Posting = {
         ...existing,
         ...p,
+        // keep the ORIGINAL publish date: a repost re-stamps the source's date (§3)
+        postedAt: earlierDate(existing.postedAt, p.postedAt),
         id: existing.id,
         firstSeen: existing.firstSeen,
         lastSeen: now,
@@ -245,6 +247,24 @@ export class InMemoryRepository implements Repository {
       p.isActive = true;
       if (p.status === "stale") p.status = "active";
     }
+  }
+
+  async findPostingsByAtsIds(atsType: Posting["atsType"], atsJobIds: string[]): Promise<Posting[]> {
+    return atsJobIds
+      .map((id) => this.postingByAtsKey.get(`${atsType}:${id}`))
+      .filter((id): id is string => !!id)
+      .map((id) => this.postings.get(id)!);
+  }
+  async retirePostings(ids: string[]): Promise<number> {
+    let n = 0;
+    for (const id of ids) {
+      const p = this.postings.get(id);
+      if (!p || !p.isActive) continue;
+      p.isActive = false;
+      if (p.status !== "invalidated") p.status = "stale";
+      n++;
+    }
+    return n;
   }
 
   // ── posting lifecycle (manual, global) ──
@@ -542,4 +562,25 @@ function isDue(c: Company): boolean {
   const last = new Date(c.lastPolled as string | Date).getTime();
   const ageH = (Date.now() - last) / 3_600_000;
   return c.pollCadence === "daily" ? ageH >= 20 : c.pollCadence === "weekly" ? ageH >= 24 * 6 : false;
+}
+
+type DateLike = string | Date | null | undefined;
+const ms = (d: DateLike) => (d == null || d === "" ? NaN : new Date(d).getTime());
+
+/** the earlier of two publish dates (either may be missing) — Postgres `least()` semantics */
+function earlierDate(a: DateLike, b: DateLike): Posting["postedAt"] {
+  const [ta, tb] = [ms(a), ms(b)];
+  if (!Number.isFinite(ta)) return Number.isFinite(tb) ? (b as Posting["postedAt"]) : null;
+  if (!Number.isFinite(tb)) return a as Posting["postedAt"];
+  return ta <= tb ? (a as Posting["postedAt"]) : (b as Posting["postedAt"]);
+}
+
+/**
+ * The source re-stamped a posting we already hold (§3): its new date is after our last
+ * sighting (so it changed since the previous poll — counted once) and well after we
+ * first saw the job (not the jitter of a relative "Posted 30+ days ago").
+ */
+function isRedated(existing: Posting, newPostedAt: DateLike): boolean {
+  const t = ms(newPostedAt);
+  return Number.isFinite(t) && t > ms(existing.lastSeen) && t > ms(existing.firstSeen) + 2 * 86_400_000;
 }

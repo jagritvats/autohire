@@ -62,6 +62,12 @@ export function MatchCard({
             <span className="tag">{card.source}</span>
           )}
           {TIER3.has(card.source) && <span className="tag tier3">tier-3 · local</span>}
+          {card.services && <span className="tag" title="IT-services / outsourcing employer">IT services</span>}
+          {card.trust < 0.4 && (
+            <span className="tag" title="Source trust: source prior × listing signals (agency, gig, re-dated, thin JD…)">
+              low trust {Math.round(card.trust * 100)}%
+            </span>
+          )}
           {exp && (
             <span className="tag exp" data-fit={card.experience.fit ?? undefined} title="Years of experience the JD asks for (parsed) vs yours">
               {exp}

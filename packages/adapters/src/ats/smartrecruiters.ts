@@ -1,5 +1,5 @@
 import type { LevelBand, RawPosting } from "@jobflow/core";
-import { DETAIL_CAP, pickForDetail, htmlToText, httpJson, mapPool, type FetchTarget, type SourceAdapter } from "../types.js";
+import { DETAIL_CAP, pickForDetail, htmlToText, httpJson, mapPool, httpStatus, liveFromStatus, type FetchTarget, type SourceAdapter, type LivenessTarget } from "../types.js";
 
 /**
  * SmartRecruiters public posting API (Tier 1, free, no auth). Used by Freshworks,
@@ -33,6 +33,12 @@ const MAX_LIST = 600;
 export class SmartRecruitersAdapter implements SourceAdapter {
   readonly source = "smartrecruiters" as const;
   readonly tier = "tier1" as const;
+
+  /** per-job endpoint: 404 RESOURCE_NOT_FOUND once the posting is removed (verified 2026-09) */
+  async isLive(job: LivenessTarget): Promise<boolean | null> {
+    if (!job.slug) return null;
+    return liveFromStatus(await httpStatus(`https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(job.slug)}/postings/${encodeURIComponent(job.jobId)}`));
+  }
 
   async fetch(target: FetchTarget): Promise<RawPosting[]> {
     const slug = target.slug;
