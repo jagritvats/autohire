@@ -111,6 +111,19 @@ export const RawPosting = z.object({
   applyUrl: z.string().nullable().default(null),
   salaryRaw: z.string().nullable().default(null),
   postedAt: ts.nullable().default(null),
+  /**
+   * The source's own structured seniority (Himalayas "Mid-level", SmartRecruiters
+   * "Entry Level"), used when the title carries no level (§11.2). Ambiguous source
+   * buckets ("Mid-Senior") are left null rather than guessed.
+   */
+  levelHint: LevelBand.nullable().optional(),
+  /**
+   * The source's own structured years-of-experience range (Hirist/Cutshort/TimesJobs/
+   * Instahyre/Wellfound/Zoho fields). It's what the recruiter filters candidates on,
+   * so it wins over parsing JD prose (which carries boilerplate like "15 years full
+   * time education").
+   */
+  experienceHint: ExperienceRange.optional(),
   fetchedAt: ts.default(() => new Date()),
   /** raw source-specific payload, kept for re-parsing without re-fetch */
   raw: z.record(z.unknown()).default({}),
@@ -146,6 +159,13 @@ export const Posting = z.object({
   jdEmbedding: z.array(z.number()).nullable().default(null),
 
   // lifecycle / freshness (§3)
+  /**
+   * When the SOURCE says the role was published (Greenhouse first_published, Lever
+   * createdAt, Ashby publishedAt…). `firstSeen` is only when WE first saw it — a
+   * 90-day-old req first polled today would otherwise read as brand new. Null when the
+   * source gives no trustworthy publish date; freshness then falls back to firstSeen.
+   */
+  postedAt: ts.nullable().default(null),
   firstSeen: ts,
   lastSeen: ts,
   isActive: z.boolean().default(true),
@@ -290,6 +310,8 @@ export const ScoreBreakdown = z.object({
   location: z.number(),
   freshness: z.number(),
   salary: z.number(),
+  /** source prior × listing signals (§3) — older match rows predate it. */
+  sourceTrust: z.number().default(0.7),
 });
 export type ScoreBreakdown = z.infer<typeof ScoreBreakdown>;
 

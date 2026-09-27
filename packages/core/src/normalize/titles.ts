@@ -5,23 +5,42 @@ import type { LevelBand, RoleArchetype } from "../schema/enums.js";
  * level: "senior" }. This is the unglamorous core that everything downstream trusts.
  */
 
+/**
+ * Ordered most→least specific; first match wins. Explicit words ("Senior",
+ * "Director") beat ladder rungs, so "Sr. SDE II" is senior and "Associate Director"
+ * is director. Ladder rungs follow the Indian product-company convention (§11.2):
+ * SDE-1 ≈ 0–2 yrs, SDE-2 ≈ 2–5 yrs (mid — the natural target for ~2 YoE), SDE-3 ≈
+ * senior; "Engineer I/II/III/IV" reads the same way.
+ */
+const LADDER = String.raw`(?:sde|swe|engineer|developer|programmer)\s*[-–]?\s*`;
 const SENIORITY_PATTERNS: Array<[RegExp, LevelBand]> = [
   [/\b(intern|internship|trainee|apprentice)\b/i, "intern"],
-  [/\b(jr\.?|junior|entry[ -]?level|graduate|associate|sde[ -]?0|sde[ -]?i\b|grad)\b/i, "junior"],
+  [/\b(director|vp|vice president|head of|chief)\b/i, "director"],
   [/\b(principal|distinguished|fellow)\b/i, "principal"],
-  [/\b(staff|sde[ -]?iii|sde[ -]?3|l[5-7])\b/i, "staff"],
-  [/\b(sr\.?|senior|snr|sde[ -]?ii\b|sde[ -]?2|lead engineer)\b/i, "senior"],
-  [/\b(tech lead|team lead|engineering lead|\blead\b)\b/i, "lead"],
-  [/\b(director|vp|head of|chief)\b/i, "director"],
-  [/\b(engineering manager|\bem\b|people manager|manager)\b/i, "manager"],
+  [/\bstaff\b/i, "staff"],
+  [/\b(engineering manager|people manager|manager)\b/i, "manager"],
+  [/\b(sr\.?|senior|snr|lead engineer)(?![a-z])/i, "senior"],
+  [/\b(tech lead|team lead|engineering lead|lead|s?tl)\b/i, "lead"], // TL / STL = (senior) team lead
+  [new RegExp(String.raw`\b${LADDER}(iv|4)\b`, "i"), "staff"],
+  [new RegExp(String.raw`\b${LADDER}(iii|3)\b`, "i"), "senior"],
+  [new RegExp(String.raw`\b${LADDER}(ii|2)\b`, "i"), "mid"],
+  [new RegExp(String.raw`\b${LADDER}(i|1|0)\b`, "i"), "junior"],
+  // company L-levels are only roughly comparable; map to the common big-tech reading
+  [/\bl3\b/i, "junior"],
+  [/\bl4\b/i, "mid"],
+  [/\bl5\b/i, "senior"],
+  [/\bl[6-7]\b/i, "staff"],
+  [/\bmid[ -]?(level|senior)?\b/i, "mid"],
+  [/\b(jr\.?|junior|entry[ -]?level|graduate|new grad|grad|fresher|early[ -]career|associate)(?![a-z])/i, "junior"],
 ];
 
 /**
  * Non-engineering roles whose titles still contain "engineer"/"developer"
  * (Developer Marketing, Developer Relations, Sales Engineer, Solutions Engineer…).
  * Checked FIRST so they don't masquerade as backend roles and pollute the ranking.
+ * Stems end in `\w*` (not `\b`) so "Advocate", "Recruiter", "Evangelism" match.
  */
-const NON_ENG_TITLE = /\b(marketing|relations|advocat|evangelist|recruit|talent|sales|account (executive|manager)|customer success|support engineer|solutions? engineer|sales engineer|pre[- ]?sales|partnerships?|community|content|designer|writer|finance|legal|people|hr\b|operations? (manager|lead)|program manager)\b/i;
+const NON_ENG_TITLE = /\b(market\w*|relations|advocat\w*|evangelis\w*|recruit\w*|talent|sales|account (executive|manager)|accounts? (payable|receivable)|accountant|customer success|support engineer|solutions? (engineer|architect|consultant)|pre[- ]?sales|partnerships?|community|content|copy ?writer|designer|writer|art director|finance|financial|legal|counsel|people|hr\b|operations? (manager|lead|associate|specialist)|business (operations|development|analyst)|(product|program|project) (manager|owner|lead)|specialist|investigator|analyst)\b/i;
 
 const ARCHETYPE_PATTERNS: Array<[RegExp, RoleArchetype]> = [
   [/\b(sre|site reliability)\b/i, "sre"],

@@ -24,7 +24,57 @@ export interface FetchTarget {
   params?: Record<string, string | number | boolean>;
   /** max results to pull this run (politeness / cost) */
   limit?: number;
+  /**
+   * Job ids already stored with full detail. Boards that need a per-posting detail call
+   * for the JD (SmartRecruiters, Workday, Eightfold) return a LITE posting (no jdText)
+   * for these instead of re-fetching — ingest then just re-confirms them as seen.
+   */
+  known?: ReadonlySet<string>;
 }
+
+/** Max per-board detail calls per poll for NEW postings (politeness; the rest next poll). */
+export const DETAIL_CAP = 60;
+
+const ENG_TITLE = /\b(engineer\w*|engr|developer|sde|swe|programmer|backend|back-end|front-?end|full[- ]?stack|devops|sre|site reliability|platform|data engineer|software|architect|qa|sdet|test automation)\b/i;
+const NON_ENG_TITLE = /\b(sales|account (executive|manager)|marketing|recruit\w*|talent acquisition|hr\b|human resources|finance|accountant|legal|counsel|customer (success|service|support)|business development|operations (associate|analyst|manager)|nurse|pharmac\w*|clinical|driver|warehouse|store|retail|mechanical|civil|electrical|chemical|facility|facilities)\b/i;
+
+/**
+ * Pick which NEW postings get a (costly) detail call: engineering-looking titles first,
+ * clearly non-engineering ones never — they rank low on the title alone (archetype), so
+ * their JD adds nothing. Large employers list hundreds of India roles, mostly not
+ * engineering (Citi: ~960 India, ~250 engineering); this keeps the detail budget on
+ * roles that can actually match.
+ */
+export function pickForDetail<T>(items: T[], title: (t: T) => string, cap: number): T[] {
+  const eng = items.filter((i) => ENG_TITLE.test(title(i)) && !NON_ENG_TITLE.test(title(i)));
+  const other = items.filter((i) => !ENG_TITLE.test(title(i)) && !NON_ENG_TITLE.test(title(i)));
+  return [...eng, ...other].slice(0, cap);
+}
+
+/** Run `fn` over `items` with at most `n` in flight (polite detail fetching). */
+export async function mapPool<T, R>(items: T[], n: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]!);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, worker));
+  return out;
+}
+
+/** ISO-3166 alpha-2 → the country NAME boards use in facets / location strings. */
+export const COUNTRY_NAMES: Record<string, string> = {
+  IN: "India",
+  US: "United States",
+  GB: "United Kingdom",
+  DE: "Germany",
+  SG: "Singapore",
+  AE: "United Arab Emirates",
+  CA: "Canada",
+};
 
 /** Enrichment adapters return structured enrichment keyed to a company/posting. */
 export interface EnrichmentAdapter {
@@ -78,6 +128,40 @@ export async function httpJson<T = unknown>(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Text twin of httpJson (careers-page HTML, XML feeds); null on any failure. */
+export async function httpText(
+  url: string,
+  init: RequestInit & { timeoutMs?: number } = {},
+): Promise<string | null> {
+  const { timeoutMs = 20_000, ...rest } = init;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      ...rest,
+      signal: ctrl.signal,
+      headers: { "User-Agent": "JobFlow/0.1 (+personal job-search; contact via app)", ...(rest.headers ?? {}) },
+    });
+    if (!res.ok) return null;
+    return await res.text();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Decode the handful of HTML entities feeds use to escape embedded markup. */
+export function decodeEntities(s: string): string {
+  return s
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;|&apos;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&");
 }
 
 /** Strip HTML to readable text for JD parsing (ATS JDs come as HTML). */

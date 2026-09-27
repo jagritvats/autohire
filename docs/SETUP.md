@@ -101,6 +101,13 @@ All **optional**; unset → curated defaults (`INDIA_SWE_QUERIES` × Indian tech
 | `JOBFLOW_TIER3_LIMIT` | `25` | cards pulled per (query × location) cell. |
 | `JOBFLOW_TIER3_MAX_TARGETS` | `8` | politeness cap on total cells per browse (sequential, human-paced). |
 
+### Polling & discovery (cloud-safe)
+| Var | Default | What it does |
+|---|---|---|
+| `JOBFLOW_POLL_EVERY_HOURS` | `6` | The worker `runner` self-enqueues discover → poll → rank when the last full poll is older than this. `0` disables (use an external cron instead). A local/Docker DB has no other scheduler — the GitHub cron can't reach it. |
+| `JOBFLOW_POLL_COUNTRY` | `IN` | ISO country the big-employer boards (Workday, Eightfold, SmartRecruiters, Amazon) are polled for — they filter server-side and otherwise return thousands of global roles. Shapes what is polled; ranking still scores location. |
+| `JOBFLOW_TELEGRAM_CHANNELS` | `gocareers,techuprise_updates,dot_aware` | csv of public Telegram channels to harvest each poll (set it empty to turn harvesting off). Links to company ATS/careers pages become registered boards; the posting itself is always fetched from the board. Scam-pattern posts and posts older than 30 days are skipped; course-funnel / blog / shortener links are dropped. The defaults won a 2026-09 review of ~100 Indian job channels (54–72% direct company links, 1–4 YoE focus, no scams). Optional extras: `jobsinternshipswale` (small, unique), `itreferral_jobs` (LinkedIn-heavy), `remote_devops_jobs` (DevOps/SRE). The big "freshers" channels route 90%+ of links through ad-funded blogs and are skipped. One-off: `pnpm --filter @jobflow/cli harvest --telegram a,b` or `--whatsapp ./export.txt` (a WhatsApp "Export chat" file — never automated). |
+
 ### Misc
 | Var | Default | What it does |
 |---|---|---|

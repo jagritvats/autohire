@@ -1,7 +1,6 @@
 import {
   discoverCompanies,
-  ingestCompany,
-  ingestFromAdapter,
+  pollAll,
   rebuildMatches,
   enrichTopMatches,
   DEFAULT_TENANT,
@@ -9,7 +8,6 @@ import {
   defaultProfile,
   seedEvidence,
 } from "@jobflow/pipeline";
-import { cloudAdapters } from "@jobflow/adapters";
 import { createProvider, providerEmbedder } from "@jobflow/llm";
 import { loadRootEnv } from "@jobflow/db";
 import { makeRepository } from "./repo.js";
@@ -35,25 +33,8 @@ async function discover(): Promise<void> {
 
 async function poll(): Promise<void> {
   const repo = await makeRepository();
-  const embedder = providerEmbedder(createProvider());
-
-  // 1. poll registered ATS boards due for poll
-  const due = await repo.listCompanies({ status: "active", dueForPoll: true });
-  let fetched = 0;
-  for (const c of due) {
-    if (c.atsType === "unknown" || !c.atsSlug) continue;
-    const s = await ingestCompany(repo, c, { embedder });
-    fetched += s.fetched;
-  }
-  log(`poll: ${due.length} companies due, ${fetched} postings ingested`);
-
-  // 2. discovery feeds (cloud-safe tier 1-2 only) → grows the registry
-  for (const adapter of cloudAdapters()) {
-    if (adapter.tier !== "tier1") continue; // belt-and-suspenders: cloud cron = tier1
-    if (!["remotive", "arbeitnow", "hn_whoishiring"].includes(adapter.source)) continue;
-    const s = await ingestFromAdapter(repo, adapter, { query: "backend", limit: 80 }, { embedder });
-    log(`  ${adapter.source}: +${s.fetched}`);
-  }
+  const s = await pollAll(repo, { embedder: providerEmbedder(createProvider()), log });
+  if (s.errors.length) log(`poll: ${s.errors.length} errors (first: ${s.errors[0]})`);
 }
 
 async function rank(): Promise<void> {
@@ -84,7 +65,10 @@ async function main(): Promise<void> {
     const ctx = { embedder: providerEmbedder(createProvider()) };
     const once = process.argv.includes("--once");
     log(`job runner started${once ? " (once)" : ""}`);
-    await runLoop(repo, ctx, { once, log: (m) => log(m) });
+    // self-schedule discover → poll → rank so a self-hosted stack stays fresh without an
+    // external cron (0 disables; the GitHub Actions cron covers hosted DBs).
+    const everyHours = Number(process.env.JOBFLOW_POLL_EVERY_HOURS ?? 6);
+    await runLoop(repo, ctx, { once, scheduleEveryHours: once ? 0 : everyHours, log: (m) => log(m) });
     return;
   }
   // one-shot orchestration (the cron path)

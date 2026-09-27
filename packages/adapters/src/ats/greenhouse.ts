@@ -50,7 +50,9 @@ export class GreenhouseAdapter implements SourceAdapter {
         locationRaw: j.location?.name ?? null,
         applyUrl: j.absolute_url ?? null,
         salaryRaw: null,
-        postedAt: j.first_published ?? j.updated_at ?? null,
+        // updated_at is bulk-bumped on board edits (every Stripe req shared one timestamp),
+        // which faked recency — only first_published is a publish date (§3).
+        postedAt: j.first_published ?? null,
         fetchedAt: new Date(),
         raw: j as unknown as Record<string, unknown>,
       } satisfies RawPosting;

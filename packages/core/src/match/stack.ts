@@ -25,17 +25,24 @@ export const STACK_EDGES: StackEdge[] = [
   { from: "java", to: "javascript", weight: 0.7 },
   { from: "java", to: "python", weight: 0.68 },
   { from: "java", to: "rust", weight: 0.55 },
+  { from: "java", to: "cpp", weight: 0.55 },
+  { from: "java", to: "php", weight: 0.5 },
+  { from: "java", to: "ruby", weight: 0.5 },
   // ts/node as origin (the user has real TS/Node)
   { from: "typescript", to: "javascript", weight: 0.98 },
   { from: "typescript", to: "go", weight: 0.62 },
   { from: "typescript", to: "python", weight: 0.7 },
   { from: "typescript", to: "java", weight: 0.6 },
+  { from: "typescript", to: "php", weight: 0.55 },
+  { from: "typescript", to: "ruby", weight: 0.55 },
   // go bridges
   { from: "go", to: "rust", weight: 0.6 },
   { from: "go", to: "java", weight: 0.7 },
   // python bridges
   { from: "python", to: "typescript", weight: 0.68 },
   { from: "python", to: "go", weight: 0.6 },
+  { from: "python", to: "ruby", weight: 0.65 },
+  { from: "python", to: "php", weight: 0.55 },
   // infra/data skills transfer near-freely once you have the systems core
   { from: "kafka", to: "rabbitmq", weight: 0.85 },
   { from: "kafka", to: "distributed_systems", weight: 0.9 },
@@ -56,6 +63,9 @@ const LANGUAGES = new Set([
   "python",
   "typescript",
   "javascript",
+  "php",
+  "ruby",
+  "cpp",
 ]);
 
 /** Skills that are "the hard part" — having them covers a language gap (§11.1). */

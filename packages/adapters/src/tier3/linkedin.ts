@@ -13,7 +13,8 @@ import { decodeEntities, firstMatch, matchAllGroups, stripTags } from "./parse.j
  * `data-entity-urn="urn:li:jobPosting:<id>"` plus stable semantic classes. Loading that
  * fragment through the logged-in session is both simpler and more robust, so that's what
  * we build + parse here. LinkedIn India exposes no salary on cards (f_SB2 is US-only), so
- * we bias comp via seniority (f_E=4,5,6) + keywords and recover LPA from the JD downstream.
+ * the experience facet (f_E) is matched to YOUR years so the sweep isn't senior-only; LPA
+ * is recovered from the JD downstream.
  */
 
 const GUEST_SEARCH = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search";
@@ -42,6 +43,21 @@ export interface LinkedInSearchOptions {
   freshnessDays?: number;
   /** result offset (guest page size is a fixed 10). */
   start?: number;
+  /** candidate YoE → f_E experience levels (default: entry → mid-senior). */
+  experienceYears?: number;
+}
+
+/**
+ * LinkedIn f_E: 1 intern · 2 entry · 3 associate · 4 mid-senior · 5 director · 6 exec.
+ * Pinning 4,5,6 (the old "bias toward CTC") made the sweep senior-only for a ~2-YoE
+ * profile; pick the band around the candidate's actual years, one step up for stretch.
+ */
+export function linkedInExperienceLevels(yoe: number | undefined): string {
+  if (yoe == null || !Number.isFinite(yoe)) return "2,3,4";
+  if (yoe < 1) return "1,2";
+  if (yoe < 5) return "2,3,4";
+  if (yoe < 8) return "3,4";
+  return "4,5";
 }
 
 /** Build the guest job-search fragment URL for a good-paying India SWE query. */
@@ -52,7 +68,7 @@ export function buildLinkedInUrl(opts: LinkedInSearchOptions): string {
     keywords: opts.query,
     location: loc ? title(loc) : "India",
     geoId,
-    f_E: "4,5,6", // Mid-Senior / Director / Executive — bias toward higher CTC (no IN salary facet)
+    f_E: linkedInExperienceLevels(opts.experienceYears),
     f_WT: "1,2,3", // on-site + remote + hybrid (India-workable is scored, not filtered)
     f_JT: "F", // full-time
     sortBy: "DD", // most recent first

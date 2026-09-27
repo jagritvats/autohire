@@ -1,5 +1,5 @@
 import type { Company, RawPosting } from "@jobflow/core";
-import { normalizePosting, type NormalizedPosting } from "@jobflow/core";
+import { isIndiaWorkable, normalizePosting, parseLocation, scopedJobId, type NormalizedPosting } from "@jobflow/core";
 import { getAdapter, type FetchTarget, type SourceAdapter } from "@jobflow/adapters";
 import type { NewPosting, Repository } from "@jobflow/db";
 import { localEmbedder, type Embedder } from "./embedder.js";
@@ -12,6 +12,12 @@ export interface IngestStats {
 }
 
 /**
+ * Country the big-employer boards are polled for (server-side filter — they list
+ * thousands of global roles). Shapes what we poll; ranking still scores location.
+ */
+export const DEFAULT_POLL_COUNTRY = process.env.JOBFLOW_POLL_COUNTRY ?? "IN";
+
+/**
  * Poll one registered company via its ATS adapter, normalize, idempotently upsert,
  * and soft-delete postings that disappeared (§3 freshness). The orchestrator calls
  * this for every company due for poll.
@@ -19,7 +25,7 @@ export interface IngestStats {
 export async function ingestCompany(
   repo: Repository,
   company: Company,
-  opts: { embedder?: Embedder; limit?: number } = {},
+  opts: { embedder?: Embedder; limit?: number; country?: string } = {},
 ): Promise<IngestStats> {
   const embedder = opts.embedder ?? localEmbedder;
   const stats: IngestStats = { fetched: 0, upserted: 0, staled: 0, errors: [] };
@@ -30,21 +36,54 @@ export async function ingestCompany(
     return stats;
   }
 
-  const raws = await adapter.fetch({ slug: company.atsSlug, limit: opts.limit });
+  // Always fetch the WHOLE board: staleness is a diff against everything that's live, so
+  // truncating the fetch would soft-delete every live posting past the limit (§3).
+  // `country` lets big-employer boards (Workday/Eightfold/SmartRecruiters/Amazon) filter
+  // server-side — it shapes what we poll, it is not a match filter (invariant #4).
+  // `known` lets boards with per-posting detail calls skip re-fetching stored JDs.
+  const known = new Set(
+    (await repo.listPostingsByCompany(company.id)).filter((p) => p.jdText.trim()).map((p) => p.atsJobId),
+  );
+  const raws = await adapter.fetch({ slug: company.atsSlug, location: opts.country ?? DEFAULT_POLL_COUNTRY, known });
   stats.fetched = raws.length;
 
-  const seenIds: string[] = [];
-  for (const raw of raws) {
-    seenIds.push(raw.atsJobId);
+  // Adapters return [] on a recoverable error (invariant), which is indistinguishable
+  // from an empty board — never mass-stale on it. A board that's truly emptied is
+  // retired by the lastSeen TTL sweep in pollAll instead.
+  if (raws.length === 0) {
+    await repo.touchPolled(company.id);
+    return stats;
+  }
+
+  // `limit` caps the (embedding-costly) upserts, not the fetch. Global boards list
+  // hundreds of roles with a handful in India, so upsert India-workable ones first.
+  const toUpsert = opts.limit ? prioritizeIndiaWorkable(raws).slice(0, opts.limit) : raws;
+  const written = new Set<string>();
+  for (const raw of toUpsert) {
+    // a lite listing (no JD) for a posting we already hold would overwrite its JD — skip
+    if (!raw.jdText.trim() && known.has(scopedJobId(raw))) continue;
+    written.add(scopedJobId(raw));
     const normalized = normalizePosting(raw);
     const newPosting = await toNewPosting(normalized, company.id, company.name, embedder);
     await repo.upsertPosting(newPosting);
     stats.upserted++;
   }
 
+  // everything still listed but not re-written is re-confirmed, so it isn't flagged unverified
+  const seenIds = raws.map((r) => scopedJobId(r));
+  await repo.touchSeen(company.id, seenIds.filter((id) => !written.has(id) && known.has(id)));
   stats.staled = await repo.markStale(company.id, seenIds);
   await repo.touchPolled(company.id);
   return stats;
+}
+
+/** Stable sort: India-workable roles first (cheap location-string parse only). */
+export function prioritizeIndiaWorkable(raws: RawPosting[]): RawPosting[] {
+  const rank = (r: RawPosting) => (isIndiaWorkable(parseLocation(r.locationRaw)) ? 0 : 1);
+  return raws
+    .map((r, i) => ({ r, i, k: rank(r) }))
+    .sort((a, b) => a.k - b.k || a.i - b.i)
+    .map((x) => x.r);
 }
 
 /**
@@ -170,6 +209,7 @@ export async function toNewPosting(
     salary: n.salary,
     experience: n.experience,
     applyUrl: n.applyUrl,
+    postedAt: n.postedAt,
     jdEmbedding: embedding,
     dedupKey: n.dedupKey,
   };

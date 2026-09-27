@@ -1,12 +1,16 @@
 #!/usr/bin/env node
-import { InMemoryRepository } from "@jobflow/db";
+import { readFile } from "node:fs/promises";
+import { InMemoryRepository, createRepository, isDurable, loadRootEnv } from "@jobflow/db";
 import {
   discoverCompanies,
   ingestCompany,
   ingestFromAdapter,
   rebuildMatches,
+  harvestLinks,
+  DEFAULT_DISCOVERY_FEEDS,
 } from "@jobflow/pipeline";
-import { getAdapter } from "@jobflow/adapters";
+import { fetchTelegramChannel, getAdapter } from "@jobflow/adapters";
+import { parseWhatsAppExport } from "@jobflow/core";
 import { createProvider, rerankMatch, tailorResume, answerQuestion } from "@jobflow/llm";
 import { buildFillPlan, renderDryRun, type ApplicantData } from "@jobflow/autofill";
 import { DEFAULT_TENANT, SEED_COMPANIES, defaultProfile, seedEvidence } from "./seed-data.js";
@@ -47,12 +51,15 @@ async function demo(): Promise<void> {
   }
 
   // ── 3. discovery via aggregators + HN (grows registry, adds coverage) ──
-  log("\n③ Discovery feeds — HN 'Who is Hiring' + Remotive…");
-  const hn = await ingestFromAdapter(repo, getAdapter("hn_whoishiring")!, { query: "backend", limit: 40 });
-  log(`   HN who-is-hiring: ${hn.fetched} postings`);
-  const remotive = await ingestFromAdapter(repo, getAdapter("remotive")!, { query: "backend", limit: 40 });
-  log(`   Remotive:         ${remotive.fetched} postings`);
-  totalFetched += hn.fetched + remotive.fetched;
+  log("\n③ Discovery feeds — the same cloud-safe feeds the worker polls…");
+  for (const feed of DEFAULT_DISCOVERY_FEEDS) {
+    const adapter = getAdapter(feed.source);
+    if (!adapter) continue;
+    let n = 0;
+    for (const target of feed.targets) n += (await ingestFromAdapter(repo, adapter, target)).fetched;
+    log(`   ${feed.source.padEnd(16)} ${n} postings`);
+    totalFetched += n;
+  }
 
   // ── 4. rank ──
   log("\n④ Matching — embed + dedup + soft-weighted score + rule check…");
@@ -124,14 +131,51 @@ async function demo(): Promise<void> {
   log("");
 }
 
+/**
+ * `harvest --telegram chanA,chanB` | `harvest --whatsapp ./chat.txt` — pull ATS/careers
+ * links out of community channels and register those companies' boards; the next poll
+ * ingests their real postings. Persists when DATABASE_URL is set (in-memory otherwise).
+ */
+async function harvest(args: string[]): Promise<void> {
+  loadRootEnv();
+  const repo = await createRepository();
+  const flag = (name: string) => {
+    const i = args.indexOf(name);
+    return i >= 0 ? args[i + 1] : undefined;
+  };
+  const maxAgeDays = Number(flag("--max-age-days") ?? 30);
+  const telegram = flag("--telegram");
+  const whatsapp = flag("--whatsapp");
+  if (!telegram && !whatsapp) {
+    log("usage: harvest --telegram <chan,chan> | --whatsapp <export.txt> [--max-age-days 30]");
+    process.exit(1);
+  }
+  for (const channel of (telegram ?? "").split(",").map((s) => s.trim()).filter(Boolean)) {
+    const msgs = await fetchTelegramChannel(channel, { pages: 3 });
+    const s = await harvestLinks(repo, msgs, { origin: `telegram:${channel}`, maxAgeDays });
+    log(`telegram/${channel}: ${s.messages} msgs (${s.skippedOld} stale, ${s.skippedSuspicious} suspicious) links=${JSON.stringify(s.links)}`);
+    for (const b of s.boards) log(`   + ${b}`);
+  }
+  if (whatsapp) {
+    const msgs = parseWhatsAppExport(await readFile(whatsapp, "utf8"));
+    const s = await harvestLinks(repo, msgs, { origin: "whatsapp:export", maxAgeDays });
+    log(`whatsapp: ${s.messages} msgs (${s.skippedOld} stale, ${s.skippedSuspicious} suspicious) links=${JSON.stringify(s.links)}`);
+    for (const b of s.boards) log(`   + ${b}`);
+  }
+  log(isDurable() ? "Registered boards are polled on the next poll run." : "(in-memory — set DATABASE_URL to persist)");
+}
+
 async function main(): Promise<void> {
   const cmd = process.argv[2] ?? "demo";
   switch (cmd) {
     case "demo":
       await demo();
       break;
+    case "harvest":
+      await harvest(process.argv.slice(3));
+      break;
     default:
-      log(`Unknown command: ${cmd}. Try: demo`);
+      log(`Unknown command: ${cmd}. Try: demo | harvest`);
       process.exit(1);
   }
 }

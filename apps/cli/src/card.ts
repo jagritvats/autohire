@@ -1,4 +1,4 @@
-import type { Match, Posting } from "@jobflow/core";
+import { postingAgeDays, type Match, type Posting } from "@jobflow/core";
 
 /** Render the §11.6 match card — the actual product surface. */
 export function renderMatchCard(m: Match & { posting: Posting }, idx: number): string {
@@ -31,10 +31,10 @@ function locationLine(p: Posting): string {
 }
 
 function freshnessLine(p: Posting): string {
-  const ageDays = Math.floor((Date.now() - new Date(p.firstSeen as string | Date).getTime()) / 86_400_000);
+  const ageDays = Math.floor(postingAgeDays(p)); // source publish date, else first seen
   const tag = p.atsType !== "unknown" ? "ATS-direct" : "aggregator";
   const age = ageDays <= 0 ? "today" : `${ageDays}d`;
-  return `Fresh (${age}, ${tag})`;
+  return `${p.postedAt ? "Posted" : "Seen"} ${age} ago (${tag})`;
 }
 
 function compLine(p: Posting): string | null {

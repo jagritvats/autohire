@@ -18,6 +18,8 @@ export * from "./skills.js";
 export * from "./location.js";
 export * from "./experience.js";
 export * from "./salary.js";
+export * from "./links.js";
+export * from "./chat.js";
 
 /**
  * The canonical fields derived from a RawPosting. The persistence layer combines
@@ -44,6 +46,8 @@ export interface NormalizedPosting {
   salary: SalaryBand;
   experience: ExperienceRange;
   applyUrl: string | null;
+  /** source publish date (ISO), sanity-checked; null when absent/untrustworthy (§3). */
+  postedAt: string | null;
   dedupKey: string;
 }
 
@@ -53,8 +57,13 @@ export function normalizePosting(raw: RawPosting): NormalizedPosting {
   const skills = extractSkills(`${raw.title} ${jd}`);
   const requirements = parseRequirements(jd);
   const location = parseLocation(raw.locationRaw, jd);
-  // deterministic YoE parse over title + JD (§11.2) — no per-job LLM.
-  const experience = parseExperience(`${raw.title}\n${jd}`);
+  // the source's structured range when it has one; else a deterministic parse of
+  // title + JD (§11.2) — no per-job LLM.
+  const hint = raw.experienceHint;
+  const experience =
+    hint && (hint.min != null || hint.max != null)
+      ? { min: hint.min ?? null, max: hint.max ?? null }
+      : parseExperience(`${raw.title}\n${jd}`);
 
   // salary cascade step 1 — direct from JD/explicit field; else null band to fill later
   const salary: SalaryBand =
@@ -68,14 +77,14 @@ export function normalizePosting(raw: RawPosting): NormalizedPosting {
     source: raw.source,
     tier: raw.tier,
     atsType: raw.atsType,
-    atsJobId: raw.atsJobId,
+    atsJobId: scopedJobId(raw),
     companyName: raw.companyName,
     companyNameNorm,
     companySlug: raw.companySlug,
     title: raw.title.trim(),
     titleNorm: title.titleNorm,
     roleArchetype: title.roleArchetype,
-    levelBand: title.levelBand,
+    levelBand: title.levelBand ?? raw.levelHint ?? null, // title wins; the source's bucket fills a gap
     jdText: jd,
     jdSkills: skills,
     requirements,
@@ -83,8 +92,29 @@ export function normalizePosting(raw: RawPosting): NormalizedPosting {
     salary,
     experience,
     applyUrl: raw.applyUrl,
+    postedAt: parsePostedAt(raw.postedAt),
     dedupKey: canonicalKey(companyNameNorm, title.titleNorm, location),
   };
+}
+
+/**
+ * Postings key on (atsType, atsJobId) (invariant #5). Every non-ATS source shares
+ * atsType "unknown", so a Remotive id and an HN id that happen to be equal would
+ * overwrite each other — prefix the source to keep the key unique per source.
+ */
+export function scopedJobId(raw: Pick<RawPosting, "atsType" | "source" | "atsJobId">): string {
+  if (raw.atsType !== "unknown") return raw.atsJobId;
+  const prefix = `${raw.source}:`;
+  return raw.atsJobId.startsWith(prefix) ? raw.atsJobId : `${prefix}${raw.atsJobId}`;
+}
+
+/** A publish date we can trust: parseable, not in the future, not before 2000. */
+export function parsePostedAt(v: RawPosting["postedAt"] | undefined): string | null {
+  if (v == null || v === "") return null;
+  const t = new Date(v as string | Date).getTime();
+  if (!Number.isFinite(t)) return null;
+  if (t > Date.now() + 86_400_000 || t < Date.UTC(2000, 0, 1)) return null;
+  return new Date(t).toISOString();
 }
 
 /**

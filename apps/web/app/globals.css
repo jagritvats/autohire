@@ -625,3 +625,7 @@ a.company:hover { color: var(--signal); }
 .cmd.danger:hover { color: var(--red); border-color: var(--red); background: rgba(242,113,94,.08); }
 /* the gen-meta line doubles as the live progress readout (label · Ns · cancel) */
 .gen-meta .cmd { margin-left: 6px; padding: 2px 8px; }
+
+.stale-banner { margin: 8px 0; padding: 8px 12px; border: 1px solid var(--amber-dim); border-radius: var(--radius); color: var(--amber); font-size: 12px; }
+.tag.exp[data-fit="stretch"] { color: var(--amber); border-color: var(--amber-dim); }
+.tag.exp[data-fit="far"] { color: var(--red); border-color: var(--red); }

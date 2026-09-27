@@ -2,23 +2,32 @@ import type { Posting, Profile, ScoreBreakdown } from "../schema/entities.js";
 import { LevelBandOrder, type LevelBand, type RemoteGeo, type RoleArchetype } from "../schema/enums.js";
 import { cosine, clamp } from "../util/vector.js";
 import { stackAdjacency, type StackAdjacencyResult } from "./stack.js";
+import { EVERGREEN_TITLE_RE, REDATED_SOURCES, scoreSourceTrust } from "./trust.js";
 
 /**
  * Soft-weighted match scoring (§11). Almost NOTHING is a hard filter — a hard
  * "Java-only" / "exactly-2-YoE" / "Pune-only" filter would hide most roles you'd
  * actually be strong for. Everything is a weighted signal with an honest flag.
  * Only two genuine hard exclusions: salary below your floor, and a truly
- * impossible location (onsite in a country with no relocation/sponsorship).
+ * impossible location (onsite abroad with no relocation/sponsorship, or a remote role
+ * explicitly restricted to a geo outside your `remoteGeoOk`).
  */
 
+/**
+ * Seniority, location and freshness carry real weight: they're the signals that decide
+ * whether you can actually get the role (a perfect-stack staff role, a US-only remote,
+ * or a 4-month-old req are all dead ends). Semantic is trimmed because the offline
+ * embedder barely discriminates until a real model is configured.
+ */
 export const DEFAULT_WEIGHTS = {
-  semantic: 0.24,
-  stackAdjacency: 0.24,
-  archetype: 0.18,
-  seniority: 0.1,
-  location: 0.15,
-  freshness: 0.04,
-  salary: 0.05,
+  semantic: 0.16,
+  stackAdjacency: 0.19,
+  archetype: 0.15,
+  seniority: 0.16,
+  location: 0.18,
+  freshness: 0.08,
+  salary: 0.03,
+  sourceTrust: 0.05,
 } as const;
 
 export type ScoreWeights = typeof DEFAULT_WEIGHTS;
@@ -60,26 +69,24 @@ export function scorePosting(
   );
   if (archetypeFlag) redFlags.push(archetypeFlag);
 
-  // ── component: seniority band (§11.2) ──
-  const { score: seniority, note: levelNote, flag: levelFlag } = scoreSeniority(
-    profile.levelBand,
-    posting.levelBand,
-  );
+  // ── component: seniority band + asked YoE (§11.2) ──
+  const { score: seniority, note: levelNote, flag: levelFlag } = scoreSeniority(profile, posting);
   if (levelFlag) redFlags.push(levelFlag);
 
   // ── component: location & remote-geo (§11.3) ──
   const locResult = scoreLocation(posting, profile);
   for (const f of locResult.flags) redFlags.push(f);
 
-  // ── component: freshness (§3) — ATS-direct + fresh ranks above stale aggregator ──
-  const freshness = scoreFreshness(posting);
+  // ── component: freshness (§3) — real publish age + how recently we re-verified it ──
+  const { score: freshness, flags: freshFlags } = scoreFreshness(posting);
+  for (const f of freshFlags) redFlags.push(f);
 
   // ── component: salary fit ──
   const salaryScore = scoreSalary(posting, profile);
 
-  // ── light soft signal: JD's asked YoE vs yours (§11.2) — a stretch note, never a gate ──
-  const expNote = experienceNote(posting.experience, profile.yoe);
-  if (expNote && redFlags.length < 4) redFlags.push(expNote);
+  // ── component: source trust (§3) — real, open, and likely to get a reply ──
+  const trust = scoreSourceTrust(posting);
+  for (const f of trust.flags) if (redFlags.length < 5) redFlags.push(f);
 
   // ── stretch flag for "X required" must-haves you don't have (never an exclusion) ──
   for (const req of posting.requirements) {
@@ -97,6 +104,7 @@ export function scorePosting(
     location: locResult.score,
     freshness,
     salary: salaryScore,
+    sourceTrust: trust.score,
   };
 
   const raw =
@@ -106,9 +114,17 @@ export function scorePosting(
     weights.seniority * seniority +
     weights.location * locResult.score +
     weights.freshness * freshness +
-    weights.salary * salaryScore;
+    weights.salary * salaryScore +
+    weights.sourceTrust * trust.score;
 
-  const score = Math.round(raw * 100);
+  // Feasibility: the weighted sum is additive, so strong other signals could carry a role
+  // you realistically can't land or don't want (7+ yrs asked, visa-bound onsite,
+  // restricted remote, a non-engineering "Risk Analyst" at a great India office). Scale by
+  // the weakest "is this even my role" signal — soft (≥0.6×): it re-orders, it never
+  // hides (invariant #4).
+  const feasibility = Math.min(seniority, locResult.score, archetype);
+  const damp = feasibility >= 0.5 ? 1 : 0.6 + 0.8 * feasibility;
+  const score = Math.round(raw * damp * 100);
 
   // ── HARD EXCLUSIONS — the only two (§11.3) ──
   const hardExclusionReason = hardExclude(posting, profile);
@@ -157,11 +173,57 @@ function scoreArchetype(
 }
 
 // ── seniority ─────────────────────────────────────────────────────────────
+/**
+ * Two views of the same question, and the binding one wins: the title's band
+ * ("Senior", "SDE-3") and the YoE the JD asks for. Most titles carry no level
+ * ("Software Engineer", "SRE 3" before the ladder fix) while the JD says "7+ years" —
+ * scoring only the title let those rank as a perfect fit for ~2 YoE (§11.2).
+ */
 function scoreSeniority(
+  profile: Profile,
+  posting: Posting,
+): { score: number; note: string | null; flag: string | null } {
+  const band = scoreBand(profile.levelBand, posting.levelBand);
+  const yoe = scoreYoeGap(posting.experience, profile.yoe);
+  if (!yoe) return band;
+  if (!posting.levelBand) return yoe;
+  return yoe.score < band.score ? { ...yoe, note: yoe.note ?? band.note } : band;
+}
+
+/**
+ * Asked-YoE vs yours → score. Indian recruiters (and Naukri/LinkedIn filters) screen
+ * on the stated range, so a 3-year gap is usually a resume-screen reject even when the
+ * title reads mid-level ("SDE", "Software Engineer" + "5+ years"). One year short is
+ * normal and scores full; being far ABOVE the range reads as overqualified.
+ */
+function scoreYoeGap(
+  exp: Posting["experience"],
+  yoe: number,
+): { score: number; note: string | null; flag: string | null } | null {
+  if (exp.min == null && exp.max == null) return null;
+  const asked =
+    exp.min == null ? `up to ${exp.max}` : exp.max != null && exp.max !== exp.min ? `${exp.min}–${exp.max}` : `${exp.min}+`;
+  if (exp.max != null && yoe - exp.max >= 2) {
+    return { score: 0.6, note: `Asks ${asked} yrs, you have ~${yoe} — may read as overqualified.`, flag: null };
+  }
+  if (exp.min == null) return null;
+  const gap = exp.min - yoe;
+  if (gap <= 1) return { score: 1, note: null, flag: null };
+  if (gap <= 2) return { score: 0.6, note: `Asks ${asked} yrs, you have ~${yoe} — reachable stretch if the rest fits.`, flag: null };
+  if (gap <= 3) return { score: 0.3, note: `Asks ${asked} yrs, you have ~${yoe} — likely screened out on YoE.`, flag: `Seniority stretch: asks ${asked} yrs (you have ~${yoe})` };
+  if (gap <= 4) return { score: 0.2, note: `Asks ${asked} yrs, you have ~${yoe} — senior role.`, flag: `Seniority gap: asks ${asked} yrs (you have ~${yoe}) — big stretch` };
+  return { score: 0.1, note: `Asks ${asked} yrs — not your role yet.`, flag: `Large seniority gap: asks ${asked} yrs (you have ~${yoe}) — big stretch` };
+}
+
+function scoreBand(
   yours: LevelBand,
   jd: LevelBand | null,
 ): { score: number; note: string | null; flag: string | null } {
   if (!jd) return { score: 0.7, note: null, flag: null };
+  // internships are for students — not a level-down you can apply to with real YoE
+  if (jd === "intern" && yours !== "intern") {
+    return { score: 0.15, note: `Internship — not aimed at ~${yours} engineers.`, flag: "Internship role" };
+  }
   const delta = LevelBandOrder[jd] - LevelBandOrder[yours];
   // delta 0 = perfect; +1 = mild stretch up (often aspirational, fine); +2 = real stretch
   if (delta <= 0) {
@@ -173,33 +235,23 @@ function scoreSeniority(
   }
   if (delta === 1) {
     return {
-      score: 0.8,
-      note: `Asks ${jd}, you're ${yours} — common stretch-up; "5+ yrs" is usually aspirational.`,
+      score: 0.7,
+      note: `Asks ${jd}, you're ${yours} — a common stretch-up when the asked YoE is within reach.`,
       flag: null,
     };
   }
   if (delta === 2) {
     return {
-      score: 0.45,
+      score: 0.3,
       note: `Asks ${jd}, you're ${yours} — real stretch; project depth has to argue up.`,
       flag: `Seniority gap: role targets ${jd}`,
     };
   }
   return {
-    score: 0.15,
+    score: 0.1,
     note: `Posting is ${jd} — likely not your role yet.`,
     flag: `Large seniority gap (${jd})`,
   };
-}
-
-// ── experience (§11.2) — a soft "stretch" note when the JD asks materially more
-//    YoE than you have. Deterministic (parsed), never a hard exclusion (invariant #4). ──
-function experienceNote(exp: Posting["experience"], yoe: number): string | null {
-  if (exp.min == null) return null;
-  const gap = exp.min - yoe;
-  if (gap < 3) return null; // within reach — "5+ yrs" is usually aspirational
-  const range = exp.max != null && exp.max !== exp.min ? `${exp.min}–${exp.max}` : `${exp.min}+`;
-  return `JD asks ~${range} yrs experience (you have ~${yoe}) — stretch`;
 }
 
 // ── location ──────────────────────────────────────────────────────────────
@@ -234,8 +286,10 @@ function scoreLocation(
 
   if (loc.mode === "remote") {
     // geo restriction MULTIPLIES the pref score so a us_only "remote" is down-weighted
-    // hard, not surfaced as a clean remote match (§11.3).
-    const geo = GEO_PENALTY[loc.remoteGeo];
+    // hard, not surfaced as a clean remote match (§11.3). The user's own `remoteGeoOk`
+    // decides which geos count as open; the penalty table covers the rest.
+    const geoOk = profile.prefs.remoteGeoOk ?? [];
+    const geo = geoOk.includes(loc.remoteGeo) ? 1 : GEO_PENALTY[loc.remoteGeo];
     const openBonus = loc.remoteGeo === "india_ok" || loc.remoteGeo === "worldwide" ? 0.1 : 0;
     score = clamp(labelScore * geo + openBonus);
     note = `Remote (${loc.remoteGeo}).`;
@@ -244,14 +298,23 @@ function scoreLocation(
       note = `"Remote" but US-only — false-positive remote.`;
     } else if (loc.remoteGeo === "eu_only") {
       flags.push(`"Remote" is EU-only`);
+    } else if (loc.remoteGeo === "us_eu") {
+      flags.push(`"Remote" is limited to US/EU`);
     }
   } else if (loc.mode === "hybrid" || loc.mode === "onsite") {
     // onsite/hybrid in India is workable — a small honest boost, not a hard filter.
     const indiaWorkable = loc.country === "India";
     score = clamp(indiaWorkable ? labelScore + INDIA_ONSITE_BOOST : labelScore);
-    // onsite abroad with no sponsorship and you can't relocate freely → flag
-    if (loc.country && loc.country !== "India" && loc.sponsorship === false) {
-      flags.push(`Onsite ${loc.country}, no sponsorship offered`);
+    // onsite abroad needs a work visa. Explicit sponsorship keeps it viable; silence is
+    // usually "no" for early-career roles, so it's a real (soft) discount + an honest flag.
+    if (loc.country && loc.country !== "India") {
+      if (loc.sponsorship === false) {
+        score *= 0.3;
+        flags.push(`Onsite ${loc.country}, no sponsorship offered`);
+      } else if (loc.sponsorship == null) {
+        score *= 0.6;
+        flags.push(`Onsite ${loc.country} — visa sponsorship not mentioned`);
+      }
     }
     note = `${cap(loc.mode)}${loc.city ? ` · ${loc.city}` : ""}${indiaWorkable ? " · India-workable" : ""}.`;
   } else {
@@ -292,13 +355,43 @@ function matchLocationLabel(
 }
 
 // ── freshness ─────────────────────────────────────────────────────────────
-function scoreFreshness(posting: Posting): number {
-  const first = new Date(posting.firstSeen as string | Date).getTime();
-  const ageDays = (Date.now() - first) / 86_400_000;
-  const ageScore = ageDays <= 3 ? 1 : ageDays <= 7 ? 0.85 : ageDays <= 21 ? 0.6 : 0.35;
+/** re-verified (seen in a poll) within this many days → trusted as still open. */
+export const VERIFIED_WITHIN_DAYS = 10;
+/** open longer than this → likely filled, evergreen, or a talent-pool req (§3). */
+const EVERGREEN_AFTER_DAYS = 60;
+
+/**
+ * Two questions (§3): how old is the ROLE (source publish date, falling back to when
+ * we first saw it), and how recently did we CONFIRM it's still up (lastSeen)? A
+ * posting nobody has re-polled in weeks is unverified no matter how new it looked.
+ */
+export function postingAgeDays(posting: Pick<Posting, "postedAt" | "firstSeen">, now = Date.now()): number {
+  const t = new Date((posting.postedAt ?? posting.firstSeen) as string | Date).getTime();
+  return Math.max(0, (now - t) / 86_400_000);
+}
+
+function scoreFreshness(posting: Posting): { score: number; flags: string[] } {
+  const flags: string[] = [];
+  const ageDays = postingAgeDays(posting);
+  let score =
+    ageDays <= 3 ? 1 : ageDays <= 7 ? 0.9 : ageDays <= 14 ? 0.75 : ageDays <= 30 ? 0.55 : ageDays <= 60 ? 0.3 : 0.15;
   // ATS-direct sources are ghost-free; nudge them above aggregators (§3)
-  const atsBonus = posting.atsType !== "unknown" ? 0.1 : 0;
-  return clamp(ageScore + atsBonus);
+  if (posting.atsType !== "unknown") score += 0.1;
+  // a board that re-stamps dates can't prove recency — cap what its "posted today" earns
+  if (REDATED_SOURCES.has(posting.source)) score = Math.min(score, 0.55);
+  if (EVERGREEN_TITLE_RE.test(posting.title)) {
+    score = Math.min(score, 0.15);
+    flags.push("Talent-pool / evergreen req — not a specific open seat");
+  } else if (ageDays > EVERGREEN_AFTER_DAYS) {
+    flags.push(`Open ~${Math.round(ageDays)} days — may be filled or an evergreen req`);
+  }
+
+  const sinceSeen = (Date.now() - new Date(posting.lastSeen as string | Date).getTime()) / 86_400_000;
+  if (sinceSeen > VERIFIED_WITHIN_DAYS) {
+    score *= 0.5;
+    flags.push(`Not re-verified in ${Math.round(sinceSeen)} days — may be closed`);
+  }
+  return { score: clamp(score), flags };
 }
 
 // ── salary ────────────────────────────────────────────────────────────────
@@ -337,8 +430,27 @@ function hardExclude(posting: Posting, profile: Profile): string | null {
     return `Onsite ${posting.location.country}, no sponsorship, relocation off`;
   }
 
+  // 2b. the remote twin of the same rule: a remote role that EXPLICITLY requires living
+  //     in / work authorization for a geo you've said you can't work from. Relocation
+  //     can't fix a remote-US role, so this is as impossible as onsite-no-sponsorship.
+  //     High confidence only — an inferred/ambiguous geo stays a soft down-weight (§11.3).
+  const loc = posting.location;
+  if (
+    loc.mode === "remote" &&
+    RESTRICTED_GEOS.has(loc.remoteGeo) &&
+    loc.confidence >= RESTRICTION_CONFIDENCE &&
+    !(profile.prefs.remoteGeoOk ?? []).includes(loc.remoteGeo)
+  ) {
+    return `Remote restricted to ${GEO_LABEL[loc.remoteGeo]} — outside your remote-geo prefs`;
+  }
+
   return null;
 }
+
+const RESTRICTED_GEOS = new Set<RemoteGeo>(["us_only", "eu_only", "us_eu"]);
+/** the parser reports ≥0.85 for an explicit location field or explicit JD restriction. */
+const RESTRICTION_CONFIDENCE = 0.85;
+const GEO_LABEL: Partial<Record<RemoteGeo, string>> = { us_only: "US/Americas", eu_only: "EU/UK", us_eu: "US/EU" };
 
 function cap(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);

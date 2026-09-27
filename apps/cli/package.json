@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "demo": "tsx src/index.ts demo",
+    "harvest": "tsx src/index.ts harvest",
     "ingest": "tsx src/index.ts ingest",
     "match": "tsx src/index.ts match",
     "typecheck": "tsc --noEmit"

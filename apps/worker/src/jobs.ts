@@ -6,15 +6,13 @@ import {
   SEED_COMPANIES,
   defaultProfile,
   discoverCompanies,
-  ingestCompany,
-  ingestFromAdapter,
+  pollAll,
   rebuildMatches,
   enrichTopMatches,
   recheckPostings,
   type SeedCompany,
   type Embedder,
 } from "@jobflow/pipeline";
-import { cloudAdapters } from "@jobflow/adapters";
 
 /**
  * Cloud job handlers (§ control plane Phase 2). The web enqueues jobs; this drains
@@ -36,28 +34,17 @@ export async function handleJob(repo: Repository, job: Job, ctx: JobCtx): Promis
       return { seeded: s.seeded, resolved: s.resolved, unresolved: s.unresolved };
     }
     case "poll": {
-      const companyId = job.payload.companyId as string | undefined;
-      const companies = companyId
-        ? (await repo.listCompanies()).filter((c) => c.id === companyId)
-        : await repo.listCompanies({ status: "active", dueForPoll: true });
-      let fetched = 0;
-      let polled = 0;
-      for (const c of companies) {
-        if (c.atsType === "unknown" || !c.atsSlug) continue;
-        const r = await ingestCompany(repo, c, { embedder: ctx.embedder });
-        fetched += r.fetched;
-        polled++;
-      }
-      // discovery feeds (tier-1 only) unless polling a single company
-      if (!companyId) {
-        for (const adapter of cloudAdapters()) {
-          if (adapter.tier !== "tier1") continue;
-          if (!["remotive", "arbeitnow", "hn_whoishiring"].includes(adapter.source)) continue;
-          const r = await ingestFromAdapter(repo, adapter, { query: "backend", limit: 80 }, { embedder: ctx.embedder });
-          fetched += r.fetched;
-        }
-      }
-      return { companiesPolled: polled, postingsFetched: fetched };
+      // one shared routine (boards → feeds → resolve shells → expire); a single company
+      // when the registry UI asks for "poll now"
+      const r = await pollAll(repo, { embedder: ctx.embedder, companyId: job.payload.companyId as string | undefined });
+      return {
+        companiesPolled: r.companiesPolled,
+        postingsFetched: r.fetched,
+        staled: r.staled,
+        feeds: r.feeds,
+        resolved: r.resolved,
+        expired: r.expired,
+      };
     }
     case "rank": {
       const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? defaultProfile();
@@ -105,14 +92,19 @@ export async function handleJob(repo: Repository, job: Job, ctx: JobCtx): Promis
 export async function runLoop(
   repo: Repository,
   ctx: JobCtx,
-  opts: { intervalMs?: number; once?: boolean; log?: (m: string) => void } = {},
+  opts: { intervalMs?: number; once?: boolean; scheduleEveryHours?: number; log?: (m: string) => void } = {},
 ): Promise<void> {
   const intervalMs = opts.intervalMs ?? 3000;
   const log = opts.log ?? ((m) => console.log(new Date().toISOString(), m));
+  let lastScheduleCheck = 0;
   for (;;) {
     const job = await repo.claimJob("cloud");
     if (!job) {
       if (opts.once) return;
+      if (opts.scheduleEveryHours && Date.now() - lastScheduleCheck > 60_000) {
+        lastScheduleCheck = Date.now();
+        await maybeSchedulePoll(repo, opts.scheduleEveryHours, log).catch((e) => log(`schedule check failed: ${(e as Error).message}`));
+      }
       await sleep(intervalMs);
       continue;
     }
@@ -130,4 +122,23 @@ export async function runLoop(
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+/**
+ * Self-scheduling (§3 freshness). Nothing else enqueues periodic polls on a self-hosted
+ * stack: the GitHub cron can't reach a local database, and the runner only drained jobs
+ * someone clicked — so the corpus silently went months without a poll while still
+ * showing as "active". When the last full poll is older than `everyHours`, enqueue
+ * discover → poll → rank (claimed oldest-first, so they run in that order).
+ */
+async function maybeSchedulePoll(repo: Repository, everyHours: number, log: (m: string) => void): Promise<void> {
+  const recent = await repo.listJobs(DEFAULT_TENANT, 50);
+  const lastFullPoll = recent.find((j) => j.type === "poll" && !j.payload.companyId);
+  const ageMs = lastFullPoll ? Date.now() - new Date(lastFullPoll.createdAt as string | Date).getTime() : Infinity;
+  if (ageMs < everyHours * 3_600_000) return;
+  for (const type of ["discover", "poll", "rank"] as const) {
+    await repo.enqueueJob({ tenantId: DEFAULT_TENANT, type, runtime: JOB_RUNTIME[type], payload: { scheduled: true } });
+  }
+  const ago = Number.isFinite(ageMs) ? `${Math.round(ageMs / 3_600_000)}h ago` : "never";
+  log(`⏰ scheduled discover → poll → rank (last full poll: ${ago})`);
 }

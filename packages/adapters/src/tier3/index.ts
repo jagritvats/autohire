@@ -70,6 +70,7 @@ export class NaukriAdapter extends LocalTier3Adapter {
       location: target.location ?? "",
       minLpa: numParam(target, "minLpa"),
       freshnessDays: numParam(target, "freshnessDays"),
+      experienceYears: numParam(target, "experienceYears"),
     };
     const limit = target.limit ?? 25;
     // best path: replay the SRP's own JSON (needs appid/systemid headers → localFetchJson)
@@ -88,7 +89,7 @@ export class NaukriAdapter extends LocalTier3Adapter {
 }
 
 /** LinkedIn: fetched via the static guest job-search fragment (the auth Voyager list is
- *  virtualized), through the user's session. India geo + seniority-biased. */
+ *  virtualized), through the user's session. India geo + experience-level facet. */
 export class LinkedInAdapter extends LocalTier3Adapter {
   readonly source = "linkedin" as const;
   async fetch(target: FetchTarget): Promise<RawPosting[]> {
@@ -97,6 +98,7 @@ export class LinkedInAdapter extends LocalTier3Adapter {
       query: target.query ?? "software engineer",
       location: target.location ?? "",
       freshnessDays: numParam(target, "freshnessDays"),
+      experienceYears: numParam(target, "experienceYears"),
     });
     const html = await this.ctx.localFetch!(url);
     return parseLinkedInJobs(html, target.limit ?? 25);

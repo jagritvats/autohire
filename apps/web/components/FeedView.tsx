@@ -329,6 +329,8 @@ export function FeedView({ initial }: { initial: FeedData }) {
           </button>
         </div>
 
+        <StaleBanner lastPolledAt={data.stats.lastPolledAt} />
+
         {notice && (
           <div className="notice" role="status">
             {notice}
@@ -363,6 +365,20 @@ export function FeedView({ initial }: { initial: FeedData }) {
           )}
         </div>
       </main>
+    </div>
+  );
+}
+
+/** Postings are only as current as the last poll — say so when it's been a while (§3). */
+function StaleBanner({ lastPolledAt }: { lastPolledAt: string | null }) {
+  if (!lastPolledAt) return null;
+  const hours = (Date.now() - new Date(lastPolledAt).getTime()) / 3_600_000;
+  if (hours < 24) return null;
+  const ago = hours < 48 ? `${Math.round(hours)} hours` : `${Math.round(hours / 24)} days`;
+  return (
+    <div className="stale-banner" role="status">
+      Last poll was {ago} ago — listings are unverified and may be closed. Keep the worker runner up (it
+      re-polls every few hours) or use ↻ sync re-poll.
     </div>
   );
 }

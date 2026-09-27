@@ -14,6 +14,7 @@ interface AshbyJob {
   team?: string;
   employmentType?: string;
   location?: string;
+  secondaryLocations?: Array<{ location?: string }>;
   isRemote?: boolean;
   descriptionPlain?: string;
   descriptionHtml?: string;
@@ -57,7 +58,7 @@ export class AshbyAdapter implements SourceAdapter {
         title: j.title,
         jdText,
         jdHtml: j.descriptionHtml ?? null,
-        locationRaw: j.isRemote ? `Remote ${j.location ?? ""}`.trim() : j.location ?? null,
+        locationRaw: ashbyLocation(j),
         applyUrl: j.applyUrl ?? j.jobUrl ?? null,
         salaryRaw,
         postedAt: j.publishedAt ?? null,
@@ -66,4 +67,15 @@ export class AshbyAdapter implements SourceAdapter {
       } satisfies RawPosting;
     });
   }
+}
+
+/**
+ * Primary + secondary locations. Global boards often list a US city first and
+ * "Bengaluru" as a secondary — dropping those hid India-workable roles (§11.3).
+ */
+function ashbyLocation(j: AshbyJob): string | null {
+  const all = [j.location, ...(j.secondaryLocations ?? []).map((l) => l.location)].filter(Boolean);
+  const joined = [...new Set(all)].join("; ");
+  if (j.isRemote) return `Remote ${joined}`.trim();
+  return joined || null;
 }

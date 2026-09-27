@@ -1,6 +1,7 @@
 import type { AtsType } from "@jobflow/core";
 import { slugify } from "@jobflow/core";
-import { httpJson } from "../types.js";
+import { httpJson, httpText } from "../types.js";
+import { parseWorkdaySlug } from "../ats/workday.js";
 
 /**
  * ATS Detector (§ ATS Detector). Given a careers URL and/or company name, identify
@@ -27,12 +28,61 @@ const URL_PATTERNS: Array<{ ats: AtsType; re: RegExp; group: number }> = [
   { ats: "lever", re: /jobs\.lever\.co\/([^/?#]+)/i, group: 1 },
   { ats: "ashby", re: /jobs\.ashbyhq\.com\/([^/?#]+)/i, group: 1 },
   { ats: "ashby", re: /ashbyhq\.com\/([^/?#]+)/i, group: 1 },
-  { ats: "workable", re: /([^./]+)\.workable\.com/i, group: 1 },
+  // path form first: the subdomain form would read "apply.workable.com/x" as slug "apply"
   { ats: "workable", re: /apply\.workable\.com\/([^/?#]+)/i, group: 1 },
+  { ats: "workable", re: /([^./]+)\.workable\.com/i, group: 1 },
   { ats: "recruitee", re: /([^./]+)\.recruitee\.com/i, group: 1 },
   { ats: "personio", re: /([^./]+)\.jobs\.personio\.(?:de|com)/i, group: 1 },
-  { ats: "smartrecruiters", re: /careers\.smartrecruiters\.com\/([^/?#]+)/i, group: 1 },
+  { ats: "smartrecruiters", re: /(?:careers|jobs)\.smartrecruiters\.com\/([^/?#]+)/i, group: 1 },
+  { ats: "rippling", re: /ats\.rippling\.com\/([^/?#]+)/i, group: 1 },
+  { ats: "rippling", re: /api\.rippling\.com\/platform\/api\/ats\/v\d\/board\/([^/?#]+)/i, group: 1 },
+  { ats: "jobvite", re: /jobs\.jobvite\.com\/([^/?#]+)/i, group: 1 },
+  { ats: "kula", re: /careers\.kula\.ai\/([^/?#]+)/i, group: 1 },
+  { ats: "keka", re: /([a-z0-9-]+)\.keka\.com/i, group: 1 },
+  { ats: "zoho", re: /([a-z0-9-]+\.zohorecruit\.(?:com|in|eu))/i, group: 1 },
+  { ats: "freshteam", re: /([a-z0-9-]+)\.freshteam\.com/i, group: 1 },
 ];
+
+/** path segments that are never a board slug (script/embed/API paths in page HTML). */
+const RESERVED_SLUG = /^(embed|js|css|api|static|assets|v\d+|www|app|apply|wday|cxs|jobs|job|careers?|en-[a-z]{2})$/i;
+
+/**
+ * Every (ats, slug) a URL — or a whole careers-page HTML — points at, in pattern order.
+ * Multi-part boards encode their slug: Workday "{host}/{tenant}/{site}", Eightfold
+ * "{host}/{domain}". In HTML a capture can run past the closing quote, so each slug is
+ * cut at the first character that can't be part of one.
+ */
+export function atsCandidates(text: string): Array<{ ats: AtsType; slug: string }> {
+  const out: Array<{ ats: AtsType; slug: string }> = [];
+  const seen = new Set<string>();
+  const add = (ats: AtsType, slug: string | undefined) => {
+    if (!slug) return;
+    const key = `${ats}:${slug.toLowerCase()}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ ats, slug });
+  };
+  for (const m of text.matchAll(/\b([a-z0-9-]+)\.(wd\d+)\.myworkdayjobs\.com\/(?:[a-z]{2}-[A-Z]{2}\/)?([A-Za-z0-9_-]+)/gi)) {
+    if (!/^(wday|cxs)$/i.test(m[3]!)) add("workday", `${m[1]}.${m[2]}.myworkdayjobs.com/${m[1]}/${m[3]}`);
+  }
+  for (const m of text.matchAll(/https?:\/\/([a-z0-9.-]+)\/careers\?[^"'\s<>]*?domain=([a-z0-9.-]+)/gi)) {
+    add("eightfold", `${m[1]}/${m[2]}`);
+  }
+  for (const m of text.matchAll(/\b([a-z0-9.-]+\.oraclecloud\.com)\/hcmUI\/CandidateExperience\/[a-z]{2}(?:-[a-z]{2})?\/sites\/(CX(?:_\d+)?)\b/gi)) {
+    add("oracle", `${m[1]}/${m[2]}`);
+  }
+  if (/\bamazon\.jobs\b/i.test(text)) add("amazon", "amazon");
+  if (/\batlassian\.com\/company\/careers\b/i.test(text)) add("atlassian", "atlassian");
+  // Zoho Recruit career sites often live on a custom domain; the path gives them away
+  for (const m of text.matchAll(/https?:\/\/([a-z0-9.-]+)\/jobs\/Careers\b/g)) add("zoho", m[1]);
+  for (const { ats, re, group } of URL_PATTERNS) {
+    for (const m of text.matchAll(new RegExp(re.source, "gi"))) {
+      const slug = m[group]?.match(/^[A-Za-z0-9_.-]+/)?.[0];
+      if (slug && !RESERVED_SLUG.test(slug)) add(ats, slug);
+    }
+  }
+  return out;
+}
 
 /** Confirm a (ats, slug) pair actually returns jobs — turns a guess into confirmed. */
 async function probe(ats: AtsType, slug: string): Promise<boolean> {
@@ -65,6 +115,81 @@ async function probe(ats: AtsType, slug: string): Promise<boolean> {
       );
       return Array.isArray(r?.jobs);
     }
+    case "smartrecruiters": {
+      const r = await httpJson<{ totalFound?: number }>(
+        `https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(slug)}/postings?limit=1`,
+        { timeoutMs: 12_000 },
+      );
+      return (r?.totalFound ?? 0) > 0; // unknown ids answer 200 with zero postings
+    }
+    case "workday": {
+      const t = parseWorkdaySlug(slug);
+      if (!t) return false;
+      const r = await httpJson<{ jobPostings?: unknown[] }>(`https://${t.host}/wday/cxs/${t.tenant}/${t.site}/jobs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ appliedFacets: {}, limit: 1, offset: 0, searchText: "" }),
+        timeoutMs: 15_000,
+      });
+      return Array.isArray(r?.jobPostings);
+    }
+    case "eightfold": {
+      const [host, domain] = slug.split("/");
+      const r = await httpJson<{ data?: { positions?: unknown[] } }>(
+        `https://${host}/api/pcsx/search?domain=${domain}&query=&location=&start=0&num=1`,
+        { timeoutMs: 15_000 },
+      );
+      return Array.isArray(r?.data?.positions);
+    }
+    case "recruitee": {
+      const r = await httpJson<{ offers?: unknown[] }>(`https://${slug}.recruitee.com/api/offers/`, { timeoutMs: 12_000 });
+      return Array.isArray(r?.offers);
+    }
+    case "oracle": {
+      const [host, site] = slug.split("/");
+      const finder = encodeURIComponent(`findReqs;siteNumber=${site},limit=1`);
+      const r = await httpJson<{ items?: Array<{ TotalJobsCount?: number }> }>(
+        `https://${host}/hcmRestApi/resources/latest/recruitingCEJobRequisitions?onlyData=true&expand=requisitionList&finder=${finder}`,
+        { timeoutMs: 20_000 },
+      );
+      return typeof r?.items?.[0]?.TotalJobsCount === "number";
+    }
+    case "rippling": {
+      const r = await httpJson<{ items?: unknown[] }>(
+        `https://api.rippling.com/platform/api/ats/v2/board/${encodeURIComponent(slug)}/jobs?page=0&pageSize=1`,
+        { timeoutMs: 12_000 },
+      );
+      return Array.isArray(r?.items);
+    }
+    case "kula": {
+      const r = await httpJson<{ data?: unknown[] }>(
+        `https://careers.kula.ai/api/internal/ats_job_posts?accountName=${encodeURIComponent(slug)}&type=ats_job_post.index&items=1&page=1`,
+        { timeoutMs: 12_000 },
+      );
+      return Array.isArray(r?.data);
+    }
+    case "zoho": {
+      const r = await httpJson<{ data?: unknown[] }>(
+        `https://${slug}/recruit/v2/public/Job_Openings?pagename=Careers&source=CareerSite`,
+        { timeoutMs: 12_000 },
+      );
+      return Array.isArray(r?.data);
+    }
+    case "keka": {
+      const html = await httpText(`https://${slug}.keka.com/careers/`, { timeoutMs: 12_000 });
+      return !!html && /\/ats\/documents\/[0-9a-f-]{36}\//i.test(html);
+    }
+    case "jobvite": {
+      const html = await httpText(`https://jobs.jobvite.com/${slug}/jobs`, { timeoutMs: 12_000 });
+      return !!html && /companyEId\s*[:=]/.test(html);
+    }
+    case "freshteam": {
+      const body = await httpText(`https://${slug}.freshteam.com/hire/widgets/jobs.json`, { timeoutMs: 12_000 });
+      return !!body && body.trimStart().startsWith("{"); // a dead account answers 200 HTML
+    }
+    case "amazon":
+    case "atlassian":
+      return true; // single well-known boards; nothing to resolve
     default:
       return false;
   }
@@ -72,15 +197,10 @@ async function probe(ats: AtsType, slug: string): Promise<boolean> {
 
 /** Extract ats+slug from a careers URL via pattern, then confirm it. */
 export async function detectFromUrl(url: string): Promise<DetectResult> {
-  for (const { ats, re, group } of URL_PATTERNS) {
-    const m = url.match(re);
-    if (m?.[group]) {
-      const slug = m[group]!;
-      const ok = await probe(ats, slug).catch(() => false);
-      return { atsType: ats, atsSlug: slug, confidence: ok ? "confirmed" : "guessed" };
-    }
-  }
-  return { atsType: "unknown", atsSlug: null, confidence: "none" };
+  const first = atsCandidates(url)[0];
+  if (!first) return { atsType: "unknown", atsSlug: null, confidence: "none" };
+  const ok = await probe(first.ats, first.slug).catch(() => false);
+  return { atsType: first.ats, atsSlug: first.slug, confidence: ok ? "confirmed" : "guessed" };
 }
 
 /**
@@ -108,10 +228,37 @@ export function slugCandidates(name: string): string[] {
   return [...new Set([base, compact, noInc, noInc.replace(/-/g, "")])].filter(Boolean);
 }
 
+/**
+ * A careers page on the company's own domain usually embeds or links its ATS
+ * (an iframe, an "apply" link, a script src). One polite fetch of the page and a
+ * scan for known ATS hosts beats guessing slugs — and it finds boards whose slug
+ * isn't the company name (e.g. "razorpaysoftwareprivatelimited").
+ */
+export async function detectFromCareersPage(url: string): Promise<DetectResult> {
+  // "compatible" UA + HTML Accept: many careers sites serve a bare API client an empty
+  // shell. One read of a public page, not a crawl.
+  const html = (
+    await httpText(url, {
+      timeoutMs: 12_000,
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; JobFlow/0.1; +personal job-search)", Accept: "text/html,application/xhtml+xml" },
+    })
+  )?.slice(0, 2_000_000);
+  if (!html) return { atsType: "unknown", atsSlug: null, confidence: "none" };
+  let tried = 0;
+  for (const { ats, slug } of atsCandidates(html)) {
+    if (tried++ >= 6) break;
+    const ok = await probe(ats, slug).catch(() => false);
+    if (ok) return { atsType: ats, atsSlug: slug, confidence: "confirmed" };
+  }
+  return { atsType: "unknown", atsSlug: null, confidence: "none" };
+}
+
 export async function detect(input: { url?: string | null; name?: string }): Promise<DetectResult> {
   if (input.url) {
     const byUrl = await detectFromUrl(input.url);
     if (byUrl.atsType !== "unknown") return byUrl;
+    const byPage = await detectFromCareersPage(input.url).catch(() => null);
+    if (byPage && byPage.atsType !== "unknown") return byPage;
   }
   if (input.name) return detectFromName(input.name);
   return { atsType: "unknown", atsSlug: null, confidence: "none" };

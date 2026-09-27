@@ -62,7 +62,11 @@ export function MatchCard({
             <span className="tag">{card.source}</span>
           )}
           {TIER3.has(card.source) && <span className="tag tier3">tier-3 · local</span>}
-          {exp && <span className="tag exp" title="Years of experience the JD asks for (parsed)">{exp}</span>}
+          {exp && (
+            <span className="tag exp" data-fit={card.experience.fit ?? undefined} title="Years of experience the JD asks for (parsed) vs yours">
+              {exp}
+            </span>
+          )}
           {card.comp && (
             <span className="tag comp" title={`source: ${card.comp.source}`}>
               {isEstimate(card.comp.source) ? "~" : ""}

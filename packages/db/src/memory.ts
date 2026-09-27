@@ -21,6 +21,7 @@ import type {
   CompanyEnrichmentPatch,
   EnqueueJob,
   NewPosting,
+  PurgeOptions,
   Repository,
   SalaryCacheEntry,
   UpsertCompany,
@@ -235,6 +236,17 @@ export class InMemoryRepository implements Repository {
     return n;
   }
 
+  async touchSeen(companyId: string, atsJobIds: string[]): Promise<void> {
+    const ids = new Set(atsJobIds);
+    const now = new Date();
+    for (const p of this.postings.values()) {
+      if (p.companyId !== companyId || !ids.has(p.atsJobId)) continue;
+      p.lastSeen = now;
+      p.isActive = true;
+      if (p.status === "stale") p.status = "active";
+    }
+  }
+
   // ── posting lifecycle (manual, global) ──
   async invalidatePosting(id: string, reason: string): Promise<void> {
     const p = this.postings.get(id);
@@ -254,16 +266,14 @@ export class InMemoryRepository implements Repository {
   async listInvalidatedPostings(): Promise<Posting[]> {
     return [...this.postings.values()].filter((p) => p.status === "invalidated");
   }
-  async purgeOldPostings(opts: {
-    olderThanDays: number;
-    field?: "lastSeen" | "firstSeen";
-    hard?: boolean;
-  }): Promise<number> {
+  async purgeOldPostings(opts: PurgeOptions): Promise<number> {
     const field = opts.field ?? "lastSeen";
     const cutoff = Date.now() - opts.olderThanDays * 86_400_000;
+    const sources = opts.sources?.length ? new Set(opts.sources) : null;
     let n = 0;
     for (const p of [...this.postings.values()]) {
       if (p.status === "invalidated") continue; // a manual decision outranks age
+      if (sources && !sources.has(p.source)) continue;
       const t = new Date(p[field] as string | Date).getTime();
       if (t >= cutoff) continue;
       if (opts.hard) {

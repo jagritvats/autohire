@@ -9,7 +9,8 @@ import type { RequirementStrength } from "../schema/enums.js";
 
 // canonical skill → alias regex fragments
 const SKILL_ALIASES: Record<string, string[]> = {
-  java: ["java", "jvm", "spring boot", "spring", "hibernate"],
+  // boundaries matter: a bare "java" alias also matched every "JavaScript" JD
+  java: ["\\bjava\\b", "\\bjvm\\b", "spring boot", "\\bspring\\b", "hibernate"],
   kotlin: ["kotlin", "ktor"],
   // "go" is highly ambiguous with the English word — require a language cue so
   // "go-to-market" / "go live" in boilerplate don't false-positive (§ Normalizer).
@@ -24,6 +25,9 @@ const SKILL_ALIASES: Record<string, string[]> = {
   csharp: ["c#", "\\.net", "dotnet", "asp\\.net"],
   python: ["python", "django", "flask", "fastapi"],
   typescript: ["typescript", "\\bts\\b"],
+  php: ["\\bphp\\b", "laravel", "symfony", "codeigniter"],
+  ruby: ["\\bruby\\b", "\\brails\\b", "ruby on rails"],
+  cpp: ["c\\+\\+", "\\bcpp\\b"],
   javascript: ["javascript", "node\\.?js", "\\bnode\\b", "\\bjs\\b"],
   react: ["react", "next\\.?js", "redux"],
   kafka: ["kafka", "kafka streams", "ksql", "confluent"],

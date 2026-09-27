@@ -29,10 +29,10 @@ export type IndiaTechHub = (typeof INDIA_TECH_HUBS)[number];
 export const INDIA_SWE_QUERIES = [
   "software engineer",
   "backend engineer",
-  "senior software engineer",
+  "sde 2",
   "platform engineer",
   "full stack developer",
-  "sde",
+  "java developer",
   "devops engineer",
   "data engineer",
 ] as const;
@@ -49,6 +49,8 @@ export interface Tier3PollTarget {
   freshnessDays: number;
   /** max cards to pull for this cell (politeness / cost). */
   limit: number;
+  /** candidate YoE → the source's experience facet (soft: shapes the query only). */
+  experienceYears?: number;
 }
 
 export interface Tier3PollOptions {
@@ -66,6 +68,8 @@ export interface Tier3PollOptions {
   maxTargets?: number;
   /** include a remote / location-agnostic pass per query (location: ""); default true. */
   remote?: boolean;
+  /** candidate YoE for the experience facet; omitted → no facet. */
+  experienceYears?: number;
 }
 
 /**
@@ -107,7 +111,7 @@ export function buildIndiaSweTargets(opts: Tier3PollOptions = {}): Tier3PollTarg
       const key = `${query}::${location}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      targets.push({ query, location, minLpa, freshnessDays, limit });
+      targets.push({ query, location, minLpa, freshnessDays, limit, experienceYears: opts.experienceYears });
     }
   }
   return targets;

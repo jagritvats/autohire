@@ -4,6 +4,25 @@ import { GreenhouseAdapter } from "./ats/greenhouse.js";
 import { LeverAdapter } from "./ats/lever.js";
 import { AshbyAdapter } from "./ats/ashby.js";
 import { WorkableAdapter } from "./ats/workable.js";
+import { SmartRecruitersAdapter } from "./ats/smartrecruiters.js";
+import { WorkdayAdapter } from "./ats/workday.js";
+import { EightfoldAdapter } from "./ats/eightfold.js";
+import { AmazonJobsAdapter } from "./ats/amazon.js";
+import { OracleHcmAdapter } from "./ats/oracle.js";
+import { RipplingAdapter } from "./ats/rippling.js";
+import { JobviteAdapter } from "./ats/jobvite.js";
+import { AtlassianAdapter } from "./ats/atlassian.js";
+import { KekaAdapter } from "./ats/keka.js";
+import { ZohoRecruitAdapter } from "./ats/zoho.js";
+import { FreshteamAdapter } from "./ats/freshteam.js";
+import { KulaAdapter } from "./ats/kula.js";
+import { HimalayasAdapter } from "./aggregators/himalayas.js";
+import { HiristAdapter } from "./india/hirist.js";
+import { CutshortAdapter } from "./india/cutshort.js";
+import { TimesJobsAdapter } from "./india/timesjobs.js";
+import { InstahyreAdapter } from "./india/instahyre.js";
+import { WellfoundAdapter } from "./india/wellfound.js";
+import { RedditHiringAdapter } from "./india/reddit.js";
 import { RemotiveAdapter } from "./aggregators/remotive.js";
 import { ArbeitnowAdapter } from "./aggregators/arbeitnow.js";
 import { HnWhoIsHiringAdapter } from "./hn/whoishiring.js";
@@ -14,9 +33,31 @@ export const ADAPTERS: Record<string, SourceAdapter> = {
   lever: new LeverAdapter(),
   ashby: new AshbyAdapter(),
   workable: new WorkableAdapter(),
+  smartrecruiters: new SmartRecruitersAdapter(),
+  // big-employer careers backends (tier 2: the public JSON their own sites call)
+  workday: new WorkdayAdapter(),
+  eightfold: new EightfoldAdapter(),
+  amazon: new AmazonJobsAdapter(),
+  oracle: new OracleHcmAdapter(),
+  rippling: new RipplingAdapter(),
+  jobvite: new JobviteAdapter(),
+  atlassian: new AtlassianAdapter(),
+  // India-market ATSes (tier 2: the public JSON their career pages call)
+  keka: new KekaAdapter(),
+  zoho: new ZohoRecruitAdapter(),
+  freshteam: new FreshteamAdapter(),
+  kula: new KulaAdapter(),
   remotive: new RemotiveAdapter(),
   arbeitnow: new ArbeitnowAdapter(),
   hn_whoishiring: new HnWhoIsHiringAdapter(),
+  himalayas: new HimalayasAdapter(),
+  // India tech boards (tier 2: public, no login)
+  hirist: new HiristAdapter(),
+  cutshort: new CutshortAdapter(),
+  timesjobs: new TimesJobsAdapter(),
+  instahyre: new InstahyreAdapter(),
+  wellfound: new WellfoundAdapter(),
+  reddit: new RedditHiringAdapter(),
 };
 
 export function getAdapter(source: SourceKind): SourceAdapter | undefined {

@@ -18,6 +18,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
+      # the repo factory persists only when DATABASE_URL is set (a HOSTED Postgres —
+      # a localhost/Docker DB is unreachable from Actions; there the worker runner's
+      # built-in scheduler keeps the corpus fresh instead). Without it this run is in-memory.
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'echo' }}

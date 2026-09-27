@@ -5,3 +5,5 @@ export * from "./discover.js";
 export * from "./enrich.js";
 export * from "./import.js";
 export * from "./seed.js";
+export * from "./poll.js";
+export * from "./harvest.js";

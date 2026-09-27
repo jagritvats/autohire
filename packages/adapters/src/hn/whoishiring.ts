@@ -53,8 +53,7 @@ export class HnWhoIsHiringAdapter implements SourceAdapter {
       if (target.query && !text.toLowerCase().includes(target.query.toLowerCase())) continue;
 
       const firstLine = text.split("\n")[0] ?? "";
-      const companyMatch = firstLine.match(COMPANY_LINE);
-      const company = (companyMatch?.[1] ?? firstLine.slice(0, 50)).trim();
+      const company = deriveCompany(firstLine);
       if (!company) continue;
 
       const applyUrl = (text.match(/https?:\/\/[^\s)>\]]+/) ?? [null])[0];
@@ -81,9 +80,25 @@ export class HnWhoIsHiringAdapter implements SourceAdapter {
   }
 }
 
+const ROLE_HINT = /engineer|developer|sde|swe|backend|frontend|platform|sre|staff|senior/i;
+
+/**
+ * The convention is "Company | Role | Location", but some posts lead with the role
+ * ("Senior Python Engineer | Acme | Remote") — then the company is the first segment
+ * that doesn't read like a role or a location.
+ */
+const NOT_COMPANY = /\b(remote|onsite|on[- ]site|hybrid|full[- ]time|part[- ]time|contract|visa|hiring)\b|[$€£]/i;
+function deriveCompany(line: string): string {
+  const lede = (line.match(COMPANY_LINE)?.[1] ?? line.slice(0, 50)).trim();
+  if (!ROLE_HINT.test(lede) && !NOT_COMPANY.test(lede)) return lede;
+  const parts = line.split(/[|]/).map((s) => s.trim()).filter(Boolean);
+  const alt = parts.find((p) => !ROLE_HINT.test(p) && !NOT_COMPANY.test(p) && p.length <= 60);
+  return alt ?? lede;
+}
+
 function deriveTitle(line: string): string {
   const parts = line.split(/[|]/).map((s) => s.trim());
-  const roleHint = parts.find((p) => /engineer|developer|sde|swe|backend|frontend|platform|sre|staff|senior/i.test(p));
+  const roleHint = parts.find((p) => ROLE_HINT.test(p));
   return roleHint ?? parts[1] ?? "Engineering role";
 }
 

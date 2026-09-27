@@ -17,9 +17,23 @@ describe("parseExperience — deterministic YoE (§11.2, no LLM)", () => {
     ["10+ years of experience", { min: 10, max: null }],
     // capped upper bound
     ["up to 4 years", { min: null, max: 4 }],
-    // aggregation across multiple mentions → overall min..max
-    ["2 yrs Java, 3 years backend", { min: 2, max: 3 }],
-    ["Requires 4+ years; 2-6 years in distributed systems", { min: 2, max: 6 }],
+    // aggregation: a candidate must clear EVERY stated bar → min is the largest lower bound
+    ["2 yrs Java, 3 years backend", { min: 3, max: 3 }],
+    ["Requires 4+ years; 2-6 years in distributed systems", { min: 4, max: 6 }],
+    ["3+ years of Java; 5+ years of overall experience", { min: 5, max: null }],
+    ["5+ years total; 1-2 years with Kafka", { min: 5, max: null }],
+    // a preference only counts when nothing else is stated
+    ["2-4 years of experience. 7+ years preferred.", { min: 2, max: 4 }],
+    ["7+ years preferred", { min: 7, max: null }],
+    // phrasings seen on Indian boards
+    ["5 plus years of experience", { min: 5, max: null }],
+    ["Experience: 5 years+", { min: 5, max: null }],
+    ["at least five years of backend work", { min: 5, max: null }],
+    ["two to four years", { min: 2, max: 4 }],
+    ["Exp: 3-5", { min: 3, max: 5 }],
+    ["YOE: 4+", { min: 4, max: null }],
+    ["Experience: 10+ years", { min: 10, max: null }],
+    ["SDE (3-6 Yrs)", { min: 3, max: 6 }],
     // yoe token
     ["6 YOE required", { min: 6, max: 6 }],
     // nothing to find
@@ -42,6 +56,14 @@ describe("parseExperience — deterministic YoE (§11.2, no LLM)", () => {
       "Grown 300% over the past 5 years.", // company history, not a requirement
       "Our CEO is 45 years old.", // age
       "We shipped this 2 years ago.", // history
+      "There is a 2 year bond with the company.", // service bond
+      "Service agreement of 2 years applies.", // bond phrasing
+      "Celebrating 20 years of excellence in fintech.", // company history
+      "Candidates must be 18 years or older.", // age
+      "A 4 year degree in CS.", // degree length
+      "Experience: 3 months of internship", // months
+      "Educational Qualification: 15 years full time education", // Accenture boilerplate
+      "Minimum 15 years of full-time education required", // same, other phrasing
     ];
     for (const jd of falsePositives) {
       it(`ignores ${JSON.stringify(jd)}`, () => {

@@ -5,15 +5,13 @@ import {
   SEED_COMPANIES,
   defaultProfile,
   discoverCompanies,
-  ingestCompany,
-  ingestFromAdapter,
+  pollAll,
   rebuildMatches,
   recheckPostings,
   type RecheckStats,
 } from "@jobflow/pipeline";
-import { getAdapter } from "@jobflow/adapters";
 import type { Match, Posting } from "@jobflow/core";
-import { isIndiaWorkable } from "@jobflow/core";
+import { isIndiaWorkable, postingAgeDays } from "@jobflow/core";
 import { getRepo, ensureTenant } from "./repo.js";
 
 /** Serializable match-card DTO for the client UI (§11.6). */
@@ -31,7 +29,7 @@ export interface FeedCard {
   atsDirect: boolean;
   location: { mode: string; label: string; remoteGeo: string; country: string | null; confidence: number };
   /** parsed years-of-experience the JD asks for (§11.2); nulls when unstated. */
-  experience: { min: number | null; max: number | null };
+  experience: { min: number | null; max: number | null; fit: "ok" | "stretch" | "far" | null };
   /** true when the role is workable from India (onsite/hybrid IN, or IN-ok/worldwide remote). */
   indiaWorkable: boolean;
   level: string | null;
@@ -54,7 +52,16 @@ export interface FeedCard {
 
 export interface FeedData {
   cards: FeedCard[];
-  stats: { companies: number; postings: number; ranked: number; excluded: number; durable: boolean; generatedAt: string };
+  stats: {
+    companies: number;
+    postings: number;
+    ranked: number;
+    excluded: number;
+    durable: boolean;
+    generatedAt: string;
+    /** most recent board poll (ISO) — the UI warns when the corpus has gone unverified. */
+    lastPolledAt: string | null;
+  };
 }
 
 /** The secondary views (per-user / lifecycle collections), rendered as feed cards. */
@@ -97,19 +104,16 @@ export async function rerankOnly(): Promise<FeedData> {
 
 async function ingestAndRank(repo: Repository): Promise<void> {
   await discoverCompanies(repo, SEED_COMPANIES);
-  const companies = await repo.listCompanies({ status: "active" });
-  for (const c of companies) {
-    if (c.atsType === "unknown" || !c.atsSlug) continue;
-    await ingestCompany(repo, c, { limit: 50 });
-  }
-  await ingestFromAdapter(repo, getAdapter("hn_whoishiring")!, { query: "backend", limit: 40 });
-  await ingestFromAdapter(repo, getAdapter("remotive")!, { query: "backend", limit: 40 });
+  // the same poll routine the worker runs; boards not yet due are skipped
+  await pollAll(repo, { limitPerCompany: 50, maxBoards: 25, skipSlowFeeds: true, telegramChannels: [] }); // a request-bound refresh stays small; the runner does the sweep
   const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? defaultProfile();
   await rebuildMatches(repo, profile);
 }
 
 /** Card context — the per-user overlays needed to render correct action state. */
 interface CardCtx {
+  /** the profile's years of experience — to mark how far the JD's ask is. */
+  yoe: number;
   appliedKeys: Set<string>;
   bookmarked: Set<string>;
   archived: Set<string>;
@@ -121,7 +125,7 @@ function buildCard(
   m: Pick<Match, "score" | "levelNote" | "stackNote" | "redFlags"> | null,
   ctx: CardCtx,
 ): FeedCard {
-  const ageDays = Math.max(0, Math.floor((Date.now() - new Date(p.firstSeen as string).getTime()) / 86_400_000));
+  const ageDays = Math.floor(postingAgeDays(p)); // source publish date, else first seen
   return {
     id: p.id,
     companyId: p.companyId,
@@ -141,7 +145,7 @@ function buildCard(
       country: p.location.country,
       confidence: p.location.confidence,
     },
-    experience: { min: p.experience.min, max: p.experience.max },
+    experience: { min: p.experience.min, max: p.experience.max, fit: experienceFit(p.experience.min, ctx.yoe) },
     indiaWorkable: isIndiaWorkable(p.location),
     level: p.levelBand,
     levelNote: m?.levelNote ?? null,
@@ -164,18 +168,23 @@ async function shape(repo: Repository, matches: Awaited<ReturnType<Repository["l
     repo.appliedDedupKeys(DEFAULT_TENANT),
     repo.getPostingUserState(DEFAULT_TENANT),
   ]);
-  const ctx: CardCtx = { appliedKeys, bookmarked: userState.bookmarked, archived: userState.archived };
+  const yoe = ((await repo.getProfile(DEFAULT_TENANT)) ?? defaultProfile()).yoe;
+  const ctx: CardCtx = { yoe, appliedKeys, bookmarked: userState.bookmarked, archived: userState.archived };
   const cards: FeedCard[] = matches.map((m) => buildCard(m.posting, m, ctx));
   const allActive = await repo.listActivePostings();
+  const companies = await repo.listCompanies();
+  const polled = companies.map((c) => (c.lastPolled ? new Date(c.lastPolled as string | Date).getTime() : 0));
+  const lastPolled = Math.max(0, ...polled);
   return {
     cards,
     stats: {
-      companies: (await repo.listCompanies()).length,
+      companies: companies.length,
       postings: allActive.length,
       ranked: cards.length,
       excluded: 0,
       durable: !!process.env.DATABASE_URL,
       generatedAt: new Date().toISOString(),
+      lastPolledAt: lastPolled ? new Date(lastPolled).toISOString() : null,
     },
   };
 }
@@ -188,7 +197,8 @@ export async function getPostingsView(view: PostingView): Promise<{ cards: FeedC
     repo.appliedDedupKeys(DEFAULT_TENANT),
     repo.getPostingUserState(DEFAULT_TENANT),
   ]);
-  const ctx: CardCtx = { appliedKeys, bookmarked: userState.bookmarked, archived: userState.archived };
+  const yoe = ((await repo.getProfile(DEFAULT_TENANT)) ?? defaultProfile()).yoe;
+  const ctx: CardCtx = { yoe, appliedKeys, bookmarked: userState.bookmarked, archived: userState.archived };
 
   const postings =
     view === "bookmarks"
@@ -237,4 +247,11 @@ function compLabel(p: Posting) {
 function ratingOf(p: Posting): { overall: number; reviews: number } | null {
   // ratings come from Tier-3 enrichment (local agent), surfaced via company.* later.
   return null;
+}
+
+/** Same bands the scorer uses: ≤1 yr short is normal, 2 a stretch, 3+ usually screened out. */
+function experienceFit(min: number | null, yoe: number): "ok" | "stretch" | "far" | null {
+  if (min == null) return null;
+  const gap = min - yoe;
+  return gap <= 1 ? "ok" : gap <= 2 ? "stretch" : "far";
 }

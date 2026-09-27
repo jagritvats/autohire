@@ -25,6 +25,7 @@ import type {
   CompanyEnrichmentPatch,
   EnqueueJob,
   NewPosting,
+  PurgeOptions,
   Repository,
   SalaryCacheEntry,
   UpsertCompany,
@@ -59,15 +60,16 @@ export class PgRepository implements Repository {
   async upsertCompany(c: UpsertCompany): Promise<Company> {
     const { rows } = await this.q(
       `insert into company (name, name_norm, ats_type, ats_slug, careers_url, tags, poll_cadence)
-       values ($1,$2,$3,$4,$5,$6,$7)
+       values ($1,$2,$3,$4,$5,$6,coalesce($7,'weekly'))
        on conflict (name_norm) do update set
          ats_type = case when excluded.ats_type <> 'unknown' then excluded.ats_type else company.ats_type end,
          ats_slug = coalesce(excluded.ats_slug, company.ats_slug),
          careers_url = coalesce(excluded.careers_url, company.careers_url),
          tags = (select array(select distinct unnest(company.tags || excluded.tags))),
-         poll_cadence = excluded.poll_cadence
+         -- only an explicit cadence overrides (an aggregator mention must not reset a seed's "daily")
+         poll_cadence = coalesce($7, company.poll_cadence)
        returning *`,
-      [c.name, c.nameNorm, c.atsType ?? "unknown", c.atsSlug ?? null, c.careersUrl ?? null, c.tags ?? [], c.pollCadence ?? "weekly"],
+      [c.name, c.nameNorm, c.atsType ?? "unknown", c.atsSlug ?? null, c.careersUrl ?? null, c.tags ?? [], c.pollCadence ?? null],
     );
     return rowToCompany(rows[0]!);
   }
@@ -155,8 +157,8 @@ export class PgRepository implements Repository {
          loc_mode, loc_city, loc_country, loc_tz, remote_geo, sponsorship, location_confidence,
          salary_min, salary_max, currency, salary_source, salary_confidence,
          experience_min, experience_max,
-         apply_url, jd_embedding, dedup_key)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30)
+         apply_url, jd_embedding, dedup_key, posted_at)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31)
        on conflict (ats_type, ats_job_id) do update set
          title = excluded.title, title_norm = excluded.title_norm,
          role_archetype = excluded.role_archetype, level_band = excluded.level_band,
@@ -168,6 +170,7 @@ export class PgRepository implements Repository {
          salary_source = excluded.salary_source, salary_confidence = excluded.salary_confidence,
          experience_min = excluded.experience_min, experience_max = excluded.experience_max,
          apply_url = excluded.apply_url, jd_embedding = excluded.jd_embedding,
+         posted_at = coalesce(excluded.posted_at, posting.posted_at),
          last_seen = now(), is_active = true,
          -- re-seen: clear staleness; a manual invalidated decision persists (§3)
          status = case when posting.status = 'stale' then 'active' else posting.status end,
@@ -180,6 +183,7 @@ export class PgRepository implements Repository {
         p.salary.min, p.salary.max, p.salary.currency, p.salary.source, p.salary.confidence,
         p.experience.min, p.experience.max,
         p.applyUrl, p.jdEmbedding ? JSON.stringify(p.jdEmbedding) : null, p.dedupKey,
+        p.postedAt ?? null,
       ],
     );
     return rowToPosting(rows[0]!);
@@ -219,6 +223,16 @@ export class PgRepository implements Repository {
     return rowCount ?? 0;
   }
 
+  async touchSeen(companyId: string, atsJobIds: string[]): Promise<void> {
+    if (!atsJobIds.length) return;
+    await this.q(
+      `update posting set last_seen = now(), is_active = true,
+         status = case when status = 'stale' then 'active' else status end
+       where company_id = $1 and ats_job_id = any($2)`,
+      [companyId, atsJobIds],
+    );
+  }
+
   // ── posting lifecycle (manual, global) ──
   async invalidatePosting(id: string, reason: string): Promise<void> {
     await this.q(
@@ -240,25 +254,27 @@ export class PgRepository implements Repository {
     const { rows } = await this.q("select * from posting where status = 'invalidated' order by invalidated_at desc");
     return rows.map(rowToPosting);
   }
-  async purgeOldPostings(opts: {
-    olderThanDays: number;
-    field?: "lastSeen" | "firstSeen";
-    hard?: boolean;
-  }): Promise<number> {
+  async purgeOldPostings(opts: PurgeOptions): Promise<number> {
     const col = opts.field === "firstSeen" ? "first_seen" : "last_seen";
     // a manual invalidation outranks age; interval built from a bound int param.
     const cutoff = `now() - ($1 || ' days')::interval`;
+    const params: unknown[] = [String(opts.olderThanDays)];
+    let sourceFilter = "";
+    if (opts.sources?.length) {
+      params.push(opts.sources);
+      sourceFilter = ` and source = any($2)`;
+    }
     if (opts.hard) {
       const { rowCount } = await this.q(
-        `delete from posting where status <> 'invalidated' and ${col} < ${cutoff}`,
-        [String(opts.olderThanDays)],
+        `delete from posting where status <> 'invalidated' and ${col} < ${cutoff}${sourceFilter}`,
+        params,
       );
       return rowCount ?? 0;
     }
     const { rowCount } = await this.q(
       `update posting set is_active = false, status = 'stale'
-       where status = 'active' and ${col} < ${cutoff}`,
-      [String(opts.olderThanDays)],
+       where status = 'active' and ${col} < ${cutoff}${sourceFilter}`,
+      params,
     );
     return rowCount ?? 0;
   }
@@ -657,6 +673,7 @@ function rowToPosting(r: pg.QueryResultRow): Posting {
     source: r.source, tier: r.tier, title: r.title, titleNorm: r.title_norm, roleArchetype: r.role_archetype,
     levelBand: r.level_band, jdText: r.jd_text, jdSkills: r.jd_skills ?? [], requirements: parseJson(r.requirements, []),
     location, salary, experience, applyUrl: r.apply_url, jdEmbedding: parseJson(r.jd_embedding, null),
+    postedAt: r.posted_at ?? null, // pre-migration rows → fall back to firstSeen downstream
     firstSeen: r.first_seen, lastSeen: r.last_seen, isActive: r.is_active, repostCount: r.repost_count,
     status: r.status ?? "active", invalidReason: r.invalid_reason ?? null, invalidatedAt: r.invalidated_at ?? null,
     canonicalId: r.canonical_id, dedupKey: r.dedup_key,

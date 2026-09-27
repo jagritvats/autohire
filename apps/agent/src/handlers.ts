@@ -137,7 +137,7 @@ async function tier3Poll(repo: Repository, job: Job, ctx: HandlerCtx): Promise<R
   if (!adapter) throw new Error(`No job adapter for Tier-3 source '${source}'`);
 
   const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? defaultProfile();
-  const targets = planTier3Targets(job.payload, profile.prefs.salaryFloor);
+  const targets = planTier3Targets(job.payload, profile.prefs.salaryFloor, profile.yoe);
 
   let fetched = 0;
   let upserted = 0;
@@ -148,7 +148,7 @@ async function tier3Poll(repo: Repository, job: Job, ctx: HandlerCtx): Promise<R
       query: t.query,
       location: t.location || undefined,
       limit: t.limit,
-      params: { minLpa: t.minLpa, freshnessDays: t.freshnessDays },
+      params: { minLpa: t.minLpa, freshnessDays: t.freshnessDays, ...(t.experienceYears != null ? { experienceYears: t.experienceYears } : {}) },
     };
     const s = await ingestFromAdapter(repo, adapter, ft, { embedder: ctx.embedder });
     fetched += s.fetched;
@@ -171,7 +171,7 @@ async function tier3Poll(repo: Repository, job: Job, ctx: HandlerCtx): Promise<R
  * A payload `query`/`queries` narrows the sweep; otherwise the curated India SWE query
  * set is used. `minLpa` defaults to the profile's INR salaryFloor expressed in LPA.
  */
-function planTier3Targets(payload: Record<string, unknown>, salaryFloorInr: number): Tier3PollTarget[] {
+function planTier3Targets(payload: Record<string, unknown>, salaryFloorInr: number, yoe: number): Tier3PollTarget[] {
   const env = tier3TargetEnv();
   const payloadQueries = asStrArray(payload.queries) ?? (payload.query ? [String(payload.query)] : undefined);
   const opts: Tier3PollOptions = {
@@ -182,6 +182,9 @@ function planTier3Targets(payload: Record<string, unknown>, salaryFloorInr: numb
     limitPerTarget: asNum(payload.limit) ?? env.limitPerTarget,
     maxTargets: asNum(payload.maxTargets) ?? env.maxTargets,
     remote: typeof payload.remote === "boolean" ? payload.remote : undefined,
+    // your YoE shapes the source query (LinkedIn f_E / Naukri experience) so the sweep
+    // returns roles you can land, not senior-only ones — still scored, never gated
+    experienceYears: asNum(payload.experienceYears) ?? yoe,
   };
   return buildIndiaSweTargets(opts);
 }

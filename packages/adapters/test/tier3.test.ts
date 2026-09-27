@@ -146,12 +146,12 @@ describe("Naukri", () => {
 
 // ── LinkedIn ─────────────────────────────────────────────────────────────────
 describe("LinkedIn", () => {
-  it("builds the guest search URL with geoId + recency + seniority bias", () => {
-    const url = buildLinkedInUrl({ query: "software engineer", location: "bengaluru", freshnessDays: 7 });
+  it("builds the guest search URL with geoId + recency + an experience facet matched to YoE", () => {
+    const url = buildLinkedInUrl({ query: "software engineer", location: "bengaluru", freshnessDays: 7, experienceYears: 2 });
     expect(url).toContain("/jobs-guest/jobs/api/seeMoreJobPostings/search?");
     expect(url).toContain("keywords=software+engineer");
     expect(url).toContain("geoId=105214831"); // Bengaluru
-    expect(url).toContain("f_E=4%2C5%2C6");
+    expect(url).toContain("f_E=2%2C3%2C4"); // entry → mid-senior for ~2 YoE, not senior-only
     expect(url).toContain("f_TPR=r604800"); // 7d in seconds
   });
 

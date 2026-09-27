@@ -51,6 +51,11 @@ export interface Repository {
   updatePostingSalary(id: string, band: SalaryBand): Promise<void>;
   /** soft-delete postings not seen in this poll of a company (role filled/pulled). */
   markStale(companyId: string, seenAtsJobIds: string[]): Promise<number>;
+  /**
+   * Re-confirm postings as still live (bump lastSeen) without re-writing them — for
+   * boards whose poll returned a lite listing (no JD) for already-stored postings.
+   */
+  touchSeen(companyId: string, atsJobIds: string[]): Promise<void>;
 
   // ── posting lifecycle (manual, shared-global; §3) ──
   /** manually mark a posting invalid (spam/dupe/fake) with a reason — reversible. */
@@ -146,6 +151,12 @@ export interface PurgeOptions {
   field?: "lastSeen" | "firstSeen";
   /** true → DELETE the rows; false/undefined → soft-delete (mark stale + inactive). */
   hard?: boolean;
+  /**
+   * limit to postings from these sources. Aggregator/HN postings have no per-company
+   * board to diff against, so `markStale` never retires them — a lastSeen TTL scoped to
+   * those sources is how they expire (§3).
+   */
+  sources?: string[];
 }
 
 export interface CompanyEnrichmentPatch {
