@@ -445,6 +445,7 @@ export class PgRepository implements Repository {
       llmApiKey: readLlmKey(r),
       llmBaseUrl: r.llm_base_url ?? "",
       digestCadence: r.digest_cadence ?? "daily",
+      discoveryPresets: r.discovery_presets ?? [],
       discoveryPreset: r.discovery_preset ?? "india",
       presetFeedsDisabled: r.preset_feeds_disabled ?? [],
     };
@@ -453,17 +454,18 @@ export class PgRepository implements Repository {
     const { plain, enc } = writeLlmKey(c.llmApiKey ?? "");
     await this.q(
       `insert into tenant_config (tenant_id, sources_enabled, automation_flags, llm_choice, llm_model, llm_api_key, llm_api_key_enc,
-         llm_base_url, digest_cadence, discovery_preset, preset_feeds_disabled)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+         llm_base_url, digest_cadence, discovery_preset, preset_feeds_disabled, discovery_presets)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
        on conflict (tenant_id) do update set
          sources_enabled = excluded.sources_enabled, automation_flags = excluded.automation_flags,
          llm_choice = excluded.llm_choice, llm_model = excluded.llm_model,
          llm_api_key = excluded.llm_api_key, llm_api_key_enc = excluded.llm_api_key_enc,
          llm_base_url = excluded.llm_base_url, digest_cadence = excluded.digest_cadence,
-         discovery_preset = excluded.discovery_preset, preset_feeds_disabled = excluded.preset_feeds_disabled`,
+         discovery_preset = excluded.discovery_preset, preset_feeds_disabled = excluded.preset_feeds_disabled,
+         discovery_presets = excluded.discovery_presets`,
       [
         c.tenantId, c.sourcesEnabled, JSON.stringify(c.automationFlags), c.llmChoice, c.llmModel ?? "", plain, enc,
-        c.llmBaseUrl ?? "", c.digestCadence, c.discoveryPreset ?? "india", c.presetFeedsDisabled ?? [],
+        c.llmBaseUrl ?? "", c.digestCadence, c.discoveryPreset ?? "india", c.presetFeedsDisabled ?? [], c.discoveryPresets ?? [],
       ],
     );
     return c;

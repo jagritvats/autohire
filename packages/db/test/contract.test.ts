@@ -357,10 +357,11 @@ describe.each(stores)("Repository contract — %s", (name, open) => {
 
   it("config round-trips the discovery preset, disabled preset feeds and the LLM key", async () => {
     const [t1, t2] = [await newTenant(), await newTenant()];
-    await repo.saveConfig(configFor(t1, { discoveryPreset: "eu-uk", presetFeedsDisabled: ["telegram", "hn"] }));
+    await repo.saveConfig(configFor(t1, { discoveryPreset: "eu-uk", discoveryPresets: ["eu-uk", "global-remote"], presetFeedsDisabled: ["telegram", "hn"] }));
     await repo.saveConfig(configFor(t2));
     const c1 = await repo.getConfig(t1);
     expect(c1?.discoveryPreset).toBe("eu-uk");
+    expect(c1?.discoveryPresets).toEqual(["eu-uk", "global-remote"]);
     expect(c1?.presetFeedsDisabled).toEqual(["telegram", "hn"]);
     expect(c1?.llmApiKey).toBe("sk-test-123");
     expect(c1?.sourcesEnabled).toEqual(["greenhouse", "lever"]);

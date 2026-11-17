@@ -26,12 +26,14 @@
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f web worker",
     "docker:migrate": "docker compose run --rm migrate",
-    "docker:rebuild": "docker compose build --no-cache"
+    "docker:rebuild": "docker compose build --no-cache",
+    "screenshots": "pnpm --filter @jobflow/web build && node scripts/screenshots.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
-  }
+  },
+  "license": "MIT"
 }

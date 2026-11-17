@@ -2,6 +2,7 @@ import type { PurgeOptions, Repository } from "@jobflow/db";
 import {
   blankProfile,
   isOnboarded,
+  presetsForPosting,
   pollAll,
   rebuildMatches,
   recheckPostings,
@@ -63,6 +64,8 @@ export interface FeedCard {
   /** global manual lifecycle: invalidated (spam/dupe/fake) + why. */
   invalidated: boolean;
   invalidReason: string | null;
+  /** discovery-preset tags (india / us / eu-uk / global-remote) — filterable in the feed */
+  presets: string[];
 }
 
 export interface FeedData {
@@ -183,7 +186,7 @@ export async function getFeed(repo: Repository, tenantId: string, opts: FeedOpti
   if (opts.view) {
     const query = typeof opts.view === "string" ? (await repo.getSavedSearch(tenantId, opts.view))?.query : opts.view;
     if (query) {
-      const v = applyView(matches, query);
+      const v = applyView(matches, query, { presetsOf: presetsForPosting });
       const data = await shape(repo, tenantId, v.shown);
       return { ...data, stats: { ...data.stats, hidden: v.hidden, hiddenTotal: v.hiddenTotal } };
     }
@@ -305,6 +308,7 @@ function buildCard(
     archived: ctx.archived.has(p.id),
     invalidated: p.status === "invalidated",
     invalidReason: p.invalidReason ?? null,
+    presets: presetsForPosting(p),
   };
 }
 

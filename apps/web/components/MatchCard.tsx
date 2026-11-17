@@ -136,6 +136,15 @@ export function MatchCard({
 
       <div className="actions">
         <span className="arch">{card.archetype.replace(/_/g, "/")}</span>
+        {(card.presets ?? []).length > 0 && (
+          <span className="preset-tags" title="discovery presets this posting belongs to">
+            {card.presets.map((p) => (
+              <span key={p} className="preset-tag">
+                #{p}
+              </span>
+            ))}
+          </span>
+        )}
         <div className="action-btns">
           {onBookmark && (
             <button className="mini" data-on={card.bookmarked} onClick={() => onBookmark(card)} title={card.bookmarked ? "Remove bookmark" : "Bookmark"}>

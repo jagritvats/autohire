@@ -5,6 +5,7 @@ import { importResumeFile, importResumeText, ResumeIoError } from "@jobflow/resu
 import { extractResumeAssisted, isOfflineProvider } from "@jobflow/llm";
 import { tenantProvider } from "./tailor.js";
 import { ensureTenant } from "./tenant.js";
+import { setPresets } from "./discovery.js";
 
 /**
  * Résumé import + onboarding, shared by the web wizard and `jobflow init`. Import never
@@ -85,7 +86,9 @@ export interface OnboardingInput {
   yoe?: number;
   levelBand?: LevelBand;
   stackProfile?: string[];
-  /** built-in discovery preset (india / global-remote / us / eu-uk) */
+  /** built-in discovery presets to switch on (india / global-remote / us / eu-uk) — several allowed */
+  discoveryPresets?: string[];
+  /** @deprecated single preset */
   discoveryPreset?: string;
 }
 
@@ -118,10 +121,8 @@ export async function finishOnboarding(
     levelBand: input.levelBand,
     stackProfile: input.stackProfile,
   });
-  if (input.discoveryPreset) {
-    const config = await repo.getConfig(tenantId);
-    if (config) await repo.saveConfig({ ...config, discoveryPreset: input.discoveryPreset });
-  }
+  const presets = input.discoveryPresets?.length ? input.discoveryPresets : input.discoveryPreset ? [input.discoveryPreset] : [];
+  if (presets.length) await setPresets(repo, tenantId, presets);
   const evidence = await repo.listEvidence(tenantId);
   return { evidenceAdded, readiness: profileReadiness(profile, evidence.length) };
 }

@@ -495,7 +495,12 @@ export const TenantConfig = z.object({
   /** custom base URL / gateway (blank → the provider's default). */
   llmBaseUrl: z.string().default(""),
   digestCadence: z.enum(["off", "daily", "weekly"]).default("daily"),
-  /** built-in discovery preset (`india`, `global-remote`, `us`, `eu-uk`) — custom sources add to it. */
+  /**
+   * built-in discovery presets switched on (`india`, `global-remote`, `us`, `eu-uk`) —
+   * several at once; custom sources add to them. [] → the legacy single `discoveryPreset`.
+   */
+  discoveryPresets: z.array(z.string()).default([]),
+  /** legacy single preset (pre-multi-select rows); read through `activePresets()`. */
   discoveryPreset: z.string().default("india"),
   /** preset feed ids this tenant switched off. */
   presetFeedsDisabled: z.array(z.string()).default([]),
@@ -522,3 +527,10 @@ export type Application = z.infer<typeof Application>;
 /** Where a saved cover letter lives in `Application.answers`; the agent maps it to the
  *  form's cover-letter field rather than fuzzy-matching it as a free-text question. */
 export const COVER_LETTER_ANSWER_KEY = "cover letter";
+
+/** The presets a tenant has switched on (multi-select), falling back to the legacy single one. */
+export function activePresets(c: Pick<TenantConfig, "discoveryPresets" | "discoveryPreset"> | null | undefined): string[] {
+  if (!c) return ["india"];
+  const list = (c.discoveryPresets ?? []).filter(Boolean);
+  return list.length ? [...new Set(list)] : [c.discoveryPreset || "india"];
+}

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { presetFeedSources, presetsForPosting } from "./presets/index.js";
 import {
   SearchQuery,
   applyView,
@@ -145,7 +146,15 @@ export async function adhocSearch(
   const named = opts.sources ?? query.sources;
   const q = named.length && !query.sources.length ? { ...query, sources: named } : query;
 
-  const pool = opts.adapters ?? (named.length ? named.map((s) => cloudAdapter(s)).filter((a): a is SourceAdapter => !!a) : searchCapableAdapters());
+  // a preset tag with no explicit sources searches those presets' own feeds
+  const presetSources = !named.length && query.presets.length ? presetFeedSources(query.presets) : [];
+  const pool =
+    opts.adapters ??
+    (named.length
+      ? named.map((s) => cloudAdapter(s)).filter((a): a is SourceAdapter => !!a)
+      : presetSources.length
+        ? searchCapableAdapters().filter((a) => presetSources.includes(a.source))
+        : searchCapableAdapters());
   const adapters = pool.filter((a) => (a.tier === "tier1" || a.tier === "tier2") && typeof a.toTargets === "function");
 
   const errors: string[] = [];
@@ -225,7 +234,7 @@ export async function adhocSearch(
     scored.push({ posting, match, relevance: searchRelevance(posting, q), inFeed: !!prior && prior.status === "active" });
   }
 
-  const view = applyView(scored, q, { now });
+  const view = applyView(scored, q, { now, presetsOf: presetsForPosting });
   const ranked = [...view.shown].sort((a, b) =>
     opts.sort === "relevance" ? b.relevance - a.relevance || b.match.score - a.match.score : b.match.score - a.match.score || b.relevance - a.relevance,
   );
@@ -269,6 +278,8 @@ export interface SearchFlags {
   title?: string | string[];
   excludeCompany?: string | string[];
   exclude?: string | string[];
+  /** discovery-preset tags: `india`, `us`, `eu-uk`, `global-remote` */
+  preset?: string | string[];
 }
 
 /** split quoted phrases + flags: `"staff backend" --loc "New York,US" --remote` */
@@ -306,6 +317,9 @@ const FLAG_ALIASES: Record<string, keyof SearchFlags | "onsite"> = {
   "exclude-companies": "excludeCompany",
   exclude: "exclude",
   "exclude-keyword": "exclude",
+  preset: "preset",
+  presets: "preset",
+  tag: "preset",
 };
 const BOOLEAN_FLAGS = new Set(["remote", "onsite"]);
 const CURRENCY_CODE = /^(USD|EUR|GBP|INR|CAD|AUD|SGD|CHF|JPY|NZD|SEK|NOK|DKK|PLN|AED|BRL|MXN|ZAR)$/i;
@@ -439,6 +453,7 @@ export function makeSearchQuery(text: string, flags: SearchFlags = {}): SearchQu
     sources: [...new Set(sources)],
     excludeCompanies: list(merged.excludeCompany),
     excludeKeywords: list(merged.exclude),
+    presets: [...new Set(list(merged.preset).map((p) => p.toLowerCase()))],
   });
 }
 

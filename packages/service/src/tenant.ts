@@ -17,6 +17,7 @@ export function defaultConfig(tenantId: string, preset = "india"): TenantConfig 
     llmApiKey: "",
     llmBaseUrl: "",
     digestCadence: "daily",
+    discoveryPresets: [preset],
     discoveryPreset: preset,
     presetFeedsDisabled: [],
   };
