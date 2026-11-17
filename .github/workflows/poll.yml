@@ -5,10 +5,10 @@ name: jobflow-poll
 # Tier 3 (Naukri/Glassdoor/AmbitionBox/LinkedIn) NEVER runs here — local agent only.
 #
 # A scheduled run only makes sense against a HOSTED Postgres (the DATABASE_URL secret):
-# The secret must include ?sslmode=require for hosted Postgres — TLS follows sslmode only.
 # without one the worker falls back to an in-memory store that dies with the runner, so a
 # cron poll would hit every board every 6h and persist nothing. The gate job skips those
 # runs; "Run workflow" (workflow_dispatch) always goes ahead, as an end-to-end smoke test.
+# The secret must include ?sslmode=require for hosted Postgres — TLS follows sslmode only.
 #
 # FORKS: GitHub disables scheduled workflows on forks. To use this cron on your fork,
 # enable Actions in the fork's "Actions" tab and add the secrets below (at least
