@@ -93,6 +93,7 @@ export function SettingsForm({
       llmApiKey: "",
       llmBaseUrl: "",
       digestCadence: "daily",
+      discoveryPresets: [],
       discoveryPreset: "india",
       presetFeedsDisabled: [],
     };

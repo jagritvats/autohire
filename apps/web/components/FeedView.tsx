@@ -28,6 +28,7 @@ export function FeedView({ initial, viewName = null }: { initial: FeedData; view
   const [arch, setArch] = useState<Set<string>>(new Set());
   const [modes, setModes] = useState<Set<string>>(new Set());
   const [geos, setGeos] = useState<Set<string>>(new Set());
+  const [presetTags, setPresetTags] = useState<Set<string>>(new Set());
   const [minScore, setMinScore] = useState(0);
   const [maxYears, setMaxYears] = useState(0); // 0 = any; caps the role's minimum required YoE
   const [hideUsOnly, setHideUsOnly] = useState(false);
@@ -58,6 +59,8 @@ export function FeedView({ initial, viewName = null }: { initial: FeedData; view
       // parsed minimum (min === null) are always kept — never hide on unknown (§11, invariant #4).
       if (maxYears > 0 && c.experience.min != null && c.experience.min > maxYears) return false;
       if (arch.size && !arch.has(c.archetype)) return false;
+      // preset TAG filter: only cards from the chosen presets' companies / feeds
+      if (presetTags.size && !(c.presets ?? []).some((p) => presetTags.has(p))) return false;
       if (modes.size && !modes.has(c.location.mode)) return false;
       if (geos.size && c.location.mode === "remote" && !geos.has(c.location.remoteGeo)) return false;
       if (hideUsOnly && c.location.remoteGeo === "us_only") return false;
@@ -65,7 +68,9 @@ export function FeedView({ initial, viewName = null }: { initial: FeedData; view
       if (minTrust > 0 && c.trust * 100 < minTrust) return false;
       return true;
     });
-  }, [baseCards, arch, modes, geos, minScore, maxYears, hideUsOnly, hideServices, minTrust]);
+  }, [baseCards, arch, modes, geos, presetTags, minScore, maxYears, hideUsOnly, hideServices, minTrust]);
+  // the preset tags present in this feed (only offer filters that can match something)
+  const feedPresets = useMemo(() => [...new Set(baseCards.flatMap((c) => c.presets ?? []))].sort(), [baseCards]);
 
   // India-onsite "allowed" filter: fetch the India-workable feed on first toggle-on.
   const toggleIndia = () => {
@@ -254,6 +259,19 @@ export function FeedView({ initial, viewName = null }: { initial: FeedData; view
             title="Hide roles asking for more than N years of experience. Roles with no stated minimum are kept."
           />
         </div>
+
+        {feedPresets.length > 0 && (
+          <div className="rail-group">
+            <h4>preset</h4>
+            <div className="chip-row">
+              {feedPresets.map((p) => (
+                <button key={p} className="chip" data-on={presetTags.has(p)} onClick={() => toggle(presetTags, p, setPresetTags)}>
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="rail-group">
           <h4>archetype</h4>

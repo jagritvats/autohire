@@ -55,7 +55,7 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
   const [currency, setCurrency] = useState("USD");
   const [archetypes, setArchetypes] = useState<RoleArchetype[]>([]);
   const [locations, setLocations] = useState("remote");
-  const [preset, setPreset] = useState("global-remote");
+  const [presets, setPresets] = useState<string[]>(["global-remote"]);
 
   function seedFromDraft(d: ResumeDraft) {
     setDraft(d);
@@ -146,7 +146,7 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
           yoe,
           levelBand: level,
           stackProfile: skills,
-          discoveryPreset: preset,
+          discoveryPresets: presets,
           prefs: {
             homeCountry: homeCountry.trim().toUpperCase(),
             markets: markets.split(",").map((m) => m.trim().toUpperCase()).filter((m) => /^[A-Z]{2}$/.test(m)),
@@ -378,10 +378,16 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
       {step === "discovery" && (
         <>
           <section className="card-block">
-            <h3>Where to look <span className="hint">— a starting set of companies and boards; add your own anytime</span></h3>
+            <h3>Where to look <span className="hint">— pick one or more starting sets of companies and boards; add your own anytime</span></h3>
             <div className="onb-presets">
               {PRESETS.map((p) => (
-                <button key={p.id} type="button" className="onb-preset" data-on={preset === p.id} onClick={() => setPreset(p.id)}>
+                <button
+                  key={p.id}
+                  type="button"
+                  className="onb-preset"
+                  data-on={presets.includes(p.id)}
+                  onClick={() => setPresets(presets.includes(p.id) ? (presets.length > 1 ? presets.filter((x) => x !== p.id) : presets) : [...presets, p.id])}
+                >
                   <b>{p.label}</b>
                   <span className="hint">{p.detail}</span>
                 </button>

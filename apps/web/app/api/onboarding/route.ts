@@ -28,6 +28,7 @@ const Body = z.object({
   yoe: z.number().min(0).max(60).optional(),
   levelBand: LevelBand.optional(),
   stackProfile: z.array(z.string().max(60)).max(200).optional(),
+  discoveryPresets: z.array(z.string().max(40)).max(10).optional(),
   discoveryPreset: z.string().max(40).optional(),
 });
 

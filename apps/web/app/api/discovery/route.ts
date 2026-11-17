@@ -5,8 +5,9 @@ import {
   addSource,
   listDiscovery,
   removeDiscoverySource,
-  setPreset,
+  setPresets,
   setPresetFeed,
+  togglePreset,
   setSourceEnabledById,
 } from "@jobflow/service";
 import { getRepo } from "@/lib/repo";
@@ -24,7 +25,10 @@ export async function GET(req: Request) {
 }
 
 const Op = z.discriminatedUnion("op", [
-  z.object({ op: z.literal("preset"), id: z.string().max(40) }),
+  /** turn one preset on/off (multi-select) */
+  z.object({ op: z.literal("preset"), id: z.string().max(40), enabled: z.boolean().default(true) }),
+  /** switch on exactly these presets */
+  z.object({ op: z.literal("presets"), ids: z.array(z.string().max(40)).min(1).max(10) }),
   z.object({ op: z.literal("preset_feed"), feedId: z.string().max(80), enabled: z.boolean() }),
   z.object({ op: z.literal("add"), label: z.string().max(120).optional(), config: z.unknown() }),
   z.object({ op: z.literal("toggle"), id: z.string().uuid(), enabled: z.boolean() }),
@@ -41,7 +45,8 @@ export async function POST(req: Request) {
   const repo = await getRepo();
   const b = parsed.data;
   try {
-    if (b.op === "preset") await setPreset(repo, auth.tenantId, b.id);
+    if (b.op === "preset") return NextResponse.json({ presets: await togglePreset(repo, auth.tenantId, b.id, b.enabled) });
+    else if (b.op === "presets") return NextResponse.json({ presets: await setPresets(repo, auth.tenantId, b.ids) });
     else if (b.op === "preset_feed") await setPresetFeed(repo, auth.tenantId, b.feedId, b.enabled);
     else if (b.op === "add") return NextResponse.json({ source: await addSource(repo, auth.tenantId, { label: b.label, config: b.config }) });
     else if (b.op === "toggle") await setSourceEnabledById(repo, auth.tenantId, b.id, b.enabled);

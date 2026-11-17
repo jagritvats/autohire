@@ -731,3 +731,5 @@ a.company:hover { color: var(--signal); }
 .search-bar input { flex: 1 1 260px; min-width: 0; background: var(--bg); border: 1px solid var(--line-bright); border-radius: 5px; color: var(--ink); font-family: var(--mono); font-size: 13px; padding: 9px 10px; }
 .search-bar input:focus { outline: none; border-color: var(--signal-dim); }
 .search-summary { margin: 4px 0 12px; }
+.preset-tags { display: inline-flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.preset-tag { font-size: 9px; letter-spacing: 0.06em; color: var(--blue); opacity: 0.8; }

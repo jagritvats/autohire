@@ -28,6 +28,11 @@ export interface ViewOptions {
   now?: number;
   /** override the location-confidence bar (default 0.85). */
   locationConfidence?: number;
+  /**
+   * the discovery presets a posting belongs to (its company is in a preset's seed list, or
+   * it came from a preset's feed). Needed only when the query filters by `presets`.
+   */
+  presetsOf?: (posting: Posting) => readonly string[];
 }
 
 export interface ViewResult<T> {
@@ -42,6 +47,7 @@ export interface ViewResult<T> {
  * The user's explicit exclusions come first (they're the most definite), then the facets.
  */
 export const VIEW_REASON_ORDER: readonly ViewHiddenReason[] = [
+  "preset",
   "company",
   "keyword",
   "location",
@@ -53,7 +59,7 @@ export const VIEW_REASON_ORDER: readonly ViewHiddenReason[] = [
 ];
 
 export function emptyHiddenCounts(): Record<ViewHiddenReason, number> {
-  return { location: 0, remote: 0, seniority: 0, salary: 0, age: 0, company: 0, keyword: 0, skill: 0 };
+  return { preset: 0, location: 0, remote: 0, seniority: 0, salary: 0, age: 0, company: 0, keyword: 0, skill: 0 };
 }
 
 /** Partition matches into shown/hidden by a view. Order of `shown` is preserved. */
@@ -83,6 +89,12 @@ export function viewHideReason(posting: Posting, query: SearchQuery, opts: ViewO
   const bar = opts.locationConfidence ?? VIEW_LOCATION_CONFIDENCE;
   const loc = posting.location;
   const locKnown = loc.confidence >= bar;
+
+  // preset — a tag filter: the posting must belong to one of the chosen presets
+  if (query.presets.length && opts.presetsOf) {
+    const tags = opts.presetsOf(posting);
+    if (!query.presets.some((p) => tags.includes(p))) return "preset";
+  }
 
   // company — the user excluded it by name
   if (query.excludeCompanies.length) {

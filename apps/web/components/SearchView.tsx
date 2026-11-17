@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import type { FeedCard } from "@/lib/feed";
 import { MatchCard } from "./MatchCard";
 
+const PRESET_TAGS = ["india", "global-remote", "us", "eu-uk"];
+
 interface SavedSearchDTO {
   id: string;
   name: string;
@@ -39,6 +41,9 @@ export function SearchView() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<SavedSearchDTO[]>([]);
   const [saveName, setSaveName] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
+  // presets act as TAGS: restrict a search to those presets' feeds + companies
+  const withTags = (q: string) => (tags.length && !/--presets?\b|--tag\b/.test(q) ? `${q} --preset ${tags.join(",")}` : q);
 
   const loadSaved = async () => {
     const r = await fetch("/api/searches");
@@ -56,7 +61,7 @@ export function SearchView() {
       const r = await fetch("/api/search", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text: q, ingest, limit: 40 }),
+        body: JSON.stringify({ text: withTags(q), ingest, limit: 40 }),
       });
       const body = (await r.json()) as SearchResponse;
       if (!r.ok) throw new Error(body.error ?? "Search failed.");
@@ -96,6 +101,20 @@ export function SearchView() {
             {busy ? "searching…" : "search"}
           </button>
         </form>
+        <div className="chip-row" style={{ marginTop: 10 }}>
+          <span className="hint">presets:</span>
+          {PRESET_TAGS.map((p) => (
+            <button
+              key={p}
+              type="button"
+              className="chip"
+              data-on={tags.includes(p)}
+              onClick={() => setTags(tags.includes(p) ? tags.filter((t) => t !== p) : [...tags, p])}
+            >
+              #{p}
+            </button>
+          ))}
+        </div>
         <div className="field-row" style={{ marginTop: 10 }}>
           <label className="onb-inline">
             <input type="checkbox" checked={ingest} onChange={(e) => setIngest(e.target.checked)} />
@@ -110,7 +129,7 @@ export function SearchView() {
             className="save ghost"
             disabled={!saveName.trim() || !text.trim()}
             onClick={async () => {
-              await op({ op: "save", name: saveName, text });
+              await op({ op: "save", name: saveName, text: withTags(text) });
               setSaveName("");
             }}
           >

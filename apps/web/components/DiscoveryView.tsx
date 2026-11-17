@@ -87,17 +87,25 @@ export function DiscoveryView() {
   }
 
   if (!data) return <p className="hint">loading…</p>;
-  const active = data.presets.find((p) => p.active);
+  const active = data.presets.filter((p) => p.active);
 
   return (
     <div className="settings">
       <section className="card-block">
         <h3>
-          Built-in preset <span className="hint">— a curated starting set of companies and boards</span>
+          Built-in presets <span className="hint">— curated starting sets of companies and boards; switch on as many as you like</span>
         </h3>
         <div className="onb-presets">
           {data.presets.map((p) => (
-            <button key={p.id} type="button" className="onb-preset" data-on={p.active} disabled={busy} onClick={() => void op({ op: "preset", id: p.id })}>
+            <button
+              key={p.id}
+              type="button"
+              className="onb-preset"
+              data-on={p.active}
+              disabled={busy || (p.active && active.length === 1)}
+              title={p.active && active.length === 1 ? "keep at least one preset on" : p.active ? "click to switch off" : "click to switch on"}
+              onClick={() => void op({ op: "preset", id: p.id, enabled: !p.active })}
+            >
               <b>{p.label}</b>
               <span className="hint">{p.description}</span>
               <span className="hint">
@@ -106,18 +114,18 @@ export function DiscoveryView() {
             </button>
           ))}
         </div>
-        {active && (
-          <>
-            <p className="hint" style={{ marginTop: 12 }}>Feeds in “{active.label}” (click to turn off/on):</p>
+        {active.map((a) => (
+          <div key={a.id}>
+            <p className="hint" style={{ marginTop: 12 }}>Feeds in “{a.label}” (click to turn off/on):</p>
             <div className="chip-row">
-              {active.feeds.map((f) => (
+              {a.feeds.map((f) => (
                 <button key={f.id} type="button" className="chip" data-on={f.enabled} onClick={() => void op({ op: "preset_feed", feedId: f.id, enabled: !f.enabled })}>
                   {f.source} · {f.id}
                 </button>
               ))}
             </div>
-          </>
-        )}
+          </div>
+        ))}
       </section>
 
       <section className="card-block">

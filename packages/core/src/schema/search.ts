@@ -37,6 +37,12 @@ export const SearchQuery = z.object({
   sources: z.array(SourceKind).default([]),
   excludeCompanies: z.array(z.string()).default([]),
   excludeKeywords: z.array(z.string()).default([]),
+  /**
+   * discovery-preset TAGS (`india`, `us`, …): only postings from those presets' companies or
+   * feeds. A tag filter, like the others — never a rescoring. For a live search it also
+   * picks the presets' sources when `sources` is empty.
+   */
+  presets: z.array(z.string()).default([]),
 });
 export type SearchQuery = z.infer<typeof SearchQuery>;
 export type SearchQueryInput = z.input<typeof SearchQuery>;
@@ -60,6 +66,7 @@ export type SavedSearch = z.infer<typeof SavedSearch>;
 
 /** why a view hid a match — every hidden card is counted under exactly one reason. */
 export const ViewHiddenReason = z.enum([
+  "preset",
   "location",
   "remote",
   "seniority",

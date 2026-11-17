@@ -136,7 +136,7 @@ describe("applyView — hides only confidently-known values, counts every hide",
     ];
     const matches = items.map(wrap);
     const view = applyView(matches, q, { now: NOW });
-    expect(view.hidden).toEqual({ company: 2, keyword: 1, location: 3, remote: 0, seniority: 1, salary: 1, age: 1, skill: 1 });
+    expect(view.hidden).toEqual({ preset: 0, company: 2, keyword: 1, location: 3, remote: 0, seniority: 1, salary: 1, age: 1, skill: 1 });
     expect(view.hiddenTotal).toBe(10);
     expect(view.shown.map((m) => m.posting.id)).toEqual([items[0]!.id, items[1]!.id]);
     expect(Object.values(view.hidden).reduce((a, b) => a + b, 0)).toBe(view.hiddenTotal);

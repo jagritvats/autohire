@@ -1,4 +1,4 @@
-import { classifyLink, effectiveMarkets, normCompany, type DiscoverySource, type Profile, type SavedSearch, type SourceKind, type TenantConfig } from "@jobflow/core";
+import { activePresets, classifyLink, effectiveMarkets, normCompany, type DiscoverySource, type Profile, type SavedSearch, type SourceKind, type TenantConfig } from "@jobflow/core";
 import { checkUrlSyntax, cloudAdapter, feedKeyFor, isSafeUrl, searchCapableAdapters, type FetchTarget, type SourceAdapter } from "@jobflow/adapters";
 import type { Repository } from "@jobflow/db";
 import type { SeedCompany } from "./discover.js";
@@ -146,29 +146,35 @@ export async function resolveDiscoveryPlan(repo: Repository, opts: DiscoveryPlan
   };
 
   for (const t of tenants) {
-    const preset: DiscoveryPreset = getPreset(t.config?.discoveryPreset) ?? getPreset(DEFAULT_PRESET_ID)!;
-    if (!presets.includes(preset.id)) presets.push(preset.id);
-    const disabled = new Set(t.config?.presetFeedsDisabled ?? []);
-    const enabled = enabledSourcesOf(t.config);
-    for (const f of preset.feeds) {
-      if (disabled.has(f.id) || feedIds.has(f.id)) continue;
-      if (enabled && !enabled.has(f.source)) continue;
-      if (!cloud(f.source)) continue; // never a non-cloud source (invariant #1)
-      const targets = f.targets.filter((tg) => {
-        const k = `${f.source}|${JSON.stringify(tg)}`;
-        if (targetSeen.has(k)) return false;
-        targetSeen.add(k);
-        return true;
-      });
-      if (!targets.length) continue;
-      feedIds.add(f.id);
-      // an untouched preset feed is passed through as-is (the india preset stays identical)
-      const { id: _id, ...feed } = f;
-      feeds.push(targets.length === f.targets.length ? feed : { ...feed, targets });
+    // every preset the tenant switched on (multi-select), unioned with everyone else's
+    const tenantPresets: DiscoveryPreset[] = activePresets(t.config)
+      .map((id) => getPreset(id))
+      .filter((p): p is DiscoveryPreset => !!p);
+    if (!tenantPresets.length) tenantPresets.push(getPreset(DEFAULT_PRESET_ID)!);
+    for (const preset of tenantPresets) {
+      if (!presets.includes(preset.id)) presets.push(preset.id);
+      const disabled = new Set(t.config?.presetFeedsDisabled ?? []);
+      const enabled = enabledSourcesOf(t.config);
+      for (const f of preset.feeds) {
+        if (disabled.has(f.id) || feedIds.has(f.id)) continue;
+        if (enabled && !enabled.has(f.source)) continue;
+        if (!cloud(f.source)) continue; // never a non-cloud source (invariant #1)
+        const targets = f.targets.filter((tg) => {
+          const k = `${f.source}|${JSON.stringify(tg)}`;
+          if (targetSeen.has(k)) return false;
+          targetSeen.add(k);
+          return true;
+        });
+        if (!targets.length) continue;
+        feedIds.add(f.id);
+        // an untouched preset feed is passed through as-is (the india preset stays identical)
+        const { id: _id, ...feed } = f;
+        feeds.push(targets.length === f.targets.length ? feed : { ...feed, targets });
+      }
+      preset.seedCompanies.forEach(addSeed);
+      preset.telegramChannels.forEach(addChannel);
+      for (const m of preset.markets) if (!presetMarkets.includes(m)) presetMarkets.push(m);
     }
-    preset.seedCompanies.forEach(addSeed);
-    preset.telegramChannels.forEach(addChannel);
-    for (const m of preset.markets) if (!presetMarkets.includes(m)) presetMarkets.push(m);
     for (const m of t.profile ? effectiveMarkets(t.profile.prefs) : []) if (!tenantMarkets.includes(m)) tenantMarkets.push(m);
   }
 

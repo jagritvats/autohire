@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { Repository } from "@jobflow/db";
 import {
   DiscoverySourceConfig,
+  activePresets,
   canonicalConfigJson,
   normCompany,
   type DiscoverySource,
@@ -32,23 +33,46 @@ export async function listDiscovery(repo: Repository, tenantId: string): Promise
   await ensureTenant(repo, tenantId);
   const config = await repo.getConfig(tenantId);
   const disabled = new Set(config?.presetFeedsDisabled ?? []);
+  const on = new Set(activePresets(config));
   const presets = listPresets().map((p: DiscoveryPreset) => ({
     id: p.id,
     label: p.label,
     description: p.description,
     markets: p.markets,
-    active: p.id === (config?.discoveryPreset ?? "india"),
+    active: on.has(p.id),
     feeds: p.feeds.map((f) => ({ id: f.id, source: f.source, enabled: !disabled.has(f.id) })),
     companies: p.seedCompanies.length,
   }));
   return { presets, sources: await repo.listDiscoverySources(tenantId), followed: await repo.listFollowedCompanyIds(tenantId) };
 }
 
-export async function setPreset(repo: Repository, tenantId: string, presetId: string): Promise<void> {
-  if (!getPreset(presetId)) throw new Error(`Unknown preset "${presetId}". Try: ${listPresets().map((p) => p.id).join(", ")}`);
+function checkPreset(id: string): void {
+  if (!getPreset(id)) throw new Error(`Unknown preset "${id}". Try: ${listPresets().map((p) => p.id).join(", ")}`);
+}
+
+/** Switch on exactly these presets (multi-select). */
+export async function setPresets(repo: Repository, tenantId: string, presetIds: string[]): Promise<string[]> {
+  const ids = [...new Set(presetIds.map((p) => p.trim().toLowerCase()).filter(Boolean))];
+  if (!ids.length) throw new Error("Keep at least one preset on (add your own sources on top).");
+  ids.forEach(checkPreset);
   await ensureTenant(repo, tenantId);
   const config = await repo.getConfig(tenantId);
-  if (config) await repo.saveConfig({ ...config, discoveryPreset: presetId });
+  if (config) await repo.saveConfig({ ...config, discoveryPresets: ids, discoveryPreset: ids[0]! });
+  return ids;
+}
+
+/** Turn one preset on or off, keeping the others. */
+export async function togglePreset(repo: Repository, tenantId: string, presetId: string, enabled: boolean): Promise<string[]> {
+  checkPreset(presetId);
+  await ensureTenant(repo, tenantId);
+  const current = activePresets(await repo.getConfig(tenantId));
+  const next = enabled ? [...new Set([...current, presetId])] : current.filter((p) => p !== presetId);
+  return setPresets(repo, tenantId, next);
+}
+
+/** @deprecated single-select — use setPresets / togglePreset. */
+export async function setPreset(repo: Repository, tenantId: string, presetId: string): Promise<void> {
+  await setPresets(repo, tenantId, [presetId]);
 }
 
 export async function setPresetFeed(repo: Repository, tenantId: string, feedId: string, enabled: boolean): Promise<void> {
