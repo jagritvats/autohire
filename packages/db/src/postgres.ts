@@ -1,10 +1,11 @@
-import pg from "pg";
-import { ProfilePrefs as ProfilePrefsSchema } from "@jobflow/core";
+import { ProfilePrefs as ProfilePrefsSchema, SearchQuery as SearchQuerySchema } from "@jobflow/core";
 import type {
   AgentHeartbeat,
+  ApiToken,
   Application,
   Company,
   ConnectedContext,
+  DiscoverySource,
   Evidence,
   ExperienceRange,
   Generation,
@@ -19,9 +20,15 @@ import type {
   Profile,
   SalaryBand,
   SalaryEstimate,
+  SavedSearch,
   ScoreBreakdown,
+  Session,
+  Tenant,
   TenantConfig,
+  User,
+  UserRole,
 } from "@jobflow/core";
+import { decryptSecret, encryptSecret } from "./auth/crypto.js";
 import type {
   CompanyEnrichmentPatch,
   EnqueueJob,
@@ -31,30 +38,41 @@ import type {
   SalaryCacheEntry,
   UpsertCompany,
 } from "./repository.js";
+import { pgPoolClient, sqlState, type SqlClient, type SqlRow } from "./sql.js";
 
 /**
  * Postgres-backed Repository. Works against Supabase's Postgres (point DATABASE_URL
- * at the project's connection string) or any local/VPS Postgres + pgvector path.
- * Same interface as InMemoryRepository, so callers are unchanged. Runs as the
- * service/owner role (RLS-bypassing) — the worker + local agent connect this way.
+ * at the project's connection string), any local/VPS Postgres, or PGlite (the CLI's
+ * zero-infra durable store) — all through a `SqlClient` running the same SQL.
+ * Same interface + semantics as InMemoryRepository, so callers are unchanged. Runs as
+ * the service/owner role (RLS-bypassing), so every tenant-scoped statement carries its
+ * own `tenant_id` predicate.
  */
 export class PgRepository implements Repository {
-  private pool: pg.Pool;
+  private db: SqlClient;
 
-  constructor(connectionString = process.env.DATABASE_URL) {
-    if (!connectionString) throw new Error("PgRepository requires DATABASE_URL");
-    this.pool = new pg.Pool({
-      connectionString,
-      ssl: /supabase|amazonaws|render|neon/.test(connectionString) ? { rejectUnauthorized: false } : undefined,
-      max: 8,
-    });
+  /** a SqlClient, or a connection string (default `DATABASE_URL`) for a pg pool. */
+  constructor(client: SqlClient | string | undefined = process.env.DATABASE_URL) {
+    if (client && typeof client === "object") this.db = client;
+    else {
+      if (!client) throw new Error("PgRepository requires DATABASE_URL");
+      this.db = pgPoolClient(client);
+    }
+  }
+
+  /** what this repo runs on: a Postgres server or embedded PGlite. */
+  get kind(): SqlClient["kind"] {
+    return this.db.kind;
+  }
+  get client(): SqlClient {
+    return this.db;
   }
 
   async close(): Promise<void> {
-    await this.pool.end();
+    await this.db.close();
   }
-  private q<T extends pg.QueryResultRow = pg.QueryResultRow>(text: string, params: unknown[] = []) {
-    return this.pool.query<T>(text, params);
+  private q<T extends SqlRow = SqlRow>(text: string, params: unknown[] = []) {
+    return this.db.query<T>(text, params);
   }
 
   // ── companies ──
@@ -390,13 +408,18 @@ export class PgRepository implements Repository {
   }
   async saveProfile(p: Profile): Promise<Profile> {
     await this.q(
-      `insert into profile (id, tenant_id, master_resume, resume_latex, about_text, profile_embedding, yoe, level_band, prefs)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      `insert into profile (id, tenant_id, master_resume, resume_latex, about_text, profile_embedding, yoe, level_band, prefs, onboarded_at, resume_file)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
        on conflict (tenant_id) do update set
          master_resume = excluded.master_resume, resume_latex = excluded.resume_latex,
          about_text = excluded.about_text, profile_embedding = excluded.profile_embedding,
-         yoe = excluded.yoe, level_band = excluded.level_band, prefs = excluded.prefs`,
-      [p.id, p.tenantId, p.masterResume, p.resumeLatex ?? "", p.aboutText ?? "", p.profileEmbedding ? JSON.stringify(p.profileEmbedding) : null, p.yoe, p.levelBand, JSON.stringify(p.prefs)],
+         yoe = excluded.yoe, level_band = excluded.level_band, prefs = excluded.prefs,
+         onboarded_at = excluded.onboarded_at, resume_file = excluded.resume_file`,
+      [
+        p.id, p.tenantId, p.masterResume, p.resumeLatex ?? "", p.aboutText ?? "",
+        p.profileEmbedding ? JSON.stringify(p.profileEmbedding) : null, p.yoe, p.levelBand, JSON.stringify(p.prefs),
+        p.onboardedAt ?? null, p.resumeFile ? JSON.stringify(p.resumeFile) : null,
+      ],
     );
     return p;
   }
@@ -419,7 +442,7 @@ export class PgRepository implements Repository {
       },
       llmChoice: r.llm_choice ?? "echo",
       llmModel: r.llm_model ?? "",
-      llmApiKey: r.llm_api_key ?? "",
+      llmApiKey: readLlmKey(r),
       llmBaseUrl: r.llm_base_url ?? "",
       digestCadence: r.digest_cadence ?? "daily",
       discoveryPreset: r.discovery_preset ?? "india",
@@ -427,15 +450,21 @@ export class PgRepository implements Repository {
     };
   }
   async saveConfig(c: TenantConfig): Promise<TenantConfig> {
+    const { plain, enc } = writeLlmKey(c.llmApiKey ?? "");
     await this.q(
-      `insert into tenant_config (tenant_id, sources_enabled, automation_flags, llm_choice, llm_model, llm_api_key, llm_base_url, digest_cadence)
-       values ($1,$2,$3,$4,$5,$6,$7,$8)
+      `insert into tenant_config (tenant_id, sources_enabled, automation_flags, llm_choice, llm_model, llm_api_key, llm_api_key_enc,
+         llm_base_url, digest_cadence, discovery_preset, preset_feeds_disabled)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
        on conflict (tenant_id) do update set
          sources_enabled = excluded.sources_enabled, automation_flags = excluded.automation_flags,
          llm_choice = excluded.llm_choice, llm_model = excluded.llm_model,
-         llm_api_key = excluded.llm_api_key, llm_base_url = excluded.llm_base_url,
-         digest_cadence = excluded.digest_cadence`,
-      [c.tenantId, c.sourcesEnabled, JSON.stringify(c.automationFlags), c.llmChoice, c.llmModel ?? "", c.llmApiKey ?? "", c.llmBaseUrl ?? "", c.digestCadence],
+         llm_api_key = excluded.llm_api_key, llm_api_key_enc = excluded.llm_api_key_enc,
+         llm_base_url = excluded.llm_base_url, digest_cadence = excluded.digest_cadence,
+         discovery_preset = excluded.discovery_preset, preset_feeds_disabled = excluded.preset_feeds_disabled`,
+      [
+        c.tenantId, c.sourcesEnabled, JSON.stringify(c.automationFlags), c.llmChoice, c.llmModel ?? "", plain, enc,
+        c.llmBaseUrl ?? "", c.digestCadence, c.discoveryPreset ?? "india", c.presetFeedsDisabled ?? [],
+      ],
     );
     return c;
   }
@@ -444,13 +473,15 @@ export class PgRepository implements Repository {
     return rows.map(rowToEvidence);
   }
   async saveEvidence(e: Evidence): Promise<Evidence> {
+    // upsert by id — never across tenants (the WHERE turns a foreign id into a no-op)
     await this.q(
-      `insert into evidence (id, tenant_id, project, headline, detail, metric, tags, embedding)
-       values ($1,$2,$3,$4,$5,$6,$7,$8)
+      `insert into evidence (id, tenant_id, project, headline, detail, metric, tags, embedding, origin)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
        on conflict (id) do update set
          project = excluded.project, headline = excluded.headline, detail = excluded.detail,
-         metric = excluded.metric, tags = excluded.tags, embedding = excluded.embedding`,
-      [e.id, e.tenantId, e.project, e.headline, e.detail, e.metric, e.tags, e.embedding ? JSON.stringify(e.embedding) : null],
+         metric = excluded.metric, tags = excluded.tags, embedding = excluded.embedding, origin = excluded.origin
+       where evidence.tenant_id = excluded.tenant_id`,
+      [e.id, e.tenantId, e.project, e.headline, e.detail, e.metric, e.tags, e.embedding ? JSON.stringify(e.embedding) : null, e.origin ?? "manual"],
     );
     return e;
   }
@@ -651,17 +682,27 @@ export class PgRepository implements Repository {
     return rowToJob(rows[0]!);
   }
   /** Atomic claim — FOR UPDATE SKIP LOCKED so multiple workers never grab the same job. */
-  async claimJob(runtime: JobRuntime): Promise<Job | null> {
+  async claimJob(runtime: JobRuntime, opts?: { tenantId?: string }): Promise<Job | null> {
     const { rows } = await this.q(
       `update job set status = 'running', picked_at = now()
        where id = (
          select id from job where runtime = $1 and status = 'queued'
+           and ($2::uuid is null or tenant_id = $2::uuid)
          order by created_at asc for update skip locked limit 1
        )
        returning *`,
-      [runtime],
+      [runtime, opts?.tenantId ?? null],
     );
     return rows[0] ? rowToJob(rows[0]) : null;
+  }
+  async requeueStuckJobs(runtime: JobRuntime, olderThanMinutes: number): Promise<number> {
+    const { rowCount } = await this.q(
+      `update job set status = 'queued', picked_at = null
+       where runtime = $1 and status = 'running'
+         and picked_at < now() - ($2::double precision * interval '1 minute')`,
+      [runtime, olderThanMinutes],
+    );
+    return rowCount;
   }
   async completeJob(
     id: string,
@@ -697,49 +738,289 @@ export class PgRepository implements Repository {
     const r = rows[0];
     return { tenantId, lastSeen: r.last_seen, version: r.version, flags: r.flags ?? {}, enabledSources: r.enabled_sources ?? [] };
   }
-  // ── PHASE-0 STUBS: implemented with migrations 0014-0017 ──
-  async requeueStuckJobs(..._a: any[]): Promise<any> { throw new Error("PgRepository.requeueStuckJobs: not implemented yet"); }
-  async createTenant(..._a: any[]): Promise<any> { throw new Error("PgRepository.createTenant: not implemented yet"); }
-  async getTenant(..._a: any[]): Promise<any> { throw new Error("PgRepository.getTenant: not implemented yet"); }
-  async listTenants(..._a: any[]): Promise<any> { throw new Error("PgRepository.listTenants: not implemented yet"); }
-  async touchTenantActive(..._a: any[]): Promise<any> { throw new Error("PgRepository.touchTenantActive: not implemented yet"); }
-  async createUser(..._a: any[]): Promise<any> { throw new Error("PgRepository.createUser: not implemented yet"); }
-  async countUsers(..._a: any[]): Promise<any> { throw new Error("PgRepository.countUsers: not implemented yet"); }
-  async findUserByEmail(..._a: any[]): Promise<any> { throw new Error("PgRepository.findUserByEmail: not implemented yet"); }
-  async getUser(..._a: any[]): Promise<any> { throw new Error("PgRepository.getUser: not implemented yet"); }
-  async setUserPassword(..._a: any[]): Promise<any> { throw new Error("PgRepository.setUserPassword: not implemented yet"); }
-  async createSession(..._a: any[]): Promise<any> { throw new Error("PgRepository.createSession: not implemented yet"); }
-  async getSession(..._a: any[]): Promise<any> { throw new Error("PgRepository.getSession: not implemented yet"); }
-  async touchSession(..._a: any[]): Promise<any> { throw new Error("PgRepository.touchSession: not implemented yet"); }
-  async deleteSession(..._a: any[]): Promise<any> { throw new Error("PgRepository.deleteSession: not implemented yet"); }
-  async deleteUserSessions(..._a: any[]): Promise<any> { throw new Error("PgRepository.deleteUserSessions: not implemented yet"); }
-  async createApiToken(..._a: any[]): Promise<any> { throw new Error("PgRepository.createApiToken: not implemented yet"); }
-  async getApiToken(..._a: any[]): Promise<any> { throw new Error("PgRepository.getApiToken: not implemented yet"); }
-  async listApiTokens(..._a: any[]): Promise<any> { throw new Error("PgRepository.listApiTokens: not implemented yet"); }
-  async revokeApiToken(..._a: any[]): Promise<any> { throw new Error("PgRepository.revokeApiToken: not implemented yet"); }
-  async touchApiToken(..._a: any[]): Promise<any> { throw new Error("PgRepository.touchApiToken: not implemented yet"); }
-  async listSavedSearches(..._a: any[]): Promise<any> { throw new Error("PgRepository.listSavedSearches: not implemented yet"); }
-  async getSavedSearch(..._a: any[]): Promise<any> { throw new Error("PgRepository.getSavedSearch: not implemented yet"); }
-  async saveSavedSearch(..._a: any[]): Promise<any> { throw new Error("PgRepository.saveSavedSearch: not implemented yet"); }
-  async deleteSavedSearch(..._a: any[]): Promise<any> { throw new Error("PgRepository.deleteSavedSearch: not implemented yet"); }
-  async recordSavedSearchRun(..._a: any[]): Promise<any> { throw new Error("PgRepository.recordSavedSearchRun: not implemented yet"); }
-  async listAllSourceSearches(..._a: any[]): Promise<any> { throw new Error("PgRepository.listAllSourceSearches: not implemented yet"); }
-  async listDiscoverySources(..._a: any[]): Promise<any> { throw new Error("PgRepository.listDiscoverySources: not implemented yet"); }
-  async saveDiscoverySource(..._a: any[]): Promise<any> { throw new Error("PgRepository.saveDiscoverySource: not implemented yet"); }
-  async deleteDiscoverySource(..._a: any[]): Promise<any> { throw new Error("PgRepository.deleteDiscoverySource: not implemented yet"); }
-  async recordDiscoverySourceRun(..._a: any[]): Promise<any> { throw new Error("PgRepository.recordDiscoverySourceRun: not implemented yet"); }
-  async listAllEnabledDiscoverySources(..._a: any[]): Promise<any> { throw new Error("PgRepository.listAllEnabledDiscoverySources: not implemented yet"); }
-  async followCompany(..._a: any[]): Promise<any> { throw new Error("PgRepository.followCompany: not implemented yet"); }
-  async unfollowCompany(..._a: any[]): Promise<any> { throw new Error("PgRepository.unfollowCompany: not implemented yet"); }
-  async listFollowedCompanyIds(..._a: any[]): Promise<any> { throw new Error("PgRepository.listFollowedCompanyIds: not implemented yet"); }
+  // ── tenants + accounts ──
+  async createTenant(input: { name: string; id?: string }): Promise<Tenant> {
+    // idempotent when an id is given (first signup claiming the default tenant)
+    const { rows } = await this.q(
+      `insert into tenant (id, name) values (coalesce($1::uuid, uuid_generate_v4()), $2)
+       on conflict (id) do nothing returning *`,
+      [input.id ?? null, input.name],
+    );
+    if (rows[0]) return rowToTenant(rows[0]);
+    const existing = await this.getTenant(input.id!);
+    if (!existing) throw new Error(`createTenant: tenant ${input.id} vanished`);
+    return existing;
+  }
+  async getTenant(id: string): Promise<Tenant | null> {
+    const { rows } = await this.q("select * from tenant where id = $1", [id]);
+    return rows[0] ? rowToTenant(rows[0]) : null;
+  }
+  async listTenants(opts?: { activeSinceDays?: number }): Promise<Tenant[]> {
+    if (opts?.activeSinceDays == null) {
+      const { rows } = await this.q("select * from tenant order by created_at, id");
+      return rows.map(rowToTenant);
+    }
+    // a tenant never marked active (single-user / CLI) still counts — it is the operator
+    const { rows } = await this.q(
+      `select * from tenant
+       where last_active_at is null or last_active_at >= now() - ($1::double precision * interval '1 day')
+       order by created_at, id`,
+      [opts.activeSinceDays],
+    );
+    return rows.map(rowToTenant);
+  }
+  async touchTenantActive(id: string): Promise<void> {
+    await this.q("update tenant set last_active_at = now() where id = $1", [id]);
+  }
+  async createUser(input: { tenantId: string; email: string; passwordHash: string | null; role: UserRole }): Promise<User> {
+    try {
+      const { rows } = await this.q(
+        `insert into app_user (tenant_id, email, password_hash, role) values ($1, $2, $3, $4) returning *`,
+        [input.tenantId, input.email.trim().toLowerCase(), input.passwordHash, input.role],
+      );
+      return rowToUser(rows[0]!);
+    } catch (e) {
+      if (sqlState(e) === "23505") throw new Error("email already registered");
+      throw e;
+    }
+  }
+  async countUsers(): Promise<number> {
+    const { rows } = await this.q<{ n: number }>("select count(*)::int as n from app_user");
+    return Number(rows[0]?.n ?? 0);
+  }
+  async findUserByEmail(email: string): Promise<(User & { passwordHash: string | null }) | null> {
+    const { rows } = await this.q("select * from app_user where lower(email) = lower($1)", [email.trim()]);
+    return rows[0] ? { ...rowToUser(rows[0]), passwordHash: rows[0].password_hash ?? null } : null;
+  }
+  async getUser(id: string): Promise<User | null> {
+    const { rows } = await this.q("select * from app_user where id = $1", [id]);
+    return rows[0] ? rowToUser(rows[0]) : null;
+  }
+  async setUserPassword(id: string, passwordHash: string): Promise<void> {
+    await this.q("update app_user set password_hash = $2 where id = $1", [id, passwordHash]);
+  }
 
+  // ── sessions + API tokens (secrets stored as sha256 only) ──
+  async createSession(s: Session & { secretHash: string }): Promise<void> {
+    await this.q(
+      `insert into auth_session (id, user_id, tenant_id, secret_hash, created_at, last_seen_at, expires_at, user_agent)
+       values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [s.id, s.userId, s.tenantId, s.secretHash, s.createdAt, s.lastSeenAt, s.expiresAt, s.userAgent ?? null],
+    );
+  }
+  async getSession(id: string): Promise<(Session & { secretHash: string }) | null> {
+    const { rows } = await this.q("select * from auth_session where id = $1", [id]);
+    const r = rows[0];
+    if (!r) return null;
+    return {
+      id: r.id, userId: r.user_id, tenantId: r.tenant_id, createdAt: r.created_at, lastSeenAt: r.last_seen_at,
+      expiresAt: r.expires_at, userAgent: r.user_agent ?? null, secretHash: r.secret_hash,
+    };
+  }
+  async touchSession(id: string, expiresAt: Date): Promise<void> {
+    await this.q("update auth_session set last_seen_at = now(), expires_at = $2 where id = $1", [id, expiresAt]);
+  }
+  async deleteSession(id: string): Promise<void> {
+    await this.q("delete from auth_session where id = $1", [id]);
+  }
+  async deleteUserSessions(userId: string, exceptId?: string): Promise<number> {
+    const { rowCount } = await this.q(
+      "delete from auth_session where user_id = $1 and ($2::text is null or id <> $2::text)",
+      [userId, exceptId ?? null],
+    );
+    return rowCount;
+  }
+  async createApiToken(t: ApiToken & { secretHash: string }): Promise<void> {
+    await this.q(
+      `insert into api_token (id, tenant_id, user_id, name, scopes, secret_hash, created_at, last_used_at, expires_at, revoked_at)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [t.id, t.tenantId, t.userId ?? null, t.name, t.scopes, t.secretHash, t.createdAt, t.lastUsedAt ?? null, t.expiresAt ?? null, t.revokedAt ?? null],
+    );
+  }
+  async getApiToken(id: string): Promise<(ApiToken & { secretHash: string }) | null> {
+    const { rows } = await this.q("select * from api_token where id = $1", [id]);
+    return rows[0] ? { ...rowToApiToken(rows[0]), secretHash: rows[0].secret_hash } : null;
+  }
+  async listApiTokens(tenantId: string): Promise<ApiToken[]> {
+    const { rows } = await this.q("select * from api_token where tenant_id = $1 order by created_at, id", [tenantId]);
+    return rows.map(rowToApiToken);
+  }
+  async revokeApiToken(tenantId: string, id: string): Promise<boolean> {
+    const { rowCount } = await this.q(
+      "update api_token set revoked_at = now() where id = $2 and tenant_id = $1 and revoked_at is null",
+      [tenantId, id],
+    );
+    return rowCount > 0;
+  }
+  async touchApiToken(id: string): Promise<void> {
+    await this.q("update api_token set last_used_at = now() where id = $1", [id]);
+  }
+
+  // ── saved searches ──
+  async listSavedSearches(tenantId: string): Promise<SavedSearch[]> {
+    const { rows } = await this.q("select * from saved_search where tenant_id = $1 order by lower(name), name", [tenantId]);
+    return rows.map(rowToSavedSearch);
+  }
+  async getSavedSearch(tenantId: string, id: string): Promise<SavedSearch | null> {
+    const { rows } = await this.q("select * from saved_search where tenant_id = $1 and id = $2", [tenantId, id]);
+    return rows[0] ? rowToSavedSearch(rows[0]) : null;
+  }
+  async saveSavedSearch(s: SavedSearch): Promise<SavedSearch> {
+    const clash = () => new Error(`a saved search named "${s.name}" already exists`);
+    const { rows: dup } = await this.q(
+      "select 1 from saved_search where tenant_id = $1 and id <> $2 and lower(name) = lower($3) limit 1",
+      [s.tenantId, s.id, s.name],
+    );
+    if (dup.length) throw clash();
+    const { rows: own } = await this.q<{ tenant_id: string }>("select tenant_id from saved_search where id = $1", [s.id]);
+    if (own[0] && own[0].tenant_id !== s.tenantId) throw new Error("saved search belongs to another tenant");
+    try {
+      await this.q(
+        `insert into saved_search (id, tenant_id, name, query, as_source, as_view, cadence, enabled, last_run_at, last_result, created_at)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+         on conflict (id) do update set
+           name = excluded.name, query = excluded.query, as_source = excluded.as_source, as_view = excluded.as_view,
+           cadence = excluded.cadence, enabled = excluded.enabled,
+           last_run_at = excluded.last_run_at, last_result = excluded.last_result
+         where saved_search.tenant_id = excluded.tenant_id`,
+        [
+          s.id, s.tenantId, s.name, JSON.stringify(s.query), s.asSource, s.asView, s.cadence, s.enabled,
+          s.lastRunAt ?? null, s.lastResult ? JSON.stringify(s.lastResult) : null, s.createdAt ?? new Date(),
+        ],
+      );
+    } catch (e) {
+      if (sqlState(e) === "23505") throw clash(); // lost a race to the unique (tenant, lower(name))
+      throw e;
+    }
+    return s;
+  }
+  async deleteSavedSearch(tenantId: string, id: string): Promise<void> {
+    await this.q("delete from saved_search where tenant_id = $1 and id = $2", [tenantId, id]);
+  }
+  async recordSavedSearchRun(tenantId: string, id: string, result: Record<string, unknown>): Promise<void> {
+    await this.q(
+      "update saved_search set last_run_at = now(), last_result = $3 where tenant_id = $1 and id = $2",
+      [tenantId, id, JSON.stringify(result)],
+    );
+  }
+  async listAllSourceSearches(): Promise<SavedSearch[]> {
+    const { rows } = await this.q("select * from saved_search where enabled and as_source order by created_at, id");
+    return rows.map(rowToSavedSearch);
+  }
+
+  // ── custom discovery sources ──
+  async listDiscoverySources(tenantId: string): Promise<DiscoverySource[]> {
+    const { rows } = await this.q("select * from discovery_source where tenant_id = $1 order by created_at, id", [tenantId]);
+    return rows.map(rowToDiscoverySource);
+  }
+  async saveDiscoverySource(s: DiscoverySource): Promise<DiscoverySource> {
+    // (tenant, configKey) is unique: adding the same feed twice returns the existing row
+    const findDupe = async () => {
+      const { rows } = await this.q(
+        "select * from discovery_source where tenant_id = $1 and config_key = $2 and id <> $3",
+        [s.tenantId, s.configKey, s.id],
+      );
+      return rows[0] ? rowToDiscoverySource(rows[0]) : null;
+    };
+    const dupe = await findDupe();
+    if (dupe) return dupe;
+    const { rows: own } = await this.q<{ tenant_id: string }>("select tenant_id from discovery_source where id = $1", [s.id]);
+    if (own[0] && own[0].tenant_id !== s.tenantId) throw new Error("source belongs to another tenant");
+    try {
+      await this.q(
+        `insert into discovery_source (id, tenant_id, label, config, config_key, enabled, last_run_at, last_status, last_count, last_error, created_at)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+         on conflict (id) do update set
+           label = excluded.label, config = excluded.config, config_key = excluded.config_key, enabled = excluded.enabled,
+           last_run_at = excluded.last_run_at, last_status = excluded.last_status,
+           last_count = excluded.last_count, last_error = excluded.last_error
+         where discovery_source.tenant_id = excluded.tenant_id`,
+        [
+          s.id, s.tenantId, s.label, JSON.stringify(s.config), s.configKey, s.enabled, s.lastRunAt ?? null,
+          s.lastStatus ?? null, s.lastCount ?? null, s.lastError ?? null, s.createdAt ?? new Date(),
+        ],
+      );
+    } catch (e) {
+      if (sqlState(e) === "23505") {
+        const raced = await findDupe(); // a concurrent add of the same feed won
+        if (raced) return raced;
+      }
+      throw e;
+    }
+    return s;
+  }
+  async deleteDiscoverySource(tenantId: string, id: string): Promise<void> {
+    await this.q("delete from discovery_source where tenant_id = $1 and id = $2", [tenantId, id]);
+  }
+  async recordDiscoverySourceRun(
+    id: string,
+    run: { status: "ok" | "empty" | "error"; count: number; error?: string | null },
+  ): Promise<void> {
+    await this.q(
+      "update discovery_source set last_run_at = now(), last_status = $2, last_count = $3, last_error = $4 where id = $1",
+      [id, run.status, run.count, run.error ?? null],
+    );
+  }
+  async listAllEnabledDiscoverySources(): Promise<DiscoverySource[]> {
+    const { rows } = await this.q("select * from discovery_source where enabled order by created_at, id");
+    return rows.map(rowToDiscoverySource);
+  }
+
+  // ── company follows ──
+  async followCompany(tenantId: string, companyId: string): Promise<void> {
+    await this.q(
+      "insert into company_follow (tenant_id, company_id) values ($1, $2) on conflict (tenant_id, company_id) do nothing",
+      [tenantId, companyId],
+    );
+  }
+  async unfollowCompany(tenantId: string, companyId: string): Promise<void> {
+    await this.q("delete from company_follow where tenant_id = $1 and company_id = $2", [tenantId, companyId]);
+  }
+  async listFollowedCompanyIds(tenantId: string): Promise<string[]> {
+    const { rows } = await this.q<{ company_id: string }>(
+      "select company_id from company_follow where tenant_id = $1 order by created_at, company_id",
+      [tenantId],
+    );
+    return rows.map((r) => r.company_id);
+  }
+}
+
+// ── LLM key at rest ──
+// With JOBFLOW_SECRET_KEY set, the key is stored AES-256-GCM-encrypted in llm_api_key_enc
+// and llm_api_key is blanked; without it, plaintext (single-user / legacy). Callers always
+// see plaintext.
+function secretKey(): string | null {
+  return process.env.JOBFLOW_SECRET_KEY?.trim() || null;
+}
+function writeLlmKey(key: string): { plain: string; enc: string | null } {
+  if (!key) return { plain: "", enc: null };
+  const k = secretKey();
+  return k ? { plain: "", enc: encryptSecret(key, k) } : { plain: key, enc: null };
+}
+let warnedLlmKey = false;
+function readLlmKey(r: SqlRow): string {
+  const enc = r.llm_api_key_enc as string | null | undefined;
+  if (enc) {
+    const k = secretKey();
+    if (k) {
+      try {
+        return decryptSecret(enc, k);
+      } catch (e) {
+        if (!warnedLlmKey) console.warn(`[jobflow] stored LLM key could not be decrypted (${(e as Error).message}) — re-enter it in settings`);
+      }
+    } else if (!warnedLlmKey) {
+      console.warn("[jobflow] an encrypted LLM key is stored but JOBFLOW_SECRET_KEY is not set — falling back to the env key");
+    }
+    warnedLlmKey = true;
+  }
+  return r.llm_api_key ?? "";
 }
 
 // ── row mappers ──
 function num(v: unknown): number | null {
   return v == null ? null : Number(v);
 }
-function rowToCompany(r: pg.QueryResultRow): Company {
+function rowToCompany(r: SqlRow): Company {
   return {
     id: r.id, name: r.name, nameNorm: r.name_norm, atsType: r.ats_type, atsSlug: r.ats_slug,
     careersUrl: r.careers_url, fundingStage: r.funding_stage, tags: r.tags ?? [], pollCadence: r.poll_cadence,
@@ -752,7 +1033,7 @@ function rowToCompany(r: pg.QueryResultRow): Company {
     enrichedAt: r.enriched_at ?? null, createdAt: r.created_at,
   };
 }
-function rowToPosting(r: pg.QueryResultRow): Posting {
+function rowToPosting(r: SqlRow): Posting {
   const location: ParsedLocation = {
     mode: r.loc_mode, city: r.loc_city, country: r.loc_country, timezone: r.loc_tz,
     remoteGeo: r.remote_geo, sponsorship: r.sponsorship,
@@ -776,7 +1057,7 @@ function rowToPosting(r: pg.QueryResultRow): Posting {
     canonicalId: r.canonical_id, dedupKey: r.dedup_key,
   };
 }
-function rowToProfile(r: pg.QueryResultRow): Profile {
+function rowToProfile(r: SqlRow): Profile {
   return {
     id: r.id, tenantId: r.tenant_id, masterResume: r.master_resume, resumeLatex: r.resume_latex ?? "",
     aboutText: r.about_text ?? "",
@@ -788,41 +1069,73 @@ function rowToProfile(r: pg.QueryResultRow): Profile {
     resumeFile: parseJson(r.resume_file, null),
   };
 }
-function rowToContext(r: pg.QueryResultRow): ConnectedContext {
+function rowToContext(r: SqlRow): ConnectedContext {
   return {
     id: r.id, tenantId: r.tenant_id, source: r.source, handle: r.handle ?? "", label: r.label ?? "",
     content: r.content ?? "", items: parseJson(r.items, []), enabled: r.enabled, syncedAt: r.synced_at,
   };
 }
-function rowToGeneration(r: pg.QueryResultRow): Generation {
+function rowToGeneration(r: SqlRow): Generation {
   return {
     id: r.id, tenantId: r.tenant_id, postingId: r.posting_id ?? null, kind: r.kind,
     prompt: r.prompt ?? "", content: r.content, model: r.model ?? "echo",
     inputHash: r.input_hash, createdAt: r.created_at,
   };
 }
-function rowToEvidence(r: pg.QueryResultRow): Evidence {
+function rowToEvidence(r: SqlRow): Evidence {
   return { id: r.id, tenantId: r.tenant_id, project: r.project, headline: r.headline, detail: r.detail, metric: r.metric, tags: r.tags ?? [], embedding: parseJson(r.embedding, null), origin: r.origin ?? "manual" };
 }
-function rowToMatch(r: pg.QueryResultRow): Match {
+function rowToMatch(r: SqlRow): Match {
   return {
     id: r.id, tenantId: r.tenant_id, postingId: r.posting_id, score: Number(r.score),
     scoreBreakdown: parseJson<ScoreBreakdown>(r.score_breakdown, {} as ScoreBreakdown), rulePass: r.rule_pass, whyFit: r.why_fit, gap: r.gap,
     stackNote: r.stack_note, levelNote: r.level_note, redFlags: r.red_flags ?? [], generatedAt: r.generated_at,
   };
 }
-function rowToApplication(r: pg.QueryResultRow): Application {
+function rowToApplication(r: SqlRow): Application {
   return {
     id: r.id, tenantId: r.tenant_id, postingId: r.posting_id, status: r.status, appliedVia: r.applied_via,
     tailoredResumeUrl: r.tailored_resume_url, resumeVariant: r.resume_variant, answers: parseJson(r.answers, {}),
     submittedAt: r.submitted_at, nextAction: r.next_action, nextActionAt: r.next_action_at, outcome: r.outcome,
   };
 }
-function rowToJob(r: pg.QueryResultRow): Job {
+function rowToJob(r: SqlRow): Job {
   return {
     id: r.id, tenantId: r.tenant_id, type: r.type, runtime: r.runtime,
     payload: parseJson(r.payload, {}), status: r.status, result: parseJson(r.result, null),
     error: r.error, createdAt: r.created_at, pickedAt: r.picked_at, finishedAt: r.finished_at,
+  };
+}
+function rowToTenant(r: SqlRow): Tenant {
+  return { id: r.id, name: r.name, createdAt: r.created_at, lastActiveAt: r.last_active_at ?? null };
+}
+function rowToUser(r: SqlRow): User {
+  return {
+    id: r.id, tenantId: r.tenant_id, email: r.email, role: r.role, externalId: r.external_id ?? null,
+    createdAt: r.created_at, disabledAt: r.disabled_at ?? null,
+  };
+}
+function rowToApiToken(r: SqlRow): ApiToken {
+  return {
+    id: r.id, tenantId: r.tenant_id, userId: r.user_id ?? null, name: r.name, scopes: r.scopes ?? [],
+    createdAt: r.created_at, lastUsedAt: r.last_used_at ?? null, expiresAt: r.expires_at ?? null, revokedAt: r.revoked_at ?? null,
+  };
+}
+function rowToSavedSearch(r: SqlRow): SavedSearch {
+  const raw = parseJson<Record<string, unknown>>(r.query, {});
+  // parse through Zod so rows saved before a query field existed get its default
+  const q = SearchQuerySchema.safeParse(raw);
+  return {
+    id: r.id, tenantId: r.tenant_id, name: r.name, query: q.success ? q.data : (raw as SavedSearch["query"]),
+    asSource: r.as_source, asView: r.as_view, cadence: r.cadence, enabled: r.enabled,
+    lastRunAt: r.last_run_at ?? null, lastResult: parseJson(r.last_result, null), createdAt: r.created_at,
+  };
+}
+function rowToDiscoverySource(r: SqlRow): DiscoverySource {
+  return {
+    id: r.id, tenantId: r.tenant_id, label: r.label ?? "", config: parseJson(r.config, {} as DiscoverySource["config"]),
+    configKey: r.config_key, enabled: r.enabled, lastRunAt: r.last_run_at ?? null, lastStatus: r.last_status ?? null,
+    lastCount: r.last_count == null ? null : Number(r.last_count), lastError: r.last_error ?? null, createdAt: r.created_at,
   };
 }
 function parseJson<T>(v: unknown, fallback: T): T {
