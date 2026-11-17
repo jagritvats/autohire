@@ -1,0 +1,41 @@
+RILEY SAMPLE
+Backend Engineer
+riley@example.com · +1 555 010 0199 · github.com/riley-sample · linkedin.com/in/riley-sample · Austin, TX
+
+SUMMARY
+Backend engineer with 6+ years of experience building payment and data services in Java and
+JavaScript.
+
+EXPERIENCE
+Example Fintech    Jan 2023 – Present
+Senior Software Engineer
+•  Built an idempotent ledger service in Java and Spring Boot handling 2M transactions/day
+•  Cut p99 API latency from 480ms to 120ms by adding Redis caching
+•  Mentored 3 engineers on Kafka consumer design
+Demo Health    Mar 2021 – Sep 2021
+Contract Backend Engineer
+•  Integrated a claims feed over gRPC for a pilot clinic network
+Sample Retail Co    Jun 2020 – Dec 2022
+Software Engineer
+•  Shipped a Node.js order API on PostgreSQL serving
+300 req/s
+•  Migrated deployments to Docker and Kuber-
+netes, reducing release time by 60%
+Placeholder Labs    May 2019 – Aug 2019
+Software Engineering Intern
+•  Wrote JavaScript tooling for internal dashboards
+
+PROJECTS
+Queue Lens — open-source Kafka consumer-lag dashboard (TypeScript, React)
+•  Used by 40 teams to spot stuck consumers
+Tiny Ledger — double-entry bookkeeping library in Go
+
+TECHNICAL SKILLS
+Languages: Java, JavaScript, TypeScript, Go, SQL
+Backend: Spring Boot, Node.js, Kafka (event-driven), REST APIs, gRPC
+Data: PostgreSQL, Redis
+Infra: Docker, Kubernetes, AWS, Terraform
+Other: Figma, Technical writing
+
+EDUCATION
+B.S. Computer Science, Example State University    2015 – 2019

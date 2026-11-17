@@ -1,0 +1,92 @@
+%-------------------------
+% Fictional résumé fixture ("Riley Sample") in a Jake's-Resume-style template.
+%-------------------------
+\documentclass[letterpaper,11pt]{article}
+\usepackage[hidelinks]{hyperref}
+\usepackage{titlesec}
+\newcommand{\resumeItem}[1]{\item\small{#1 \vspace{-2pt}}}
+\newcommand{\resumeSubheading}[4]{
+  \vspace{-2pt}\item
+    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+      \textbf{#1} & #2 \\
+      \textit{\small#3} & \textit{\small #4} \\
+    \end{tabular*}\vspace{-7pt}
+}
+\newcommand{\resumeProjectHeading}[2]{\item #1 \hfill #2}
+\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.15in, label={}]}
+\newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
+\newcommand{\resumeItemListStart}{\begin{itemize}}
+\newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}
+
+\begin{document}
+
+\begin{center}
+    {\Huge \scshape Riley Sample} \\ \vspace{1pt}
+    Backend Engineer \\ \vspace{1pt}
+    \small \href{mailto:riley@example.com}{\underline{riley@example.com}} $|$ +1 555 010 0199 $|$
+    \href{https://github.com/riley-sample}{\underline{github.com/riley-sample}} $|$
+    \href{https://www.linkedin.com/in/riley-sample}{\underline{linkedin.com/in/riley-sample}} $|$ Austin, TX
+\end{center}
+
+\section{Summary}
+Backend engineer with 6+ years of experience building payment and data services in Java and JavaScript.
+
+\section{Experience}
+  \resumeSubHeadingListStart
+    \resumeSubheading
+      {Senior Software Engineer}{Jan 2023 -- Present}
+      {Example Fintech}{Austin, TX}
+      \resumeItemListStart
+        \resumeItem{Built an idempotent ledger service in Java and Spring Boot handling 2M transactions/day}
+        \resumeItem{Cut p99 API latency from 480ms to 120ms by adding Redis caching}
+        \resumeItem{Mentored 3 engineers on Kafka consumer design}
+      \resumeItemListEnd
+    \resumeSubheading
+      {Contract Backend Engineer}{Mar 2021 -- Sep 2021}
+      {Demo Health}{Remote}
+      \resumeItemListStart
+        \resumeItem{Integrated a claims feed over gRPC for a pilot clinic network}
+      \resumeItemListEnd
+    \resumeSubheading
+      {Software Engineer}{Jun 2020 -- Dec 2022}
+      {Sample Retail Co}{Austin, TX}
+      \resumeItemListStart
+        \resumeItem{Shipped a Node.js order API on PostgreSQL serving 300 req/s}
+        \resumeItem{Migrated deployments to Docker and Kubernetes, reducing release time by 60\%}
+      \resumeItemListEnd
+    \resumeSubheading
+      {Software Engineering Intern}{May 2019 -- Aug 2019}
+      {Placeholder Labs}{Austin, TX}
+      \resumeItemListStart
+        \resumeItem{Wrote JavaScript tooling for internal dashboards}
+      \resumeItemListEnd
+  \resumeSubHeadingListEnd
+
+\section{Projects}
+  \resumeSubHeadingListStart
+    \resumeProjectHeading{\textbf{Queue Lens} --- open-source Kafka consumer-lag dashboard (TypeScript, React)}{}
+      \resumeItemListStart
+        \resumeItem{Used by 40 teams to spot stuck consumers}
+      \resumeItemListEnd
+    \resumeProjectHeading{\textbf{Tiny Ledger} --- double-entry bookkeeping library in Go}{}
+  \resumeSubHeadingListEnd
+
+\section{Technical Skills}
+ \begin{itemize}[leftmargin=0.15in, label={}]
+    \small{\item{
+     \textbf{Languages}{: Java, JavaScript, TypeScript, Go, SQL} \\
+     \textbf{Backend}{: Spring Boot, Node.js, Kafka (event-driven), REST APIs, gRPC} \\
+     \textbf{Data}{: PostgreSQL, Redis} \\
+     \textbf{Infra}{: Docker, Kubernetes, AWS, Terraform} \\
+     \textbf{Other}{: Figma, Technical writing}
+    }}
+ \end{itemize}
+
+\section{Education}
+  \resumeSubHeadingListStart
+    \resumeSubheading
+      {Example State University}{2015 -- 2019}
+      {B.S. Computer Science}{Austin, TX}
+  \resumeSubHeadingListEnd
+
+\end{document}
