@@ -1,9 +1,29 @@
 # JobFlow stack — Postgres + migrate + web + worker, up with one command:
 #   docker compose up -d --build      (or: pnpm docker:up)
 #
-# Secrets come from your gitignored root .env via compose interpolation (${VAR});
-# DATABASE_URL is fixed to the `db` service here. The local AGENT (Tier-3 + form-fill)
-# is intentionally NOT a service — it runs on your machine: `pnpm agent`.
+# Settings come from your gitignored root .env (optional — everything has a default).
+# The `environment:` blocks below always win over .env: DATABASE_URL is fixed to the
+# `db` service and JOBFLOW_DATA_DIR to the `jobflow-data` volume. Blank values in .env
+# (e.g. `LLM_MODEL_STRONG=`) count as unset, so provider defaults apply.
+#
+# Ports are published on 127.0.0.1 only (this machine). To expose the web app on your
+# network set JOBFLOW_WEB_BIND=0.0.0.0 in .env — and JOBFLOW_AUTH=password with a
+# JOBFLOW_SECRET_KEY, or anyone on the network can use it.
+#
+# The local AGENT (Tier-3 + form-fill) is intentionally NOT a service — it runs on your
+# machine (`pnpm agent`) against this Postgres at localhost:5433.
+
+x-app-env: &app-env
+  DATABASE_URL: postgres://postgres:postgres@db:5432/jobflow
+  JOBFLOW_STORE: postgres
+  JOBFLOW_DATA_DIR: /data
+  NODE_ENV: production
+
+# every JOBFLOW_* / LLM_* / *_API_KEY / ADZUNA_* / CAREERJET_* / JSEARCH_* setting in .env
+# reaches web + worker through this (missing .env is fine)
+x-app-env-file: &app-env-file
+  - path: .env
+    required: false
 
 services:
   db:
@@ -13,7 +33,10 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: jobflow
     ports:
-      - "5433:5432" # host 5433 → avoids clashing with a local PG / Supabase :55322
+      # host 127.0.0.1:5433 → avoids clashing with a local Postgres on 5432 and keeps
+      # the default password off the network. DATABASE_URL for host tools:
+      #   postgres://postgres:postgres@localhost:5433/jobflow
+      - "127.0.0.1:5433:5432"
     volumes:
       - jobflow-db:/var/lib/postgresql/data
     healthcheck:
@@ -39,46 +62,38 @@ services:
       context: .
       target: web
       args:
-        INSTALL_LATEX: ${INSTALL_LATEX:-1} # 0 = skip TeX (smaller image; .tex fallback)
+        # 0 = skip TeX (smaller image; .tex download fallback)
+        INSTALL_LATEX: ${INSTALL_LATEX:-1}
+    env_file: *app-env-file
     environment:
-      DATABASE_URL: postgres://postgres:postgres@db:5432/jobflow
-      NODE_ENV: production
-      LLM_PROVIDER: ${LLM_PROVIDER:-echo}
-      LLM_MODEL_CHEAP: ${LLM_MODEL_CHEAP:-}
-      LLM_MODEL_STRONG: ${LLM_MODEL_STRONG:-}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      XAI_API_KEY: ${XAI_API_KEY:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      ADZUNA_APP_ID: ${ADZUNA_APP_ID:-}
-      ADZUNA_APP_KEY: ${ADZUNA_APP_KEY:-}
+      <<: *app-env
     ports:
-      - "3000:3000"
+      - "${JOBFLOW_WEB_BIND:-127.0.0.1}:3000:3000"
+    volumes:
+      - jobflow-data:/data
     depends_on:
       db:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    restart: unless-stopped
 
   worker:
     build:
       context: .
       target: worker
+    env_file: *app-env-file
     environment:
-      DATABASE_URL: postgres://postgres:postgres@db:5432/jobflow
-      NODE_ENV: production
-      LLM_PROVIDER: ${LLM_PROVIDER:-echo}
-      LLM_MODEL_CHEAP: ${LLM_MODEL_CHEAP:-}
-      LLM_MODEL_STRONG: ${LLM_MODEL_STRONG:-}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      XAI_API_KEY: ${XAI_API_KEY:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      ADZUNA_APP_ID: ${ADZUNA_APP_ID:-}
-      ADZUNA_APP_KEY: ${ADZUNA_APP_KEY:-}
+      <<: *app-env
+    volumes:
+      - jobflow-data:/data
     depends_on:
       db:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    restart: unless-stopped
 
 volumes:
   jobflow-db:
+  jobflow-data:
