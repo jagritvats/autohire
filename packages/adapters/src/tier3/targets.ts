@@ -1,3 +1,7 @@
+import type { SearchQuery } from "@jobflow/core";
+import type { SearchTargetContext } from "../types.js";
+import { MAX_TARGETS_PER_QUERY, queryCountries, queryTerms } from "../search.js";
+
 /**
  * India software/engineering Tier-3 poll targeting (§7.1, §11) — the "good-paying SWE
  * in India" sweep. Pure config + helpers shared by the Tier-3 adapters (URL building)
@@ -84,13 +88,26 @@ export function lpaFloorFromInr(salaryFloorInr: number | null | undefined, fallb
 }
 
 /**
- * Build the (query × location) target matrix for a good-paying India SWE sweep.
- * Interleaves locations across queries so a low `maxTargets` cap still yields breadth
- * (varied roles + cities) rather than one query in every city.
+ * Build the (query × location) target matrix for a good-paying India SWE sweep — the India
+ * wrapper of `buildTier3Targets` (identical output).
  */
 export function buildIndiaSweTargets(opts: Tier3PollOptions = {}): Tier3PollTarget[] {
-  const queries = dedupeNonEmpty(opts.queries ?? [...INDIA_SWE_QUERIES]);
-  const hubs = dedupeNonEmpty(opts.locations ?? [...INDIA_TECH_HUBS]);
+  return buildTier3Targets({
+    ...opts,
+    hubs: opts.locations ?? [...INDIA_TECH_HUBS],
+    queries: opts.queries ?? [...INDIA_SWE_QUERIES],
+  });
+}
+
+/**
+ * Region-neutral Tier-3 sweep: (query × hub) cells for any market's hubs (a preset's
+ * `tier3.hubs`, a search's cities). Interleaves locations across queries so a low
+ * `maxTargets` cap still yields breadth (varied roles + cities) rather than one query in
+ * every city.
+ */
+export function buildTier3Targets(opts: Omit<Tier3PollOptions, "locations" | "queries"> & { hubs: readonly string[]; queries: readonly string[] }): Tier3PollTarget[] {
+  const queries = dedupeNonEmpty([...opts.queries]);
+  const hubs = dedupeNonEmpty([...opts.hubs]);
   const minLpa = opts.minLpa && opts.minLpa > 0 ? opts.minLpa : 15;
   const freshnessDays = opts.freshnessDays && opts.freshnessDays > 0 ? opts.freshnessDays : 15;
   const limit = opts.limitPerTarget && opts.limitPerTarget > 0 ? opts.limitPerTarget : 25;
@@ -98,11 +115,10 @@ export function buildIndiaSweTargets(opts: Tier3PollOptions = {}): Tier3PollTarg
   const remote = opts.remote ?? true;
 
   // per query, the location facets to try (a remote pass first, then hubs)
-  const facetsFor = (): string[] => (remote ? ["", ...hubs] : [...hubs]);
+  const facets = remote ? ["", ...hubs] : [...hubs];
 
   // interleave: (q0,f0), (q1,f0), … then (q0,f1), (q1,f1), … → breadth under a cap
   const targets: Tier3PollTarget[] = [];
-  const facets = facetsFor();
   const seen = new Set<string>();
   for (let fi = 0; fi < facets.length && targets.length < maxTargets; fi++) {
     for (let qi = 0; qi < queries.length && targets.length < maxTargets; qi++) {
@@ -115,6 +131,30 @@ export function buildIndiaSweTargets(opts: Tier3PollOptions = {}): Tier3PollTarg
     }
   }
   return targets;
+}
+
+/**
+ * A saved/ad-hoc search mapped onto Tier-3 sweep cells — PURE config for the LOCAL agent
+ * (invariant #1: the cloud never runs these; this only plans). Cities in the query become
+ * hubs; with none, an India market sweeps INDIA_TECH_HUBS; a remote-only query is the
+ * location-agnostic pass alone. A stated INR minimum becomes the soft LPA floor. ≤3 cells.
+ */
+export function tier3TargetsFromQuery(q: SearchQuery, ctx: SearchTargetContext): Tier3PollTarget[] {
+  const queries = queryTerms(q);
+  if (!queries.length) return [];
+  const cities = q.locations.map((l) => (l.city ?? "").trim().toLowerCase()).filter(Boolean);
+  const hubs = q.remote === "only" ? [] : cities.length ? cities : queryCountries(q, ctx).includes("IN") ? [...INDIA_TECH_HUBS] : [];
+  if (q.remote === "exclude" && !hubs.length) return [];
+  const minLpa = q.minSalary && q.minSalary.currency.toUpperCase() === "INR" ? lpaFloorFromInr(q.minSalary.amount) : undefined;
+  return buildTier3Targets({
+    queries,
+    hubs,
+    minLpa,
+    freshnessDays: q.postedWithinDays ?? undefined,
+    remote: q.remote !== "exclude",
+    maxTargets: MAX_TARGETS_PER_QUERY,
+    experienceYears: ctx.yoe > 0 ? Math.round(ctx.yoe) : undefined,
+  });
 }
 
 function dedupeNonEmpty(xs: string[]): string[] {

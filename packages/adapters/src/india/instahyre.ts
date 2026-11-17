@@ -1,5 +1,6 @@
-import type { RawPosting } from "@jobflow/core";
-import { htmlToText, httpJson, httpText, mapPool, httpStatus, liveFromStatus, type FetchTarget, type SourceAdapter, type LivenessTarget } from "../types.js";
+import type { RawPosting, SearchQuery } from "@jobflow/core";
+import { htmlToText, httpJson, httpText, mapPool, httpStatus, liveFromStatus, type FetchTarget, type SourceAdapter, type LivenessTarget, type SearchCaps, type SearchTargetContext } from "../types.js";
+import { inIndia, queryTerms } from "../search.js";
 
 /**
  * Instahyre (Tier 2: the public JSON its search page calls, no login to browse) —
@@ -39,6 +40,16 @@ const PAGE = 35;
 export class InstahyreAdapter implements SourceAdapter {
   readonly source = "instahyre" as const;
   readonly tier = "tier2" as const;
+  readonly searchCaps: SearchCaps = {
+    keywords: true, location: false, country: false, remote: false, postedWithin: false, salaryMin: false, seniority: false, cost: "free",
+  };
+
+  /** India product companies; its search is a SKILLS filter, so skills lead the terms. */
+  toTargets(q: SearchQuery, ctx: SearchTargetContext): FetchTarget[] {
+    if (!inIndia(q, ctx)) return [];
+    const skills = q.mustSkills.length ? q.mustSkills.slice(0, 3) : queryTerms(q);
+    return skills.map((s) => ({ query: s, limit: 40, params: { years: Math.max(0, Math.round(ctx.yoe)) } }));
+  }
 
   /** the public job JSON: 404 once removed, or `is_active: false` while still served (verified 2026-09) */
   async isLive(job: LivenessTarget): Promise<boolean | null> {

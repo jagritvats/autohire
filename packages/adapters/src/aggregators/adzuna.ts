@@ -1,6 +1,7 @@
-import type { RawPosting } from "@jobflow/core";
+import type { RawPosting, SearchQuery } from "@jobflow/core";
 import { hasAdzunaKeys } from "../enrich/adzuna.js";
-import { httpJson, type FetchTarget, type SourceAdapter } from "../types.js";
+import { httpJson, type FetchTarget, type SearchCaps, type SearchTargetContext, type SourceAdapter } from "../types.js";
+import { crossCapped, queryCity, queryCountries, queryTerms } from "../search.js";
 import { highlightedToText } from "./text.js";
 
 /**
@@ -42,11 +43,35 @@ const PAGE_SIZE = 50;
  * Only currencies the core salary parser recognizes — an "SGD …" string would read as USD.
  */
 const CURRENCY: Record<string, string> = { in: "INR", us: "USD", gb: "GBP", de: "EUR" };
+/** countries the Adzuna search API serves (its `/jobs/{country}/search` path). */
+const ADZUNA_COUNTRIES = new Set(["at", "au", "be", "br", "ca", "ch", "de", "es", "fr", "gb", "in", "it", "mx", "nl", "nz", "pl", "sg", "us", "za"]);
 const COUNTRY: Record<string, string> = { in: "India", us: "United States", gb: "United Kingdom", sg: "Singapore", ca: "Canada", de: "Germany" };
 
 export class AdzunaSearchAdapter implements SourceAdapter {
   readonly source = "adzuna" as const;
   readonly tier = "tier1" as const;
+  readonly searchCaps: SearchCaps = {
+    keywords: true, location: true, country: true, remote: false, postedWithin: true, salaryMin: true, seniority: false, cost: "keyed",
+  };
+
+  /**
+   * One target per (term × supported country), city as `where`. `salary_min` only when the
+   * query's currency is the country's own (Adzuna pay is in local currency) — it shapes
+   * the search; the matcher still scores pay softly (invariant #4).
+   */
+  toTargets(q: SearchQuery, ctx: SearchTargetContext): FetchTarget[] {
+    const terms = queryTerms(q);
+    const countries = queryCountries(q, ctx).map((c) => c.toLowerCase()).filter((c) => ADZUNA_COUNTRIES.has(c));
+    if (!terms.length || !countries.length) return [];
+    return crossCapped(terms, countries).map(([term, country]) => {
+      const params: Record<string, string | number | boolean> = { country, maxDaysOld: Math.min(q.postedWithinDays ?? 14, 60) };
+      if (q.minSalary && CURRENCY[country] && q.minSalary.currency.toUpperCase() === CURRENCY[country]) {
+        params.salaryMin = Math.round(q.minSalary.amount);
+      }
+      const city = queryCity(q, country.toUpperCase());
+      return { query: term, limit: 50, params, ...(city ? { location: city } : {}) };
+    });
+  }
 
   async fetch(target: FetchTarget): Promise<RawPosting[]> {
     if (!hasAdzunaKeys()) return []; // key-gated: no keys, no request
@@ -66,6 +91,7 @@ export class AdzunaSearchAdapter implements SourceAdapter {
       qs.set(target.params?.titleOnly ? "title_only" : "what", q);
       if (target.location) qs.set("where", target.location);
       if (target.params?.category) qs.set("category", String(target.params.category));
+      if (target.params?.salaryMin) qs.set("salary_min", String(target.params.salaryMin));
       const data = await httpJson<AdzunaSearchResponse>(`https://api.adzuna.com/v1/api/jobs/${country}/search/${page}?${qs}`);
       const batch = parseAdzunaResults(data, country);
       out.push(...batch);

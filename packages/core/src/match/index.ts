@@ -4,6 +4,8 @@ import { scorePosting, type ScoredMatch, type ScoreWeights, DEFAULT_WEIGHTS } fr
 export * from "./stack.js";
 export * from "./score.js";
 export * from "./trust.js";
+export * from "./region.js";
+export * from "./view.js";
 
 /**
  * Rank a set of postings for a profile. Returns rule-passing matches sorted by

@@ -1,5 +1,6 @@
-import type { RawPosting } from "@jobflow/core";
-import { httpJson, type FetchTarget, type SourceAdapter } from "../types.js";
+import type { RawPosting, SearchQuery } from "@jobflow/core";
+import { httpJson, type FetchTarget, type SearchCaps, type SearchTargetContext, type SourceAdapter } from "../types.js";
+import { expWindow, inIndia, queryTerms } from "../search.js";
 
 /**
  * Hirist.tech (Tier 2: the public JSON its own search page calls, no login) — an
@@ -33,6 +34,16 @@ const PLATFORM_NAMES = /^(hirist(\.tech|\.com)?|iimjobs(\.com)?|updazz)$/i;
 export class HiristAdapter implements SourceAdapter {
   readonly source = "hirist" as const;
   readonly tier = "tier2" as const;
+  readonly searchCaps: SearchCaps = {
+    keywords: true, location: false, country: false, remote: false, postedWithin: false, salaryMin: false, seniority: true, cost: "free",
+  };
+
+  /** India tech board: India markets only; the experience band is the searcher's own (soft). */
+  toTargets(q: SearchQuery, ctx: SearchTargetContext): FetchTarget[] {
+    if (!inIndia(q, ctx)) return [];
+    const { min, max } = expWindow(ctx.yoe);
+    return queryTerms(q).map((term) => ({ query: term, limit: 60, params: { minexp: min, maxexp: max } }));
+  }
 
   async fetch(target: FetchTarget): Promise<RawPosting[]> {
     const limit = target.limit ?? 60;

@@ -1,5 +1,6 @@
-import { classifyLink, type RawPosting } from "@jobflow/core";
-import { COUNTRY_NAMES, htmlToText, httpJson, type FetchTarget, type SourceAdapter } from "../types.js";
+import { classifyLink, type RawPosting, type SearchQuery } from "@jobflow/core";
+import { COUNTRY_NAMES, htmlToText, httpJson, type FetchTarget, type SearchCaps, type SearchTargetContext, type SourceAdapter } from "../types.js";
+import { queryCity, queryCountries, queryTerms } from "../search.js";
 
 /**
  * JSearch (PAID, key-gated, off by default) — the Google-for-Jobs index behind an API, so
@@ -81,6 +82,29 @@ function minIntervalMs(): number {
 export class JSearchAdapter implements SourceAdapter {
   readonly source = "jsearch" as const;
   readonly tier = "tier2" as const;
+  readonly searchCaps: SearchCaps = {
+    keywords: true, location: true, country: true, remote: true, postedWithin: true, salaryMin: false, seniority: false, cost: "paid",
+  };
+
+  /**
+   * PAID: every call spends credits, so a query reaches JSearch only when it names the
+   * source explicitly (`sources: ["jsearch"]`), and then with ONE target.
+   */
+  toTargets(q: SearchQuery, ctx: SearchTargetContext): FetchTarget[] {
+    if (!q.sources.includes("jsearch")) return [];
+    const term = queryTerms(q, 1)[0];
+    if (!term) return [];
+    const country = queryCountries(q, ctx)[0] ?? "";
+    const city = queryCity(q, country || null);
+    const place = city ?? (country ? COUNTRY_NAMES[country] ?? "" : "");
+    const days = q.postedWithinDays;
+    const datePosted = days == null ? "week" : days <= 1 ? "today" : days <= 3 ? "3days" : days <= 7 ? "week" : "month";
+    const params: Record<string, string | number | boolean> = { datePosted };
+    if (country) params.country = country.toLowerCase();
+    if (q.remote === "only") params.remoteOnly = true;
+    return [{ query: term, limit: 30, params, ...(place ? { location: place } : {}) }];
+  }
+
   /** last spend per target (paid source: bound the calls, not just the results). */
   private readonly lastFetch = new Map<string, number>();
 

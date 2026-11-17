@@ -1,5 +1,5 @@
-import type { RawPosting } from "@jobflow/core";
-import { COUNTRY_NAMES, DETAIL_CAP, pickForDetail, htmlToText, httpJson, mapPool, httpStatus, liveFromStatus, type FetchTarget, type SourceAdapter, type LivenessTarget } from "../types.js";
+import { countryCodeFromText, type RawPosting } from "@jobflow/core";
+import { markPartial, COUNTRY_NAMES, DETAIL_CAP, pickForDetail, htmlToText, httpJson, mapPool, httpStatus, liveFromStatus, type FetchTarget, type SourceAdapter, type LivenessTarget } from "../types.js";
 
 /**
  * Workday CXS (Tier 2: the public JSON the careers site itself calls, no auth). The
@@ -85,18 +85,25 @@ export class WorkdayAdapter implements SourceAdapter {
 
     let appliedFacets: Record<string, string[]> = {};
     const countryName = target.location ? COUNTRY_NAMES[target.location.toUpperCase()] ?? target.location : null;
+    // no country facet or site matched: list the board unfiltered (capped) and keep rows
+    // whose location text doesn't place them elsewhere — never a silent [] for a live board
+    let unfiltered = false;
     if (countryName) {
       const first = await post({ appliedFacets: {}, offset: 0 });
-      const facet = findCountryFacet(first?.facets ?? [], countryName);
+      if (!first) return []; // the board didn't answer — nothing to diff against
+      const facet = findCountryFacet(first.facets ?? [], countryName);
       // some tenants (Comcast) have no country facet, only sites named "India - Chennai, …"
-      const sites = facet ? null : findCountrySites(first?.facets ?? [], countryName);
-      if (!facet && !sites) return []; // no roles in that country (or facet missing) — nothing to poll
-      appliedFacets = facet ? { [facet.param]: [facet.id] } : { [sites!.param]: sites!.ids };
+      // or "India Remote"
+      const sites = facet ? null : findCountrySites(first.facets ?? [], countryName);
+      if (facet) appliedFacets = { [facet.param]: [facet.id] };
+      else if (sites) appliedFacets = { [sites.param]: sites.ids };
+      else unfiltered = true;
     }
 
     const jobs: WdJob[] = [];
     let total = Infinity; // Workday reports `total` on the first page only (later pages say 0)
-    for (let offset = 0; offset < Math.min(MAX_LIST, total); offset += PAGE) {
+    const cap = unfiltered ? MAX_UNFILTERED : MAX_LIST;
+    for (let offset = 0; offset < Math.min(cap, total); offset += PAGE) {
       const page = await post({ appliedFacets, offset });
       // a failed page mid-list would make the tail look closed to markStale — all or nothing
       if (!page) return [];
@@ -105,13 +112,17 @@ export class WorkdayAdapter implements SourceAdapter {
       jobs.push(...batch);
       if (batch.length < PAGE) break;
     }
+    // the list stopped at the cap with more on the board: a diff against it would stale the
+    // tail (invariant #5) — say so, and let ingest skip markStale (the TTL sweep retires)
+    const truncated = Number.isFinite(total) && jobs.length < total;
+    const kept = unfiltered && countryName ? jobs.filter((j) => !placedElsewhere(j.locationsText, target.location!, countryName)) : jobs;
 
     const idOf = (j: WdJob) => j.externalPath.match(/_([A-Za-z0-9-]+)$/)?.[1] ?? j.externalPath;
-    const needDetail = pickForDetail(jobs.filter((j) => !target.known?.has(idOf(j))), (j) => j.title, target.limit ?? DETAIL_CAP);
+    const needDetail = pickForDetail(kept.filter((j) => !target.known?.has(idOf(j))), (j) => j.title, target.limit ?? DETAIL_CAP);
     const details = new Map<string, WdDetail | null>();
     await mapPool(needDetail, 3, async (j) => details.set(j.externalPath, await httpJson<WdDetail>(`${api}${j.externalPath}`)));
 
-    return jobs.map((j) => {
+    const out = kept.map((j) => {
       const info = details.get(j.externalPath)?.jobPostingInfo;
       const locs = [info?.location ?? j.locationsText, ...(info?.additionalLocations ?? [])].filter(Boolean);
       const remote = /remote/i.test(info?.remoteType ?? "") || /\bremote\b/i.test(locs.join(" "));
@@ -125,8 +136,9 @@ export class WorkdayAdapter implements SourceAdapter {
         title: j.title,
         jdText: htmlToText(info?.jobDescription),
         jdHtml: info?.jobDescription ?? null,
-        // Workday location strings are often "IND - Bangalore" — append the country name
-        locationRaw: `${remote ? "Remote - " : ""}${locs.join("; ")}${countryName ? `, ${countryName}` : ""}`,
+        // Workday location strings are often "IND - Bangalore" — append the country name when
+        // the country filter put the row there (an unfiltered row's country is only its text)
+        locationRaw: `${remote ? "Remote - " : ""}${locs.join("; ")}${countrySuffix(locs.join(" "), unfiltered, target.location, countryName)}`,
         applyUrl: info?.externalUrl ?? `https://${t.host}/${t.site}${j.externalPath}`,
         salaryRaw: null,
         postedAt: info?.startDate ?? relativePosted(j.postedOn),
@@ -134,7 +146,45 @@ export class WorkdayAdapter implements SourceAdapter {
         raw: j as unknown as Record<string, unknown>,
       } satisfies RawPosting;
     });
+    return truncated || unfiltered ? markPartial(out) : out;
   }
+}
+
+/** an unfiltered fallback list stops here (politeness; the result is marked partial). */
+const MAX_UNFILTERED = 200;
+
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * ", <country>" when the country filter put the row there; for an unfiltered row only when
+ * its own text places it in that country without naming it ("Bangalore" → ", India").
+ */
+function countrySuffix(text: string, unfiltered: boolean, location: string | undefined, countryName: string | null): string {
+  if (!countryName) return "";
+  if (!unfiltered) return `, ${countryName}`;
+  const want = location && location.trim().length === 2 ? location.trim().toUpperCase() : null;
+  return want && !namesCountry(text, countryName) && countryCodeFromText(text) === want ? `, ${countryName}` : "";
+}
+
+/** the text names the country as a whole word ("India Remote", "Pune, India" — not "Indiana"). */
+function namesCountry(text: string, countryName: string): boolean {
+  return new RegExp(`(^|[^\\p{L}])${escapeRe(countryName)}($|[^\\p{L}])`, "iu").test(text);
+}
+
+/**
+ * Unfiltered-fallback row filter: drop a row only when its location text CONFIDENTLY places
+ * it in another country; "2 Locations" / "Remote" / an unknown city stay (invariant #4 —
+ * shaping the poll, never guessing a row away).
+ */
+function placedElsewhere(text: string | undefined, location: string, countryName: string): boolean {
+  const t = (text ?? "").trim();
+  if (!t || namesCountry(t, countryName)) return false;
+  const want = location.trim().length === 2 ? location.trim().toUpperCase() : null;
+  const code = countryCodeFromText(t);
+  if (!code) return false;
+  return want ? code !== want : true;
 }
 
 /** Walk (possibly nested) facets for a value whose descriptor is exactly the country. */
@@ -160,12 +210,13 @@ export function findCountryFacet(facets: WdFacet[], country: string): { param: s
 
 /**
  * Fallback for tenants without a country facet: every location value NAMED for the
- * country — "India - Chennai, …", "India – Virtual – Karnataka", "Pune, India" — under
- * one facet. Anchored on separators so "IN - Indianapolis" / "Indiana" never match.
+ * country — "India - Chennai, …", "India – Virtual – Karnataka", "Pune, India", "India
+ * Remote", "Remote (India)" — under one facet. The country must stand as a whole word, so
+ * "IN - Indianapolis" / "Indiana" never match.
  */
 export function findCountrySites(facets: WdFacet[], country: string): { param: string; ids: string[] } | null {
   const c = country.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const named = new RegExp(`^${c}\\s*[-–—,:]|[-–—,]\\s*${c}\\s*$`, "i");
+  const named = new RegExp(`(^|[^\\p{L}])${c}($|[^\\p{L}])`, "iu");
   const hits = new Map<string, string[]>();
   const walk = (param: string, values: WdFacetValue[] | undefined) => {
     for (const v of values ?? []) {

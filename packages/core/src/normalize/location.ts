@@ -206,10 +206,146 @@ function scoreConfidence(
 /**
  * India-workable = onsite/hybrid in India, OR remote that's open to India
  * (`india_ok` / `worldwide`). Used by the "India-onsite allowed" view filter and
- * as a soft ranking signal — never a hard filter (invariant #4).
+ * as a soft ranking signal — never a hard filter (invariant #4). The India case of the
+ * region-neutral `isWorkableIn` (identical results).
  */
 export function isIndiaWorkable(loc: ParsedLocation): boolean {
-  if (loc.mode === "onsite" || loc.mode === "hybrid") return loc.country === "India";
-  if (loc.mode === "remote") return loc.remoteGeo === "india_ok" || loc.remoteGeo === "worldwide";
+  return isWorkableIn(loc, ["IN"]);
+}
+
+// ── region-neutral helpers (home country / markets are ISO-3166 alpha-2) ──
+
+/** ISO-2 → the country NAME `parseLocation` reports in `ParsedLocation.country`. */
+export const PARSED_COUNTRY_NAME: Readonly<Record<string, string>> = {
+  IN: "India",
+  US: "United States",
+  CA: "Canada",
+};
+
+/**
+ * Countries the parser only resolves to the region "Europe" (it names no European
+ * country). A European home/market vs a "Europe" posting is the right REGION with an
+ * unknown country — never "definitely abroad".
+ */
+export const EUROPE_CODES: ReadonlySet<string> = new Set([
+  "GB", "IE", "DE", "NL", "FR", "ES", "PT", "PL", "IT", "SE", "DK", "FI", "NO", "AT", "BE", "CH",
+  "CZ", "RO", "GR", "HU", "LU", "EE", "LV", "LT", "SK", "SI", "HR", "BG", "IS", "UA", "RS", "CY", "MT",
+]);
+const AMERICAS_CODES: ReadonlySet<string> = new Set(["CA", "MX", "BR", "AR", "CL", "CO", "PE", "UY", "CR"]);
+const APAC_CODES: ReadonlySet<string> = new Set(["SG", "AU", "NZ", "JP", "KR", "HK", "TW", "PH", "MY", "ID", "VN", "TH"]);
+
+/**
+ * Remote geos OPEN to someone living in a country — "remote, eligible from here" per
+ * market. Explicit rows win; other countries fall back by region. IN matches
+ * `isIndiaWorkable` exactly. The Americas include `us_only` because the parser files
+ * "North America" / "Canada" / "LATAM" restrictions under it: a US-only role can't be told
+ * from a Canada-ok one, so it is never treated as closed (soft signal, invariant #4).
+ */
+export const REMOTE_GEOS_FOR_COUNTRY: Readonly<Record<string, readonly RemoteGeo[]>> = {
+  IN: ["india_ok", "worldwide"],
+  US: ["us_only", "us_eu", "worldwide"],
+};
+
+export function remoteGeosForCountry(code: string): RemoteGeo[] {
+  const c = code.trim().toUpperCase();
+  if (!c) return [];
+  const row = REMOTE_GEOS_FOR_COUNTRY[c];
+  if (row) return [...row];
+  if (EUROPE_CODES.has(c)) return ["eu_only", "us_eu", "worldwide"];
+  if (AMERICAS_CODES.has(c)) return ["us_only", "worldwide"];
+  if (APAC_CODES.has(c)) return ["apac_ok", "worldwide"];
+  return ["worldwide"];
+}
+
+/** the remote geo that means "named for this country" (india_ok for IN …), or null. */
+export function primaryRemoteGeo(code: string): RemoteGeo | null {
+  const c = code.trim().toUpperCase();
+  if (c === "IN") return "india_ok";
+  if (c === "US") return "us_only";
+  if (EUROPE_CODES.has(c)) return "eu_only";
+  if (APAC_CODES.has(c)) return "apac_ok";
+  return null;
+}
+
+/** display name for an ISO-2 code (the parser's name where it has one). */
+export function countryDisplayName(code: string): string {
+  const c = code.trim().toUpperCase();
+  return PARSED_COUNTRY_NAME[c] ?? COUNTRY_DISPLAY[c] ?? c;
+}
+const COUNTRY_DISPLAY: Record<string, string> = {
+  GB: "United Kingdom", DE: "Germany", NL: "Netherlands", FR: "France", IE: "Ireland", ES: "Spain",
+  PT: "Portugal", PL: "Poland", SE: "Sweden", CH: "Switzerland", SG: "Singapore", AU: "Australia",
+  NZ: "New Zealand", JP: "Japan", AE: "United Arab Emirates",
+};
+
+/**
+ * Does a parsed posting country match an ISO-2 country? `true` = definitely there,
+ * `false` = definitely elsewhere, `null` = can't tell (no country parsed, or only the
+ * region "Europe" for a European country).
+ */
+export function parsedCountryMatches(parsed: string | null | undefined, code: string): boolean | null {
+  const c = code.trim().toUpperCase();
+  if (!parsed || !c) return null;
+  if (parsed === "Europe") return EUROPE_CODES.has(c) ? null : false;
+  const name = PARSED_COUNTRY_NAME[c];
+  // the parser only ever names India / United States / Canada / Europe, so a country
+  // outside those is definitely not where this posting is
+  return name ? parsed === name : false;
+}
+
+/**
+ * Workable from one of `markets` (ISO-2): onsite/hybrid in a market country (or in
+ * "Europe" for a European market — the parser can't name the country), or remote open to
+ * a market or to a geo in `remoteGeoOk`. A soft prioritisation/view signal, never a gate.
+ */
+export function isWorkableIn(
+  loc: ParsedLocation,
+  markets: readonly string[],
+  remoteGeoOk: readonly RemoteGeo[] = [],
+): boolean {
+  if (loc.mode === "onsite" || loc.mode === "hybrid") {
+    return markets.some((m) => {
+      const hit = parsedCountryMatches(loc.country, m);
+      return hit === true || (hit === null && loc.country === "Europe");
+    });
+  }
+  if (loc.mode === "remote") {
+    const open = new Set<RemoteGeo>(remoteGeoOk);
+    for (const m of markets) for (const g of remoteGeosForCountry(m)) open.add(g);
+    return open.has(loc.remoteGeo);
+  }
   return false;
+}
+
+/** place names → ISO-2 the parser itself doesn't resolve (it only knows IN/US/CA + "Europe"). */
+const COUNTRY_WORDS: Array<[RegExp, string]> = [
+  [/\b(united kingdom|uk|england|scotland|wales|london|manchester|edinburgh|cambridge|oxford|bristol)\b/i, "GB"],
+  [/\b(germany|deutschland|berlin|munich|hamburg|frankfurt|cologne|stuttgart)\b/i, "DE"],
+  [/\b(netherlands|holland|amsterdam|rotterdam|utrecht|eindhoven)\b/i, "NL"],
+  [/\b(france|paris|lyon)\b/i, "FR"],
+  [/\b(ireland|dublin|cork)\b/i, "IE"],
+  [/\b(spain|madrid|barcelona|valencia)\b/i, "ES"],
+  [/\b(portugal|lisbon|porto)\b/i, "PT"],
+  [/\b(poland|warsaw|krakow|wroclaw)\b/i, "PL"],
+  [/\b(sweden|stockholm)\b/i, "SE"],
+  [/\b(switzerland|zurich|geneva)\b/i, "CH"],
+  [/\b(singapore)\b/i, "SG"],
+  [/\b(australia|sydney|melbourne|brisbane)\b/i, "AU"],
+  [/\b(new zealand|auckland)\b/i, "NZ"],
+  [/\b(japan|tokyo|osaka)\b/i, "JP"],
+  [/\b(united arab emirates|uae|dubai|abu dhabi)\b/i, "AE"],
+];
+
+/**
+ * Best-effort ISO-2 for a place NAME ("Bengaluru", "remote-india", "Berlin", "Toronto") —
+ * used to infer a home country from location-preference labels. null when unsure.
+ */
+export function countryCodeFromText(text: string | null | undefined): string | null {
+  const t = (text ?? "").trim();
+  if (!t) return null;
+  if (INDIA_CITIES.test(t)) return "IN";
+  for (const [re, code] of COUNTRY_WORDS) if (re.test(t)) return code;
+  if (CANADA_HINT.test(t)) return "CA";
+  if (US_HINT.test(t)) return "US";
+  return null;
 }

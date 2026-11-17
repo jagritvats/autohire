@@ -3,6 +3,8 @@ import { LevelBandOrder, type LevelBand, type RemoteGeo, type RoleArchetype } fr
 import { cosine, clamp } from "../util/vector.js";
 import { convertCurrency, formatSalary } from "../salary/fx.js";
 import { stackAdjacency, type StackAdjacencyResult } from "./stack.js";
+import { countryDisplayName, parsedCountryMatches, primaryRemoteGeo, remoteGeosForCountry } from "../normalize/location.js";
+import { effectiveHomeCountry, effectiveRemoteGeos } from "./region.js";
 import { EVERGREEN_TITLE_RE, REDATED_SOURCES, TALENT_POOL_JD_RE, scoreSourceTrust } from "./trust.js";
 
 /**
@@ -269,10 +271,39 @@ const GEO_PENALTY: Record<RemoteGeo, number> = {
   unknown: 0.7,
 };
 
+/**
+ * Remote-geo penalty for a user whose home is OUTSIDE India: geos open from home score 1
+ * (handled by the caller); a geo named for somewhere else is a likely dead end.
+ */
+const GEO_PENALTY_ELSEWHERE: Record<RemoteGeo, number> = {
+  worldwide: 1,
+  india_ok: 0.3,
+  apac_ok: 0.5,
+  us_eu: 0.4,
+  eu_only: 0.35,
+  us_only: 0.25,
+  unknown: 0.7,
+};
+/** home unknown: a restricted geo may or may not be open — mildly below an open one. */
+const GEO_PENALTY_UNKNOWN_HOME: Record<RemoteGeo, number> = {
+  worldwide: 1,
+  india_ok: 0.6,
+  apac_ok: 0.6,
+  us_eu: 0.6,
+  eu_only: 0.6,
+  us_only: 0.6,
+  unknown: 0.7,
+};
+
+function geoPenalty(home: string, geo: RemoteGeo): number {
+  if (!home) return GEO_PENALTY_UNKNOWN_HOME[geo];
+  return home === "IN" ? GEO_PENALTY[geo] : GEO_PENALTY_ELSEWHERE[geo];
+}
+
 /** below this, the parsed geo is a guess — dampen the score + flag it honestly (§11.3). */
 const LOW_LOCATION_CONFIDENCE = 0.5;
-/** small honest boost so India-workable roles rank well for a user who wants them (§11.3). */
-const INDIA_ONSITE_BOOST = 0.1;
+/** small honest boost so roles in your own country rank well (§11.3). */
+const HOME_ONSITE_BOOST = 0.1;
 
 function scoreLocation(
   posting: Posting,
@@ -281,6 +312,9 @@ function scoreLocation(
   const loc = posting.location;
   const weights = profile.prefs.locationWeights;
   const flags: string[] = [];
+  // where the user lives (ISO-2; "" = unknown → neutral, nothing is "abroad")
+  const home = effectiveHomeCountry(profile.prefs);
+  const homeGeos = home ? remoteGeosForCountry(home) : [];
 
   // base from the user's weighted ranked prefs (§11.3) — match label fragments
   const labelScore = matchLocationLabel(loc, weights);
@@ -289,29 +323,37 @@ function scoreLocation(
   let note: string | null;
 
   if (loc.mode === "remote") {
-    // geo restriction MULTIPLIES the pref score so a us_only "remote" is down-weighted
+    // geo restriction MULTIPLIES the pref score so a restricted "remote" is down-weighted
     // hard, not surfaced as a clean remote match (§11.3). The user's own `remoteGeoOk`
-    // decides which geos count as open; the penalty table covers the rest.
-    const geoOk = profile.prefs.remoteGeoOk ?? [];
-    const geo = geoOk.includes(loc.remoteGeo) ? 1 : GEO_PENALTY[loc.remoteGeo];
-    const openBonus = loc.remoteGeo === "india_ok" || loc.remoteGeo === "worldwide" ? 0.1 : 0;
+    // plus the geos open from home decide which count as open; the penalty table covers
+    // the rest.
+    const geoOk = [...(profile.prefs.remoteGeoOk ?? []), ...homeGeos];
+    const geo = geoOk.includes(loc.remoteGeo) ? 1 : geoPenalty(home, loc.remoteGeo);
+    const primary = home ? primaryRemoteGeo(home) : null;
+    const openBonus = loc.remoteGeo === "worldwide" || (primary !== null && loc.remoteGeo === primary) ? 0.1 : 0;
     score = clamp(labelScore * geo + openBonus);
     note = `Remote (${loc.remoteGeo}).`;
-    if (loc.remoteGeo === "us_only") {
-      flags.push(`"Remote" is US-only / US work-auth — not actually open to you`);
-      note = `"Remote" but US-only — false-positive remote.`;
-    } else if (loc.remoteGeo === "eu_only") {
+    // restricted geos not open from home get an honest flag (home unknown: say what it is)
+    const closed = !homeGeos.includes(loc.remoteGeo);
+    if (loc.remoteGeo === "us_only" && closed) {
+      flags.push(home ? `"Remote" is US-only / US work-auth — not actually open to you` : `"Remote" is US-only / US work-auth`);
+      note = home ? `"Remote" but US-only — false-positive remote.` : `"Remote" but US-only.`;
+    } else if (loc.remoteGeo === "eu_only" && closed) {
       flags.push(`"Remote" is EU-only`);
-    } else if (loc.remoteGeo === "us_eu") {
+    } else if (loc.remoteGeo === "us_eu" && closed) {
       flags.push(`"Remote" is limited to US/EU`);
+    } else if (loc.remoteGeo === "india_ok" && closed && home) {
+      flags.push(`"Remote" is India-only`);
     }
   } else if (loc.mode === "hybrid" || loc.mode === "onsite") {
-    // onsite/hybrid in India is workable — a small honest boost, not a hard filter.
-    const indiaWorkable = loc.country === "India";
-    score = clamp(indiaWorkable ? labelScore + INDIA_ONSITE_BOOST : labelScore);
+    // onsite/hybrid in your own country is workable — a small honest boost, not a filter.
+    // true = in your country, false = definitely elsewhere, null = can't tell / home unknown
+    const where = home ? parsedCountryMatches(loc.country, home) : null;
+    const atHome = where === true;
+    score = clamp(atHome ? labelScore + HOME_ONSITE_BOOST : labelScore);
     // onsite abroad needs a work visa. Explicit sponsorship keeps it viable; silence is
     // usually "no" for early-career roles, so it's a real (soft) discount + an honest flag.
-    if (loc.country && loc.country !== "India") {
+    if (loc.country && where === false) {
       if (loc.sponsorship === false) {
         score *= 0.3;
         flags.push(`Onsite ${loc.country}, no sponsorship offered`);
@@ -320,7 +362,7 @@ function scoreLocation(
         flags.push(`Onsite ${loc.country} — visa sponsorship not mentioned`);
       }
     }
-    note = `${cap(loc.mode)}${loc.city ? ` · ${loc.city}` : ""}${indiaWorkable ? " · India-workable" : ""}.`;
+    note = `${cap(loc.mode)}${loc.city ? ` · ${loc.city}` : ""}${atHome ? ` · ${countryDisplayName(home)}-workable` : ""}.`;
   } else {
     score = 0.5;
     note = null;
@@ -471,11 +513,15 @@ function hardExclude(posting: Posting, profile: Profile): string | null {
     return `Comp ${top} ${posting.salary.currency} is well below your floor (${floor})`;
   }
 
-  // 2. genuinely impossible location: onsite abroad, no sponsorship, you can't relocate
+  // 2. genuinely impossible location: onsite abroad, no sponsorship, you can't relocate.
+  //    "Abroad" needs a KNOWN home: with no home country set or inferable, nothing is
+  //    abroad and this never fires (region-neutral, nothing assumed).
+  const home = effectiveHomeCountry(profile.prefs);
   if (
     (posting.location.mode === "onsite" || posting.location.mode === "hybrid") &&
     posting.location.country != null &&
-    posting.location.country !== "India" &&
+    home !== "" &&
+    parsedCountryMatches(posting.location.country, home) === false &&
     posting.location.sponsorship === false &&
     !profile.prefs.relocate
   ) {
@@ -491,7 +537,8 @@ function hardExclude(posting: Posting, profile: Profile): string | null {
     loc.mode === "remote" &&
     RESTRICTED_GEOS.has(loc.remoteGeo) &&
     loc.confidence >= RESTRICTION_CONFIDENCE &&
-    !(profile.prefs.remoteGeoOk ?? []).includes(loc.remoteGeo)
+    // geos open from home count as yours (a US user can take a US-only remote role)
+    !effectiveRemoteGeos(profile.prefs).includes(loc.remoteGeo)
   ) {
     return `Remote restricted to ${GEO_LABEL[loc.remoteGeo]} — outside your remote-geo prefs`;
   }
