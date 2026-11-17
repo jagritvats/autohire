@@ -7,6 +7,7 @@ import {
   fillPlanOnPage,
   mapContactToApplicant,
   renderDryRun,
+  resolveApplyUrl,
   type AutomationFlags,
 } from "@jobflow/autofill";
 import type { Company } from "@jobflow/core";
@@ -102,7 +103,12 @@ async function formFill(repo: Repository, job: Job, ctx: HandlerCtx): Promise<Re
   const postingId = job.payload.postingId as string | undefined;
   if (!postingId) throw new Error("form_fill requires payload.postingId");
   const posting = await repo.getPosting(postingId);
-  if (!posting?.applyUrl) throw new Error("posting has no apply URL");
+  if (!posting) throw new Error("posting not found");
+  // Greenhouse postings often link the employer's own careers page, where the form is a
+  // cross-origin iframe our selectors can't reach → open Greenhouse's hosted form instead
+  const company = posting.atsType === "greenhouse" ? await repo.getCompany(posting.companyId).catch(() => null) : null;
+  const applyUrl = resolveApplyUrl(posting.atsType, posting.applyUrl, { slug: company?.atsSlug, jobId: posting.atsJobId });
+  if (!applyUrl) throw new Error("posting has no apply URL");
 
   const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? blankProfile();
   // prefer answers passed on the job; else fall back to the tailored answers saved on
@@ -117,8 +123,9 @@ async function formFill(repo: Repository, job: Job, ctx: HandlerCtx): Promise<Re
   if (app?.tailoredResumeUrl) applicant.resumePath = app.tailoredResumeUrl;
   if (!applicant.email) throw new Error("No contact email set — fill your contact details in Settings first.");
 
-  const ats = posting.atsType === "unknown" ? "greenhouse" : posting.atsType;
-  const plan = buildFillPlan(ats, posting.applyUrl, applicant);
+  // unknown / aggregator sources get the conservative generic field map (fieldMapFor),
+  // never another ATS's selectors
+  const plan = buildFillPlan(posting.atsType, applyUrl, applicant);
 
   const flags: AutomationFlags = { browser: "on", mode: "fill", autosubmit: false, rate: ctx.flags.rate, tier3Sources: ctx.flags.enabledSources };
   const page = await ctx.session.newPage();

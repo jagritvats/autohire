@@ -4,8 +4,9 @@
 //   2. asks the JobFlow app for a match score,
 //   3. injects a small inline panel with "why it fits" + a one-click capture.
 
-// All app calls go through the service worker (it has the localhost host permission);
-// the app only accepts requests from the extension's own origin.
+// All app calls go through the service worker (it holds the configured server's host
+// permission + API token); the app only accepts requests from the extension's origin.
+// Read-only: nothing here fills or submits a form.
 
 function text(selector) {
   return document.querySelector(selector)?.textContent?.trim() || undefined;
@@ -29,8 +30,18 @@ function extractPosting() {
   };
 }
 
+/** LinkedIn is matched site-wide (so SPA navigation INTO /jobs is seen); act on job pages only. */
+function isJobPage() {
+  if (/(^|\.)linkedin\.com$/.test(location.hostname)) return location.pathname.startsWith("/jobs");
+  return true;
+}
+
+// bumps on every navigation so a slow score for the previous job never renders on the next
+let generation = 0;
+
 async function scoreAndRender() {
-  if (document.getElementById("jobflow-panel")) return;
+  const gen = generation;
+  if (!isJobPage() || document.getElementById("jobflow-panel")) return;
   const posting = extractPosting();
   if (!posting.title || posting.jdText.length < 120) return;
 
@@ -41,8 +52,47 @@ async function scoreAndRender() {
   } catch {
     /* app not running — render capture-only panel */
   }
+  if (gen !== generation || document.getElementById("jobflow-panel")) return; // navigated meanwhile
   renderPanel(posting, result);
 }
+
+// ── SPA navigation (LinkedIn, Ashby…): the URL changes without a page load, so the
+// script would otherwise keep showing the FIRST job's score. A content script runs in
+// an isolated world and can't see the page's history.pushState, so watch the URL via
+// DOM mutations + popstate, throttled, and re-score once the new content settles.
+let lastHref = location.href;
+let settleTimer = null;
+let checkQueued = false;
+
+function onPossibleNavigation() {
+  if (location.href === lastHref) return;
+  lastHref = location.href;
+  generation++;
+  document.getElementById("jobflow-panel")?.remove();
+  clearTimeout(settleTimer);
+  // give the SPA time to render the new job; retry once if the JD wasn't there yet
+  settleTimer = setTimeout(() => {
+    const gen = generation;
+    scoreAndRender().then(() => {
+      if (gen === generation && !document.getElementById("jobflow-panel")) {
+        settleTimer = setTimeout(() => void scoreAndRender(), 2000);
+      }
+    });
+  }, 1200);
+}
+
+function queueCheck() {
+  if (checkQueued) return;
+  checkQueued = true;
+  setTimeout(() => {
+    checkQueued = false;
+    onPossibleNavigation();
+  }, 400); // at most a few URL checks per second, however busy the page's DOM is
+}
+
+new MutationObserver(queueCheck).observe(document.documentElement, { childList: true, subtree: true });
+window.addEventListener("popstate", queueCheck);
+window.addEventListener("hashchange", queueCheck);
 
 function esc(s) {
   return String(s).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);

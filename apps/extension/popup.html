@@ -3,24 +3,30 @@
   <head>
     <meta charset="utf-8" />
     <style>
-      body { width: 240px; margin: 0; padding: 16px; background: #08090b; color: #e7e4da; font: 13px/1.5 ui-monospace, monospace; }
+      body { width: 260px; margin: 0; padding: 16px; background: #08090b; color: #e7e4da; font: 13px/1.5 ui-monospace, monospace; }
       h1 { font: italic 22px Georgia, serif; margin: 0 0 4px; }
       h1 span { color: #5ef2a0; }
       .row { display: flex; justify-content: space-between; padding: 7px 0; border-top: 1px solid rgba(180,200,190,.1); }
       .on { color: #5ef2a0; }
       .off { color: #5d635f; }
+      .err { color: #f2b35e; font-size: 11px; margin-top: 8px; }
       .note { color: #5d635f; font-size: 10.5px; margin-top: 10px; }
-      a { color: #6ea8f2; }
+      a { color: #6ea8f2; cursor: pointer; }
     </style>
   </head>
   <body>
     <h1>Job<span>Flow</span></h1>
     <div class="note">Read-only. Acts only on the page you're viewing.</div>
-    <div class="row"><span>master (BROWSER)</span><span id="f-browser" class="off">off</span></div>
-    <div class="row"><span>mode</span><span id="f-mode">capture</span></div>
+    <div class="row"><span>master (BROWSER)</span><span id="f-browser" class="off">—</span></div>
+    <div class="row"><span>mode</span><span id="f-mode" class="off">—</span></div>
     <div class="row"><span>autosubmit</span><span class="off">false · locked</span></div>
-    <div class="row"><span>tier-3 sources</span><span id="f-t3" class="off">none</span></div>
-    <div class="note">Form-fill + Tier-3 cron are separate, flag-guarded, default off. Open the <a href="http://localhost:3000" target="_blank">JobFlow app</a>.</div>
-    <script src="popup.js"></script>
+    <div class="row"><span>tier-3 sources</span><span id="f-t3" class="off">—</span></div>
+    <div id="err" class="err" hidden></div>
+    <div class="note">
+      Form-fill + Tier-3 cron are separate, flag-guarded, default off.
+      Open the <a id="app-link" target="_blank" rel="noopener">JobFlow app</a> ·
+      <a id="options-link">extension options</a>
+    </div>
+    <script type="module" src="popup.js"></script>
   </body>
 </html>
