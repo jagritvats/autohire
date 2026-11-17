@@ -43,7 +43,7 @@ The four ATS/discovery sources were probed live and return real data: **Greenhou
 - ✅ **Application CRM** (`/applications`): track from a card (`+ track`), status pipeline (saved→…→outcome) with a funnel, next-action + due-date reminders, **don't-double-apply badge** (`✓ in CRM`) on the feed.
 
 ### Prep (Pillar 2, §4) — 🟡 generation done, agents pending
-- ✅ Evidence Bank (schema + seed: NexusAlgo / kafka-ui / Verdict / ZFH ledger / Synapse).
+- ✅ Evidence Bank (schema + a fictional sample persona for demos; real users import their own).
 - ✅ Resume tailoring (3 strategy variants + ATS keyword coverage) — evidence-grounded.
 - ✅ Application-answer generation — honest-voice, evidence-cited.
 - ✅ **Tailor rework (2026-09-27)** — the review found tailoring ran on sample evidence under `echo`, told the model to drop the base résumé ("ONLY the evidence"), sent the JD's first 1,200 raw chars (HTML + boilerplate), cut `.tex` templates at 6k chars, accepted truncated LaTeX, and silently cached a template on any model error. Now:

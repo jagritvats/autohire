@@ -1,0 +1,43 @@
+name: Bug report
+description: Something is broken or behaves unexpectedly
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! **Never paste API keys, tokens, session cookies, résumés or other personal data.**
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: How are you running JobFlow?
+      options:
+        - CLI (jobflow …)
+        - Docker Compose
+        - pnpm dev / web
+        - Local agent / extension
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      placeholder: e.g. 0.2.0 or a commit SHA
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: OS, Node version, store (memory / pglite / postgres), LLM provider. Redact secrets.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant log output (redacted). `jobflow doctor --json` output is very helpful.
+      render: shell

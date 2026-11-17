@@ -27,3 +27,6 @@ uploads/
 **/uploads/
 .jobflow-data/
 docs/screenshots/.tmp/
+
+# agent worktrees
+.claude/worktrees/
