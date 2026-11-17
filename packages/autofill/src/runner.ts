@@ -1,3 +1,5 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { actionDelayMs, assertCanFill, assertNeverSubmits, readFlags, type AutomationFlags } from "./flags.js";
 import type { FillPlan, PlannedField } from "./plan.js";
 
@@ -37,7 +39,7 @@ export async function runFill(plan: FillPlan, opts: RunnerOptions = {}): Promise
   // dynamic import keeps playwright an optional peer dep
   const pw = await importPlaywright();
 
-  const context = await pw.chromium.launchPersistentContext(opts.userDataDir ?? defaultProfileDir(), {
+  const context = await pw.chromium.launchPersistentContext(resolveProfileDir(opts.userDataDir), {
     headless: opts.headless ?? false,
     viewport: null,
   });
@@ -56,6 +58,8 @@ export async function fillPlanOnPage(
   opts: { flags: AutomationFlags; dryRun?: boolean },
 ): Promise<FillReport> {
   const { flags } = opts;
+  // the agent calls this directly (not via runFill) — re-assert gate 4 here too
+  assertNeverSubmits(flags);
   const report: FillReport = {
     filled: [],
     skippedNoField: [],
@@ -69,7 +73,9 @@ export async function fillPlanOnPage(
   await sleep(actionDelayMs(flags));
 
   for (const f of plan.fields) {
-    const locator = await firstVisible(page, f.selectors);
+    // file inputs are usually visually hidden behind a styled "Attach" button
+    // (Greenhouse/Lever/Ashby) — they only need to be in the DOM for setInputFiles
+    const locator = f.isFile ? await firstAttached(page, f.selectors) : await firstVisible(page, f.selectors);
     if (!locator) {
       report.skippedNoField.push(f.field);
       continue;
@@ -113,6 +119,19 @@ async function firstVisible(page: PwPage, selectors: string[]): Promise<PwLocato
   return null;
 }
 
+/** First selector that matches an element in the DOM, visible or not (file inputs). */
+async function firstAttached(page: PwPage, selectors: string[]): Promise<PwLocator | null> {
+  for (const sel of selectors) {
+    const loc = page.locator(sel).first();
+    try {
+      if ((await loc.count()) > 0) return loc;
+    } catch {
+      /* invalid selector on this engine → try next */
+    }
+  }
+  return null;
+}
+
 async function findTextareaByLabel(page: PwPage, question: string): Promise<PwLocator | null> {
   // match the first ~5 significant words of the question against labels
   const key = question.toLowerCase().split(/\s+/).slice(0, 5).join(" ");
@@ -130,8 +149,21 @@ function escapeQuotes(s: string): string {
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
-function defaultProfileDir(): string {
-  return process.env.JOBFLOW_BROWSER_PROFILE ?? ".jobflow/browser-profile";
+/**
+ * The persistent browser profile (the user's logged-in sessions). Absolute and
+ * independent of the cwd — a relative default meant `pnpm agent` from the repo root
+ * and from apps/agent used two different profiles (and logins). Override with
+ * JOBFLOW_BROWSER_PROFILE.
+ */
+export function defaultProfileDir(env: NodeJS.ProcessEnv = process.env): string {
+  return resolveProfileDir(undefined, env);
+}
+
+/** An explicit dir (blank = unset, `~` expanded) → env → ~/.jobflow/browser-profile. */
+export function resolveProfileDir(dir: string | undefined, env: NodeJS.ProcessEnv = process.env): string {
+  const set = dir?.trim() || env.JOBFLOW_BROWSER_PROFILE?.trim();
+  if (set) return set === "~" || set.startsWith("~/") ? join(homedir(), set.slice(1)) : set;
+  return join(homedir(), ".jobflow", "browser-profile");
 }
 
 /**
@@ -141,15 +173,18 @@ function defaultProfileDir(): string {
  */
 export async function launchUserContext(opts: { userDataDir?: string; headless?: boolean } = {}): Promise<PwContext> {
   const pw = await importPlaywright();
-  return pw.chromium.launchPersistentContext(opts.userDataDir ?? defaultProfileDir(), {
+  return pw.chromium.launchPersistentContext(resolveProfileDir(opts.userDataDir), {
     headless: opts.headless ?? false,
     viewport: null,
   });
 }
 
 // ── minimal structural types so this file type-checks without @types/playwright ──
+// NOTE: deliberately no click()/press()/tap()/dispatchEvent() here — the runner can't
+// call what the type doesn't expose, so a submit can't sneak in (invariant #2).
 export interface PwLocator {
   first(): PwLocator;
+  count(): Promise<number>;
   isVisible(opts?: { timeout?: number }): Promise<boolean>;
   fill(value: string): Promise<void>;
   setInputFiles(files: string): Promise<void>;

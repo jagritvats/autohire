@@ -26,4 +26,18 @@ describe("never submits (invariant #2)", () => {
       expect(SUBMIT_ACTION.test(src), `${f} looks like it submits a form`).toBe(false);
     }
   });
+
+  it("no source file clicks, presses keys or dispatches events at all", () => {
+    // stricter than the submit-shaped scan: a bare `.click()` on a "Next"/"Apply" button
+    // or an Enter key press in a field can submit a form just as well
+    const dir = join(__dirname, "../src");
+    const INTERACTION = /\.(click|dblclick|tap|press|pressSequentially|check|selectOption|dispatchEvent|requestSubmit|submit)\(|\bkeyboard\.|\bmouse\./;
+    for (const f of readdirSync(dir).filter((n) => n.endsWith(".ts"))) {
+      const src = readFileSync(join(dir, f), "utf8")
+        .split("\n")
+        .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)) // comments may mention them
+        .join("\n");
+      expect(INTERACTION.test(src), `${f} interacts beyond fill/setInputFiles`).toBe(false);
+    }
+  });
 });

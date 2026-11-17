@@ -73,6 +73,74 @@ const WORKDAY: AtsFieldMap = {
   resume: { selectors: ["input[data-automation-id='file-upload-input-ref']", "input[type='file']"], kind: "file" },
 };
 
+/**
+ * Conservative map for forms we have no dedicated map for (aggregator postings, unknown
+ * or unmapped ATSes). Only the unambiguous contact fields, matched on the semantic
+ * markers forms commonly carry (autocomplete tokens, name/id/placeholder/aria-label
+ * words). Deliberately no bare `input[type='file']` fallback: on an unknown form the
+ * first file input may well be a cover-letter or portfolio slot, and the human attaches
+ * the résumé at review rather than us guessing (§7.1).
+ */
+const GENERIC: AtsFieldMap = {
+  firstName: {
+    selectors: [
+      "input[autocomplete='given-name']",
+      "input[name*='first' i][name*='name' i]",
+      "input[id*='first' i][id*='name' i]",
+      "input[placeholder*='first name' i]",
+      "input[aria-label*='first name' i]",
+    ],
+    kind: "text",
+  },
+  lastName: {
+    selectors: [
+      "input[autocomplete='family-name']",
+      "input[name*='last' i][name*='name' i]",
+      "input[id*='last' i][id*='name' i]",
+      "input[name*='surname' i]",
+      "input[placeholder*='last name' i]",
+      "input[aria-label*='last name' i]",
+    ],
+    kind: "text",
+  },
+  fullName: {
+    selectors: [
+      "input[autocomplete='name']",
+      "input[name*='full' i][name*='name' i]",
+      "input[id*='full' i][id*='name' i]",
+      "input[placeholder*='full name' i]",
+      "input[aria-label*='full name' i]",
+    ],
+    kind: "text",
+  },
+  email: {
+    selectors: ["input[type='email']", "input[autocomplete='email']", "input[name*='email' i]", "input[id*='email' i]"],
+    kind: "email",
+  },
+  phone: {
+    selectors: ["input[type='tel']", "input[autocomplete='tel']", "input[name*='phone' i]", "input[id*='phone' i]", "input[name*='mobile' i]"],
+    kind: "tel",
+  },
+  linkedin: {
+    selectors: ["input[name*='linkedin' i]", "input[id*='linkedin' i]", "input[placeholder*='linkedin' i]", "input[aria-label*='linkedin' i]"],
+    kind: "text",
+  },
+  github: {
+    selectors: ["input[name*='github' i]", "input[id*='github' i]", "input[placeholder*='github' i]", "input[aria-label*='github' i]"],
+    kind: "text",
+  },
+  resume: {
+    selectors: [
+      "input[type='file'][name*='resume' i]",
+      "input[type='file'][id*='resume' i]",
+      "input[type='file'][name*='cv' i]",
+      "input[type='file'][id*='cv' i]",
+      "input[type='file'][aria-label*='resume' i]",
+    ],
+    kind: "file",
+  },
+};
+
 const MAPS: Record<string, AtsFieldMap> = {
   greenhouse: GREENHOUSE,
   lever: LEVER,
@@ -81,6 +149,19 @@ const MAPS: Record<string, AtsFieldMap> = {
   workday: WORKDAY,
 };
 
-export function fieldMapFor(ats: AtsType | "workday"): AtsFieldMap {
-  return MAPS[ats] ?? GREENHOUSE; // greenhouse selectors are the most generic fallback
+/** The generic map's identity, for callers that want to say which map a plan used. */
+export const GENERIC_FIELD_MAP: Readonly<AtsFieldMap> = GENERIC;
+
+/** true when `ats` has hand-written selectors (otherwise the generic map is used). */
+export function hasDedicatedFieldMap(ats: string): boolean {
+  return ats in MAPS;
+}
+
+/**
+ * Field map for an ATS. Anything without a dedicated map — `unknown`, aggregator
+ * postings, unmapped ATSes — gets the conservative generic map, never another ATS's
+ * selectors (Greenhouse's `#first_name` etc. mean nothing on a random careers form).
+ */
+export function fieldMapFor(ats: AtsType | "workday" | "generic"): AtsFieldMap {
+  return MAPS[ats] ?? GENERIC;
 }
