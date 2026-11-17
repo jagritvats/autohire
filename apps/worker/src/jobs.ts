@@ -34,7 +34,8 @@ export interface JobCtx {
  * Narratives are cached per posting, so a paid model only sees new or changed top cards.
  */
 export async function narratorFor(repo: Repository, llm: LlmProvider | undefined, profile: Profile): Promise<Narrator | undefined> {
-  const top = Number(process.env.JOBFLOW_RERANK_TOP ?? 15);
+  // a blank value (Actions var / docker env_file) means "default", not 0 = off
+  const top = Number(process.env.JOBFLOW_RERANK_TOP?.trim() || 15);
   if (!llm || llm.name === "echo" || !(top > 0)) return undefined;
   const evidence = await repo.listEvidence(profile.tenantId);
   return {
