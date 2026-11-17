@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@jobflow/adapters": "workspace:*",
+    "@jobflow/autofill": "workspace:*",
     "@jobflow/core": "workspace:*",
     "@jobflow/db": "workspace:*",
     "@jobflow/llm": "workspace:*",
