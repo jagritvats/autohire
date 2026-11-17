@@ -142,15 +142,22 @@ export async function runLoop(
   const intervalMs = opts.intervalMs ?? 3000;
   const log = opts.log ?? ((m) => console.log(new Date().toISOString(), m));
   let lastScheduleCheck = 0;
+  // a runner that died mid-job left it `running` forever — and a stuck `poll` blocks
+  // the liveness scheduler (it waits for queued/running polls) indefinitely
+  await requeueStuck(repo, log);
   for (;;) {
     const job = await repo.claimJob("cloud");
     if (!job) {
       if (opts.once) return;
-      if (opts.scheduleEveryHours && Date.now() - lastScheduleCheck > 60_000) {
+      if (Date.now() - lastScheduleCheck > 60_000) {
         lastScheduleCheck = Date.now();
-        await maybeSchedulePoll(repo, opts.scheduleEveryHours, log).catch((e) => log(`schedule check failed: ${(e as Error).message}`));
-        if (opts.livenessEveryHours) {
-          await maybeScheduleLiveness(repo, opts.livenessEveryHours, log).catch((e) => log(`liveness schedule failed: ${(e as Error).message}`));
+        // requeue BEFORE scheduling, so a freed stuck poll counts as queued again
+        await requeueStuck(repo, log);
+        if (opts.scheduleEveryHours) {
+          await maybeSchedulePoll(repo, opts.scheduleEveryHours, log).catch((e) => log(`schedule check failed: ${(e as Error).message}`));
+          if (opts.livenessEveryHours) {
+            await maybeScheduleLiveness(repo, opts.livenessEveryHours, log).catch((e) => log(`liveness schedule failed: ${(e as Error).message}`));
+          }
         }
       }
       await sleep(intervalMs);
@@ -170,6 +177,18 @@ export async function runLoop(
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+/** cloud jobs (a full poll can take a while) count as orphaned after an hour `running` */
+const STUCK_AFTER_MINUTES = 60;
+
+async function requeueStuck(repo: Repository, log: (m: string) => void): Promise<void> {
+  try {
+    const n = await repo.requeueStuckJobs("cloud", STUCK_AFTER_MINUTES);
+    if (n > 0) log(`↺ re-queued ${n} cloud job(s) stuck in 'running' > ${STUCK_AFTER_MINUTES}m (a runner died mid-job)`);
+  } catch (e) {
+    log(`requeue of stuck jobs failed: ${(e as Error).message}`);
+  }
 }
 
 /**
