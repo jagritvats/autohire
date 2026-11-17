@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Evidence, Profile } from "@jobflow/core";
+import type { Profile } from "@jobflow/core";
 import { normCompany } from "@jobflow/core";
 import type { SeedCompany } from "./discover.js";
 import { INDIA_EMPLOYER_BOARDS, INDIA_SERVICES_BOARDS } from "./seeds-employers.js";

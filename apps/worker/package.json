@@ -19,7 +19,8 @@
     "@jobflow/core": "workspace:*",
     "@jobflow/db": "workspace:*",
     "@jobflow/llm": "workspace:*",
-    "@jobflow/pipeline": "workspace:*"
+    "@jobflow/pipeline": "workspace:*",
+    "@jobflow/service": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.19.2"
