@@ -23,6 +23,8 @@ pnpm add -w playwright
 npx playwright install chromium
 ```
 
+Form filling is off by default; switch it on once with `pnpm jobflow config set automation.fill on`.
+
 It opens the form in a persistent browser profile under `~/.jobflow/browser-profile`
 (log in to sites there once if they need it), types only the contact details and answers
 you stored, attaches your tailored résumé (or base résumé), and waits. Greenhouse, Lever,

@@ -47,6 +47,12 @@ describe("presets as search / feed tags", () => {
     expect(presetsForPosting(posting({ companyName: indiaCo }))).toContain("india");
     expect(presetsForPosting(posting({ source: "hirist" }))).toContain("india");
     expect(presetsForPosting(posting({}))).toEqual([]);
+    // a feed every preset shares tags by fit, not all four
+    const hn = (location: Partial<Posting["location"]>) =>
+      presetsForPosting(posting({ source: "hn_whoishiring", location: { ...posting({}).location, ...location } as Posting["location"] }));
+    expect(hn({ mode: "onsite", city: "Bengaluru", country: "India", confidence: 0.9 })).toContain("india");
+    expect(hn({ mode: "onsite", city: "Bengaluru", country: "India", confidence: 0.9 })).not.toContain("us");
+    expect(hn({ mode: "remote", remoteGeo: "worldwide", confidence: 0.9 })).toContain("global-remote");
   });
 
   it("--preset parses into query.presets; a preset search asks that preset's feeds", () => {

@@ -1,4 +1,4 @@
-import { EUROPE_CODES, effectiveHomeCountry, effectiveMarkets, normCompany, type Posting, type ProfilePrefs, type SourceKind } from "@jobflow/core";
+import { EUROPE_CODES, effectiveHomeCountry, effectiveMarkets, isWorkableIn, normCompany, type Posting, type ProfilePrefs, type SourceKind } from "@jobflow/core";
 import type { DiscoveryPreset } from "./types.js";
 import { INDIA_PRESET } from "./india.js";
 import { US_PRESET } from "./us.js";
@@ -63,14 +63,33 @@ function indexPresets(): Map<string, PresetIndex> {
 }
 
 /**
- * The presets a posting belongs to: its company is in a preset's company list, or it came
- * from one of the preset's feeds (a feed shared by several presets tags all of them).
+ * The presets a posting belongs to:
+ *  - its company is in the preset's company list, or
+ *  - it came from a feed only that preset uses, or
+ *  - it came from a feed SEVERAL presets share (HN, Remotive…) and its location fits the
+ *    preset's markets (a market-less preset like global-remote takes remote roles open
+ *    worldwide) — so a shared feed doesn't stamp every tag on every posting.
  */
-export function presetsForPosting(posting: Pick<Posting, "companyName" | "source">): string[] {
+export function presetsForPosting(posting: Pick<Posting, "companyName" | "source"> & Partial<Pick<Posting, "location">>): string[] {
   const co = normCompany(posting.companyName);
+  const ix = indexPresets();
+  const sharing = [...ix.values()].filter((x) => x.sources.has(posting.source)).length;
   const out: string[] = [];
-  for (const [id, ix] of indexPresets()) if ((co && ix.companies.has(co)) || ix.sources.has(posting.source)) out.push(id);
+  for (const p of PRESETS) {
+    const entry = ix.get(p.id)!;
+    if (co && entry.companies.has(co)) {
+      out.push(p.id);
+      continue;
+    }
+    if (!entry.sources.has(posting.source)) continue;
+    if (sharing <= 1 || !posting.location || fitsPreset(posting.location, p)) out.push(p.id);
+  }
   return out;
+}
+
+function fitsPreset(loc: Posting["location"], p: DiscoveryPreset): boolean {
+  if (!p.markets.length) return loc.mode === "remote" && (loc.remoteGeo === "worldwide" || loc.remoteGeo === "unknown");
+  return isWorkableIn(loc, p.markets);
 }
 
 /** the feed sources of these presets (what a preset-tagged live search asks). */

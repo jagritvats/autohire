@@ -79,8 +79,8 @@ pnpm jobflow apply '#1' --fill           # fill it in your browser, then YOU rev
 pnpm jobflow track status '#1' applied
 ```
 
-`--fill` uses Playwright in a browser profile on your machine (`pnpm add -w playwright &&
-npx playwright install chromium` once). It **never submits** — there's no option for it and
+`--fill` uses Playwright in a browser profile on your machine (once: `pnpm add -w playwright &&
+npx playwright install chromium`, then `pnpm jobflow config set automation.fill on`). It **never submits** — there's no option for it and
 no code path that does. See [guides/apply.md](guides/apply.md).
 
 ## Add an LLM (optional)

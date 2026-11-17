@@ -134,6 +134,28 @@ async function pollSources(repo: Repository, opts: PollOptions): Promise<PollSta
   }
   const countries = opts.country ? [opts.country] : (plan?.pollCountries ?? []);
 
+  // 0. seed employers new to the registry (first run, a newly switched-on preset, a custom
+  //    company list) are resolved to boards FIRST, so this same run polls them — otherwise a
+  //    fresh install's first sync polls zero boards and only feeds
+  if (plan && opts.discoverNewSeeds !== false && !opts.companyId) {
+    const fresh: SeedCompany[] = [];
+    for (const s of plan.seeds) {
+      const c = await repo.findCompanyByNameNorm(normCompany(s.name));
+      if (!c) fresh.push(s);
+    }
+    if (fresh.length) {
+      try {
+        const d = await discoverCompanies(repo, fresh, { markets: plan.pollCountries });
+        log(`  seeds: ${fresh.length} new → ${d.resolved} boards`);
+      } catch (e) {
+        stats.errors.push(`seed discovery: ${(e as Error).message}`);
+      }
+    }
+    for (const id of plan.companyListSourceIds) {
+      await repo.recordDiscoverySourceRun(id, { status: "ok", count: fresh.length }).catch(() => {});
+    }
+  }
+
   // 1. registered ATS boards (the rich, ghost-free spine) — pooled across hosts
   const companies = opts.companyId
     ? (await repo.listCompanies()).filter((c) => c.id === opts.companyId)
@@ -212,26 +234,6 @@ async function pollSources(repo: Repository, opts: PollOptions): Promise<PollSta
     const h = await harvestLinks(repo, msgs, { origin: `telegram:${channel}` });
     stats.resolved.push(...h.boards);
     log(`  telegram/${channel}: ${msgs.length} msgs → ${h.boards.length} boards (${h.skippedSuspicious} suspicious skipped)`);
-  }
-
-  // 2d. seed employers new to the registry (a newly chosen preset, a custom company list)
-  if (plan && opts.discoverNewSeeds !== false) {
-    const fresh: SeedCompany[] = [];
-    for (const s of plan.seeds) {
-      const c = await repo.findCompanyByNameNorm(normCompany(s.name));
-      if (!c) fresh.push(s);
-    }
-    if (fresh.length) {
-      try {
-        const d = await discoverCompanies(repo, fresh, { markets: plan.pollCountries });
-        log(`  seeds: ${fresh.length} new → ${d.resolved} boards`);
-      } catch (e) {
-        stats.errors.push(`seed discovery: ${(e as Error).message}`);
-      }
-    }
-    for (const id of plan.companyListSourceIds) {
-      await repo.recordDiscoverySourceRun(id, { status: "ok", count: fresh.length }).catch(() => {});
-    }
   }
 
   // 3. upgrade market-relevant company shells to their ATS boards (next poll hits them)

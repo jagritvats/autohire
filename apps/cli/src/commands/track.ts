@@ -44,7 +44,7 @@ export function register(program: Command, ctx: Ctx): void {
             ]),
             { maxWidth: [3, 12, 40, 22, 30, 10] },
           );
-          ctx.out.hint("update: jobflow track status 2 interviewing · jobflow track next 2 \"send take-home\" --due 2026-12-01");
+          ctx.out.hint("update: jobflow track status 1 interviewing · jobflow track next 1 \"send take-home\" --due 2026-12-01");
         },
       );
     });
