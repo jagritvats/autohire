@@ -9,10 +9,10 @@ import {
   harvestLinks,
   DEFAULT_DISCOVERY_FEEDS,
 } from "@jobflow/pipeline";
-import { fetchTelegramChannel, getAdapter } from "@jobflow/adapters";
+import { atsAdapter, fetchTelegramChannel, getAdapter } from "@jobflow/adapters";
 import { parseWhatsAppExport } from "@jobflow/core";
 import { createProvider, rerankMatch, tailorResume, answerQuestion } from "@jobflow/llm";
-import { buildFillPlan, renderDryRun, type ApplicantData } from "@jobflow/autofill";
+import { buildFillPlan, renderDryRun, resolveApplyUrl, type ApplicantData } from "@jobflow/autofill";
 import { DEFAULT_TENANT, SEED_COMPANIES, sampleProfile, sampleEvidence } from "./seed-data.js";
 import { renderMatchCard } from "./card.js";
 
@@ -34,33 +34,48 @@ async function demo(): Promise<void> {
 
   log("\n\x1b[1mJobFlow demo\x1b[0m — live pipeline on free APIs, in-memory store\n");
 
-  // ── 1. discover: seed registry + resolve ATS slugs ──
-  log("① Discovery — seeding registry & resolving ATS boards…");
-  const disc = await discoverCompanies(repo, SEED_COMPANIES);
-  log(`   seeded ${disc.seeded}, resolved ${disc.resolved} via ATS Detector` +
-      (disc.unresolved.length ? `, unresolved: ${disc.unresolved.join(", ")}` : ""));
+  // The demo is a quick end-to-end check, not a full crawl: a diverse sample of seeds,
+  // a capped number of boards, one target per feed, all through a small concurrency
+  // pool — so it finishes in a couple of minutes. The worker does the full sweep.
+  const started = Date.now();
 
-  // ── 2. poll every resolved company's ATS ──
-  log("\n② Ingestion — polling resolved ATS boards…");
-  const companies = await repo.listCompanies({ status: "active" });
+  // ── 1. discover: seed registry + resolve ATS slugs (sample) ──
+  const seeds = diverseSample(
+    SEED_COMPANIES.filter((s) => !!s.careersUrl),
+    DEMO_SEEDS,
+    (s) => hostFamily(s.careersUrl!),
+  );
+  log(`① Discovery — resolving ATS boards for ${seeds.length} of ${SEED_COMPANIES.length} seeds…`);
+  const discChunks = await pool(chunk(seeds, Math.ceil(seeds.length / DEMO_CONCURRENCY)), DEMO_CONCURRENCY, (c) =>
+    discoverCompanies(repo, c),
+  );
+  const resolvedN = discChunks.reduce((n, d) => n + d.resolved, 0);
+  const unresolved = discChunks.flatMap((d) => d.unresolved);
+  log(`   seeded ${seeds.length}, resolved ${resolvedN} via ATS Detector` +
+      (unresolved.length ? `, unresolved: ${unresolved.slice(0, 8).join(", ")}${unresolved.length > 8 ? ", …" : ""}` : ""));
+
+  // ── 2. poll a diverse sample of the resolved boards (cloud adapters only) ──
+  const resolved = (await repo.listCompanies({ status: "active" })).filter(
+    (c) => c.atsType !== "unknown" && !!c.atsSlug && !!atsAdapter(c.atsType),
+  );
+  const boards = diverseSample(resolved, DEMO_BOARDS, (c) => c.atsType);
+  log(`\n② Ingestion — polling ${boards.length} of ${resolved.length} resolved ATS boards (${DEMO_CONCURRENCY} at a time)…`);
   let totalFetched = 0;
-  for (const c of companies) {
-    if (c.atsType === "unknown" || !c.atsSlug) continue;
-    const s = await ingestCompany(repo, c, { limit: 60 });
-    totalFetched += s.fetched;
-    if (s.fetched) log(`   ${c.name.padEnd(16)} ${c.atsType.padEnd(10)} ${s.fetched} postings`);
-  }
+  await pool(boards, DEMO_CONCURRENCY, async (c) => {
+    const s = await ingestCompany(repo, c, { limit: 60 }).catch(() => null);
+    totalFetched += s?.fetched ?? 0;
+    if (s?.fetched) log(`   ${c.name.padEnd(16)} ${c.atsType.padEnd(10)} ${s.fetched} postings`);
+  });
 
-  // ── 3. discovery via aggregators + HN (grows registry, adds coverage) ──
-  log("\n③ Discovery feeds — the same cloud-safe feeds the worker polls…");
-  for (const feed of DEFAULT_DISCOVERY_FEEDS) {
-    const adapter = getAdapter(feed.source);
-    if (!adapter) continue;
-    let n = 0;
-    for (const target of feed.targets) n += (await ingestFromAdapter(repo, adapter, target)).fetched;
+  // ── 3. discovery via aggregators + HN (one target per feed, slow feeds skipped) ──
+  log("\n③ Discovery feeds — the same cloud-safe feeds the worker polls (first target each)…");
+  const feeds = DEFAULT_DISCOVERY_FEEDS.filter((f) => !f.slow && !!getAdapter(f.source) && !!f.targets[0]);
+  await pool(feeds, DEMO_CONCURRENCY, async (feed) => {
+    const n = (await ingestFromAdapter(repo, getAdapter(feed.source)!, feed.targets[0]!).catch(() => null))?.fetched ?? 0;
     log(`   ${feed.source.padEnd(16)} ${n} postings`);
     totalFetched += n;
-  }
+  });
+  log(`   (ingestion took ${Math.round((Date.now() - started) / 1000)}s)`);
 
   // ── 4. rank ──
   log("\n④ Matching — embed + dedup + soft-weighted score + rule check…");
@@ -132,11 +147,67 @@ async function demo(): Promise<void> {
       resumePath: "~/resumes/tailored.pdf",
       answers: { "why do you want to work here": ans },
     };
-    const atsType = top.posting.atsType === "unknown" ? "greenhouse" : top.posting.atsType;
-    const plan = buildFillPlan(atsType, top.posting.applyUrl ?? "(no apply url)", applicant);
+    // unknown/aggregator postings get the generic field map; Greenhouse opens its hosted form
+    const company = await repo.getCompany(top.posting.companyId);
+    const url = resolveApplyUrl(top.posting.atsType, top.posting.applyUrl, { slug: company?.atsSlug, jobId: top.posting.atsJobId });
+    const plan = buildFillPlan(top.posting.atsType, url ?? "(no apply url)", applicant);
     log(renderDryRun(plan).split("\n").map((l) => `  ${l}`).join("\n"));
   }
   log("");
+}
+
+/** demo bounds: seeds to resolve, boards to poll, parallel requests */
+const DEMO_SEEDS = 40;
+const DEMO_BOARDS = 25;
+const DEMO_CONCURRENCY = 6;
+
+/** Run `fn` over `items` with at most `n` in flight; results keep input order. */
+async function pool<T, R>(items: T[], n: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]!);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, worker));
+  return out;
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += Math.max(1, size)) out.push(items.slice(i, i + Math.max(1, size)));
+  return out;
+}
+
+/** Up to `n` items, round-robin across groups (keeps each group's order) — a sample that
+ *  covers every ATS family instead of the first N of whichever dominates the list. */
+function diverseSample<T>(items: T[], n: number, key: (t: T) => string): T[] {
+  const groups = new Map<string, T[]>();
+  for (const it of items) {
+    const k = key(it);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k)!.push(it);
+  }
+  const queues = [...groups.values()];
+  const out: T[] = [];
+  while (out.length < n && queues.some((q) => q.length)) {
+    for (const q of queues) {
+      const it = q.shift();
+      if (it !== undefined && out.length < n) out.push(it);
+    }
+  }
+  return out;
+}
+
+/** "boards.greenhouse.io" → "greenhouse.io", "acme.wd5.myworkdayjobs.com" → "myworkdayjobs.com" */
+function hostFamily(url: string): string {
+  try {
+    return new URL(url).hostname.split(".").slice(-2).join(".");
+  } catch {
+    return "other";
+  }
 }
 
 /**
