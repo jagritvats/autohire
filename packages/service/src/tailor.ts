@@ -5,7 +5,7 @@ import {
   ProviderError,
   answerGeneric,
   answerQuestion,
-  createProvider,
+  providerForTenant,
   isOfflineProvider,
   tailorResume,
   tailorResumeLatex,
@@ -93,15 +93,29 @@ async function loadInputs(repo: Repository, tenantId: string, postingId: string 
     postingId ? repo.getPosting(postingId) : Promise.resolve(null),
   ]);
   if (postingId && !posting) throw new ProviderError("That posting no longer exists.", postingId, 404);
-  // settings drive the provider; blank fields fall back to env / provider defaults.
-  const llmChoice = config?.llmChoice && config.llmChoice !== "echo" ? config.llmChoice : undefined;
-  const llm = createProvider({
-    provider: llmChoice,
-    apiKey: config?.llmApiKey || undefined,
-    strongModel: config?.llmModel || undefined,
-    baseUrl: config?.llmBaseUrl || undefined,
-  });
+  const llm = tenantProvider(config);
   return { profile, evidence, contexts, config, posting, llm };
+}
+
+/**
+ * May a tenant without its own key use the operator's env-configured model? Yes on a
+ * single-user install (it's the same person); on a multi-user instance only when the
+ * operator opts in (JOBFLOW_OPERATOR_LLM=shared), since it spends the operator's money.
+ */
+export function operatorLlmAllowed(): boolean {
+  const v = process.env.JOBFLOW_OPERATOR_LLM;
+  if (v === "shared") return true;
+  if (v === "off") return false;
+  return process.env.JOBFLOW_AUTH !== "password";
+}
+
+/** The generation provider for a tenant's config (their key/model first). */
+export function tenantProvider(config: TenantConfig | null): LlmProvider {
+  const fallback = operatorLlmAllowed();
+  // "echo" in a stored config historically meant "use the default" — keep that when the
+  // operator's model may be used, so existing single-user installs keep their env provider
+  const cfg = config && fallback && config.llmChoice === "echo" ? { ...config, llmChoice: "" } : config;
+  return providerForTenant(cfg, { operatorFallback: fallback });
 }
 
 /** Resolve the slot prompt for a kind (free-form answers carry their own question). */
