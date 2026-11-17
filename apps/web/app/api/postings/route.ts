@@ -19,6 +19,13 @@ export async function GET(req: Request) {
     const data = await getFeed(auth.tenantId, { indiaOnly: true });
     return NextResponse.json({ cards: data.cards, india: true });
   }
+  // `?search=<saved search id>` — the ranked feed through one of your saved searches as a
+  // VIEW: it hides only on confidently-known values and reports what it hid (never silent)
+  const search = params.get("search");
+  if (search) {
+    const data = await getFeed(auth.tenantId, { view: search });
+    return NextResponse.json({ cards: data.cards, search, hidden: data.stats.hidden ?? null, hiddenTotal: data.stats.hiddenTotal ?? 0 });
+  }
   const view = params.get("view") ?? "bookmarks";
   if (!VIEWS.includes(view as PostingView)) {
     return NextResponse.json({ error: `view must be one of ${VIEWS.join(", ")}` }, { status: 400 });

@@ -15,6 +15,8 @@ export default async function ApplicationsPage() {
         </h1>
         <nav className="rail-nav" style={{ margin: 0 }}>
           <Link href="/">feed</Link>
+          <Link href="/searches">search</Link>
+          <Link href="/discovery">discovery</Link>
           <Link href="/applications" data-active="true">pipeline</Link>
           <Link href="/companies">registry</Link>
           <Link href="/settings">settings</Link>

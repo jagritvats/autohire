@@ -20,7 +20,7 @@ const VIEW_TABS: Array<{ id: ActiveView; label: string }> = [
 
 const emptyViews: Record<PostingView, FeedCard[]> = { bookmarks: [], archived: [], invalidated: [] };
 
-export function FeedView({ initial }: { initial: FeedData }) {
+export function FeedView({ initial, viewName = null }: { initial: FeedData; viewName?: string | null }) {
   const [data, setData] = useState(initial);
   const [view, setView] = useState<ActiveView>("feed");
   const [viewData, setViewData] = useState<Record<PostingView, FeedCard[]>>(emptyViews);
@@ -222,6 +222,8 @@ export function FeedView({ initial }: { initial: FeedData }) {
         <div className="tagline">ranked match feed</div>
         <nav className="rail-nav">
           <a href="/" data-active="true">feed</a>
+          <a href="/searches">search</a>
+          <a href="/discovery">discovery</a>
           <a href="/applications">pipeline</a>
           <a href="/companies">registry</a>
           <a href="/settings">settings</a>
@@ -351,6 +353,24 @@ export function FeedView({ initial }: { initial: FeedData }) {
           <div className="feed-banner">
             These are the freshest postings, <b>unscored</b>. <a href="/onboarding">Add your résumé</a> to get ranked,
             honest match cards.
+          </div>
+        )}
+        {viewName && (
+          <div className="feed-banner">
+            Viewing your feed through the saved search <b>{viewName}</b>
+            {data.stats.hiddenTotal ? (
+              <>
+                {" "}— {data.stats.hiddenTotal} hidden (
+                {Object.entries(data.stats.hidden ?? {})
+                  .filter(([, n]) => n > 0)
+                  .map(([k, n]) => `${n} ${k}`)
+                  .join(", ")}
+                ).
+              </>
+            ) : (
+              "."
+            )}{" "}
+            Scores are unchanged. <a href="/">show all</a>
           </div>
         )}
         {data.stats.syncing && (
