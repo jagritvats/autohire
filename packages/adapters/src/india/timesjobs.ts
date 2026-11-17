@@ -1,5 +1,6 @@
-import type { RawPosting } from "@jobflow/core";
-import { htmlToText, httpJson, mapPool, httpStatus, liveFromStatus, type FetchTarget, type SourceAdapter, type LivenessTarget } from "../types.js";
+import type { RawPosting, SearchQuery } from "@jobflow/core";
+import { htmlToText, httpJson, mapPool, httpStatus, liveFromStatus, type FetchTarget, type SourceAdapter, type LivenessTarget, type SearchCaps, type SearchTargetContext } from "../types.js";
+import { inIndia, queryCity, queryTerms } from "../search.js";
 
 /**
  * TimesJobs (Tier 2: the JSON its own search page calls, no auth). Its value is the
@@ -45,6 +46,23 @@ interface TjDetail {
 export class TimesJobsAdapter implements SourceAdapter {
   readonly source = "timesjobs" as const;
   readonly tier = "tier2" as const;
+  readonly searchCaps: SearchCaps = {
+    keywords: true, location: true, country: false, remote: false, postedWithin: false, salaryMin: false, seniority: false, cost: "free",
+  };
+
+  /**
+   * India only. Multi-word keywords are OR-matched server-side, so each term is searched as
+   * given (the matcher ranks); a named Indian city narrows `locations`.
+   */
+  toTargets(q: SearchQuery, ctx: SearchTargetContext): FetchTarget[] {
+    if (!inIndia(q, ctx)) return [];
+    const city = queryCity(q, "IN");
+    return queryTerms(q).map((term) => ({
+      query: term,
+      limit: 60,
+      params: { experience: Math.max(0, Math.round(ctx.yoe)), ...(city ? { locations: city } : {}) },
+    }));
+  }
 
   /**
    * The public job JSON keeps serving long-closed jobs (a 2025 id still returns 200), so

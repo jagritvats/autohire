@@ -55,6 +55,9 @@ export const SOURCE_TRUST: Partial<Record<SourceKind, number>> = {
   himalayas: 0.35,
   remoteok: 0.35,
   jobicy: 0.25,
+  // user-configured feeds: unknown provenance — neutral prior, the listing must earn more
+  rss: 0.45,
+  json_feed: 0.45,
 };
 const DEFAULT_TRUST = 0.45;
 
@@ -69,6 +72,9 @@ export const REDATED_SOURCES: ReadonlySet<SourceKind> = new Set<SourceKind>([
   "adzuna",
   "careerjet",
   "jsearch",
+  // a feed's item date is when the FEED published it (often a re-post), not the employer
+  "rss",
+  "json_feed",
 ]);
 
 /** Evergreen / pipeline reqs that are never a specific open seat. */

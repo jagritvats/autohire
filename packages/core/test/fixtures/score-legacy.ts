@@ -1,0 +1,513 @@
+// FROZEN COPY of packages/core/src/match/score.ts as it was before the region-neutral
+// change (India hard-coded as home). Test-only: region.test.ts proves the new scorer is
+// identical for an India home. If score.ts later changes a non-location component on
+// purpose, update this copy alongside (or narrow the parity test to the location outputs).
+import type { Posting, Profile, ScoreBreakdown } from "../../src/schema/entities.js";
+import { LevelBandOrder, type LevelBand, type RemoteGeo, type RoleArchetype } from "../../src/schema/enums.js";
+import { cosine, clamp } from "../../src/util/vector.js";
+import { convertCurrency, formatSalary } from "../../src/salary/fx.js";
+import { stackAdjacency, type StackAdjacencyResult } from "../../src/match/stack.js";
+import { EVERGREEN_TITLE_RE, REDATED_SOURCES, TALENT_POOL_JD_RE, scoreSourceTrust } from "../../src/match/trust.js";
+
+/**
+ * Soft-weighted match scoring (§11). Almost NOTHING is a hard filter — a hard
+ * "Java-only" / "exactly-2-YoE" / "Pune-only" filter would hide most roles you'd
+ * actually be strong for. Everything is a weighted signal with an honest flag.
+ * Only two genuine hard exclusions: salary below your floor, and a truly
+ * impossible location (onsite abroad with no relocation/sponsorship, or a remote role
+ * explicitly restricted to a geo outside your `remoteGeoOk`).
+ */
+
+/**
+ * Seniority, location and freshness carry real weight: they're the signals that decide
+ * whether you can actually get the role (a perfect-stack staff role, a US-only remote,
+ * or a 4-month-old req are all dead ends). Semantic is trimmed because the offline
+ * embedder barely discriminates until a real model is configured.
+ */
+export const DEFAULT_WEIGHTS = {
+  semantic: 0.16,
+  stackAdjacency: 0.19,
+  archetype: 0.15,
+  seniority: 0.16,
+  location: 0.18,
+  freshness: 0.08,
+  salary: 0.03,
+  sourceTrust: 0.05,
+} as const;
+
+export type ScoreWeights = typeof DEFAULT_WEIGHTS;
+
+export interface ScoredMatch {
+  postingId: string;
+  score: number; // 0-100
+  breakdown: ScoreBreakdown;
+  rulePass: boolean;
+  flags: {
+    stack: StackAdjacencyResult;
+    levelNote: string | null;
+    locationNote: string | null;
+    redFlags: string[];
+    hardExclusionReason: string | null;
+  };
+}
+
+export function scorePosting(
+  posting: Posting,
+  profile: Profile,
+  weights: ScoreWeights = DEFAULT_WEIGHTS,
+): ScoredMatch {
+  const redFlags: string[] = [];
+
+  // ── component: semantic similarity (pgvector cosine in prod) ──
+  const semantic =
+    posting.jdEmbedding && profile.profileEmbedding
+      ? clamp((cosine(posting.jdEmbedding, profile.profileEmbedding) + 1) / 2) // map [-1,1]→[0,1]
+      : 0.5; // neutral when not yet embedded
+
+  // ── component: stack adjacency ──
+  const stack = stackAdjacency(profile.prefs.stackProfile, posting.jdSkills);
+
+  // ── component: role archetype fit — keeps non-eng roles (sales, ops) out of top ──
+  const { score: archetype, flag: archetypeFlag } = scoreArchetype(
+    posting.roleArchetype,
+    profile.prefs.targetArchetypes,
+  );
+  if (archetypeFlag) redFlags.push(archetypeFlag);
+
+  // ── component: seniority band + asked YoE (§11.2) ──
+  const { score: seniority, note: levelNote, flag: levelFlag } = scoreSeniority(profile, posting);
+  if (levelFlag) redFlags.push(levelFlag);
+
+  // ── component: location & remote-geo (§11.3) ──
+  const locResult = scoreLocation(posting, profile);
+  for (const f of locResult.flags) redFlags.push(f);
+
+  // ── component: freshness (§3) — real publish age + how recently we re-verified it ──
+  const { score: freshness, flags: freshFlags } = scoreFreshness(posting);
+  for (const f of freshFlags) redFlags.push(f);
+
+  // ── component: salary fit (stated pay, else the estimate scaled by its confidence) ──
+  const { score: salaryScore, flag: salaryFlag } = scoreSalary(posting, profile);
+  if (salaryFlag) redFlags.push(salaryFlag);
+
+  // ── component: source trust (§3) — real, open, and likely to get a reply ──
+  const trust = scoreSourceTrust(posting);
+  for (const f of trust.flags) if (redFlags.length < 5) redFlags.push(f);
+
+  // ── stretch flag for "X required" must-haves you don't have (never an exclusion) ──
+  for (const req of posting.requirements) {
+    if (req.strength === "must_have" && !profile.prefs.stackProfile.includes(req.skill)) {
+      // only surface a couple, and only if stack transfer is weak for it
+      if (redFlags.length < 4) redFlags.push(`JD requires ${req.skill} (you don't list it — stretch)`);
+    }
+  }
+
+  const breakdown: ScoreBreakdown = {
+    semantic,
+    stackAdjacency: stack.score,
+    archetype,
+    seniority,
+    location: locResult.score,
+    freshness,
+    salary: salaryScore,
+    sourceTrust: trust.score,
+  };
+
+  const raw =
+    weights.semantic * semantic +
+    weights.stackAdjacency * stack.score +
+    weights.archetype * archetype +
+    weights.seniority * seniority +
+    weights.location * locResult.score +
+    weights.freshness * freshness +
+    weights.salary * salaryScore +
+    weights.sourceTrust * trust.score;
+
+  // Feasibility: the weighted sum is additive, so strong other signals could carry a role
+  // you realistically can't land or don't want (7+ yrs asked, visa-bound onsite,
+  // restricted remote, a non-engineering "Risk Analyst" at a great India office). Scale by
+  // the weakest "is this even my role" signal — soft (≥0.6×): it re-orders, it never
+  // hides (invariant #4).
+  // An AI-training gig ("Software Engineer | $50/hr", rating model output) is a non-target
+  // role wearing an engineering title — dampened like one, and flagged, never hidden.
+  const feasibility = Math.min(seniority, locResult.score, archetype, trust.aiTrainingGig ? 0.2 : 1);
+  const damp = feasibility >= 0.5 ? 1 : 0.6 + 0.8 * feasibility;
+  const score = Math.round(raw * damp * 100);
+
+  // ── HARD EXCLUSIONS — the only two (§11.3) ──
+  const hardExclusionReason = hardExclude(posting, profile);
+  const rulePass = hardExclusionReason === null;
+
+  return {
+    postingId: posting.id,
+    score,
+    breakdown,
+    rulePass,
+    flags: {
+      stack,
+      levelNote,
+      locationNote: locResult.note,
+      redFlags,
+      hardExclusionReason,
+    },
+  };
+}
+
+// ── role archetype fit (§11.1 — surface adjacency, down-weight off-target) ──
+const ENG_ARCHETYPES = new Set<RoleArchetype>([
+  "backend",
+  "platform",
+  "fullstack",
+  "infra_devops",
+  "data_ml",
+  "sre",
+  "frontend",
+  "mobile",
+]);
+
+function scoreArchetype(
+  jd: RoleArchetype,
+  targets: RoleArchetype[],
+): { score: number; flag: string | null } {
+  if (targets.includes(jd)) return { score: 1, flag: null };
+  // adjacent engineering archetypes still transfer (a backend dev can do platform/sre)
+  if (ENG_ARCHETYPES.has(jd)) {
+    // frontend/mobile are the far edge for a backend target (java→frontend 0.2, §11.1)
+    const far = jd === "frontend" || jd === "mobile";
+    return { score: far ? 0.4 : 0.65, flag: null };
+  }
+  // "other" = non-engineering (sales, ops, design, AE) — a JD picked up by boilerplate
+  return { score: 0.08, flag: "Non-engineering role (off-target archetype)" };
+}
+
+// ── seniority ─────────────────────────────────────────────────────────────
+/**
+ * Two views of the same question, and the binding one wins: the title's band
+ * ("Senior", "SDE-3") and the YoE the JD asks for. Most titles carry no level
+ * ("Software Engineer", "SRE 3" before the ladder fix) while the JD says "7+ years" —
+ * scoring only the title let those rank as a perfect fit for ~2 YoE (§11.2).
+ */
+function scoreSeniority(
+  profile: Profile,
+  posting: Posting,
+): { score: number; note: string | null; flag: string | null } {
+  const band = scoreBand(profile.levelBand, posting.levelBand);
+  const yoe = scoreYoeGap(posting.experience, profile.yoe);
+  if (!yoe) return band;
+  if (!posting.levelBand) return yoe;
+  return yoe.score < band.score ? { ...yoe, note: yoe.note ?? band.note } : band;
+}
+
+/**
+ * Asked-YoE vs yours → score. Indian recruiters (and Naukri/LinkedIn filters) screen
+ * on the stated range, so a 3-year gap is usually a resume-screen reject even when the
+ * title reads mid-level ("SDE", "Software Engineer" + "5+ years"). One year short is
+ * normal and scores full; being far ABOVE the range reads as overqualified.
+ */
+function scoreYoeGap(
+  exp: Posting["experience"],
+  yoe: number,
+): { score: number; note: string | null; flag: string | null } | null {
+  if (exp.min == null && exp.max == null) return null;
+  const asked =
+    exp.min == null ? `up to ${exp.max}` : exp.max != null && exp.max !== exp.min ? `${exp.min}–${exp.max}` : `${exp.min}+`;
+  if (exp.max != null && yoe - exp.max >= 2) {
+    return { score: 0.6, note: `Asks ${asked} yrs, you have ~${yoe} — may read as overqualified.`, flag: null };
+  }
+  if (exp.min == null) return null;
+  const gap = exp.min - yoe;
+  if (gap <= 1) return { score: 1, note: null, flag: null };
+  if (gap <= 2) return { score: 0.6, note: `Asks ${asked} yrs, you have ~${yoe} — reachable stretch if the rest fits.`, flag: null };
+  if (gap <= 3) return { score: 0.3, note: `Asks ${asked} yrs, you have ~${yoe} — likely screened out on YoE.`, flag: `Seniority stretch: asks ${asked} yrs (you have ~${yoe})` };
+  if (gap <= 4) return { score: 0.2, note: `Asks ${asked} yrs, you have ~${yoe} — senior role.`, flag: `Seniority gap: asks ${asked} yrs (you have ~${yoe}) — big stretch` };
+  return { score: 0.1, note: `Asks ${asked} yrs — not your role yet.`, flag: `Large seniority gap: asks ${asked} yrs (you have ~${yoe}) — big stretch` };
+}
+
+function scoreBand(
+  yours: LevelBand,
+  jd: LevelBand | null,
+): { score: number; note: string | null; flag: string | null } {
+  if (!jd) return { score: 0.7, note: null, flag: null };
+  // internships are for students — not a level-down you can apply to with real YoE
+  if (jd === "intern" && yours !== "intern") {
+    return { score: 0.15, note: `Internship — not aimed at ~${yours} engineers.`, flag: "Internship role" };
+  }
+  const delta = LevelBandOrder[jd] - LevelBandOrder[yours];
+  // delta 0 = perfect; +1 = mild stretch up (often aspirational, fine); +2 = real stretch
+  if (delta <= 0) {
+    return {
+      score: delta < -1 ? 0.7 : 0.95, // level-down at a dream co is fine, slight down-weight
+      note: delta < 0 ? `Posting is ${jd}; you're ${yours} — comfortable.` : null,
+      flag: null,
+    };
+  }
+  if (delta === 1) {
+    return {
+      score: 0.7,
+      note: `Asks ${jd}, you're ${yours} — a common stretch-up when the asked YoE is within reach.`,
+      flag: null,
+    };
+  }
+  if (delta === 2) {
+    return {
+      score: 0.3,
+      note: `Asks ${jd}, you're ${yours} — real stretch; project depth has to argue up.`,
+      flag: `Seniority gap: role targets ${jd}`,
+    };
+  }
+  return {
+    score: 0.1,
+    note: `Posting is ${jd} — likely not your role yet.`,
+    flag: `Large seniority gap (${jd})`,
+  };
+}
+
+// ── location ──────────────────────────────────────────────────────────────
+const GEO_PENALTY: Record<RemoteGeo, number> = {
+  worldwide: 1,
+  india_ok: 1,
+  apac_ok: 0.95,
+  us_eu: 0.4,
+  eu_only: 0.35,
+  us_only: 0.25,
+  unknown: 0.7,
+};
+
+/** below this, the parsed geo is a guess — dampen the score + flag it honestly (§11.3). */
+const LOW_LOCATION_CONFIDENCE = 0.5;
+/** small honest boost so India-workable roles rank well for a user who wants them (§11.3). */
+const INDIA_ONSITE_BOOST = 0.1;
+
+function scoreLocation(
+  posting: Posting,
+  profile: Profile,
+): { score: number; note: string | null; flags: string[] } {
+  const loc = posting.location;
+  const weights = profile.prefs.locationWeights;
+  const flags: string[] = [];
+
+  // base from the user's weighted ranked prefs (§11.3) — match label fragments
+  const labelScore = matchLocationLabel(loc, weights);
+
+  let score: number;
+  let note: string | null;
+
+  if (loc.mode === "remote") {
+    // geo restriction MULTIPLIES the pref score so a us_only "remote" is down-weighted
+    // hard, not surfaced as a clean remote match (§11.3). The user's own `remoteGeoOk`
+    // decides which geos count as open; the penalty table covers the rest.
+    const geoOk = profile.prefs.remoteGeoOk ?? [];
+    const geo = geoOk.includes(loc.remoteGeo) ? 1 : GEO_PENALTY[loc.remoteGeo];
+    const openBonus = loc.remoteGeo === "india_ok" || loc.remoteGeo === "worldwide" ? 0.1 : 0;
+    score = clamp(labelScore * geo + openBonus);
+    note = `Remote (${loc.remoteGeo}).`;
+    if (loc.remoteGeo === "us_only") {
+      flags.push(`"Remote" is US-only / US work-auth — not actually open to you`);
+      note = `"Remote" but US-only — false-positive remote.`;
+    } else if (loc.remoteGeo === "eu_only") {
+      flags.push(`"Remote" is EU-only`);
+    } else if (loc.remoteGeo === "us_eu") {
+      flags.push(`"Remote" is limited to US/EU`);
+    }
+  } else if (loc.mode === "hybrid" || loc.mode === "onsite") {
+    // onsite/hybrid in India is workable — a small honest boost, not a hard filter.
+    const indiaWorkable = loc.country === "India";
+    score = clamp(indiaWorkable ? labelScore + INDIA_ONSITE_BOOST : labelScore);
+    // onsite abroad needs a work visa. Explicit sponsorship keeps it viable; silence is
+    // usually "no" for early-career roles, so it's a real (soft) discount + an honest flag.
+    if (loc.country && loc.country !== "India") {
+      if (loc.sponsorship === false) {
+        score *= 0.3;
+        flags.push(`Onsite ${loc.country}, no sponsorship offered`);
+      } else if (loc.sponsorship == null) {
+        score *= 0.6;
+        flags.push(`Onsite ${loc.country} — visa sponsorship not mentioned`);
+      }
+    }
+    note = `${cap(loc.mode)}${loc.city ? ` · ${loc.city}` : ""}${indiaWorkable ? " · India-workable" : ""}.`;
+  } else {
+    score = 0.5;
+    note = null;
+  }
+
+  // honest confidence handling (§11.3): when we're unsure of the geo, pull the score
+  // toward neutral and surface a "verify" flag — don't rank a guess as if it were fact.
+  if (loc.confidence < LOW_LOCATION_CONFIDENCE) {
+    score = clamp(score * 0.85 + 0.5 * 0.15);
+    flags.push("Location uncertain — verify before applying");
+    note = `${note ?? ""} (location uncertain)`.trim();
+  }
+
+  return { score: clamp(score), note, flags };
+}
+
+function matchLocationLabel(
+  loc: Posting["location"],
+  weights: Profile["prefs"]["locationWeights"],
+): number {
+  if (weights.length === 0) return 0.7;
+  const max = Math.max(...weights.map((w) => w.weight), 1);
+  const hay = `${loc.mode} ${loc.city ?? ""} ${loc.country ?? ""} ${loc.remoteGeo}`.toLowerCase();
+  let best = 0.3; // default for "anywhere else"
+  for (const w of weights) {
+    const frag = w.label.toLowerCase();
+    if (
+      hay.includes(frag) ||
+      (frag.includes("remote") && loc.mode === "remote") ||
+      (frag.includes("india") && loc.country === "India")
+    ) {
+      best = Math.max(best, w.weight / max);
+    }
+  }
+  return best;
+}
+
+// ── freshness ─────────────────────────────────────────────────────────────
+/** re-verified (seen in a poll) within this many days → trusted as still open. */
+export const VERIFIED_WITHIN_DAYS = 10;
+/** open longer than this → likely filled, evergreen, or a talent-pool req (§3). */
+const EVERGREEN_AFTER_DAYS = 60;
+
+/**
+ * Two questions (§3): how old is the ROLE (source publish date, falling back to when
+ * we first saw it), and how recently did we CONFIRM it's still up (lastSeen)? A
+ * posting nobody has re-polled in weeks is unverified no matter how new it looked.
+ * A role can't be newer than our first sighting of it: boards that re-stamp reposts
+ * (Oracle, Keka, Jibe, Himalayas) report a later date than the one we saw it under, so
+ * the earlier of the two wins.
+ */
+export function postingAgeDays(posting: Pick<Posting, "postedAt" | "firstSeen">, now = Date.now()): number {
+  const seen = new Date(posting.firstSeen as string | Date).getTime();
+  const posted = posting.postedAt ? new Date(posting.postedAt as string | Date).getTime() : Infinity;
+  return Math.max(0, (now - Math.min(seen, posted)) / 86_400_000);
+}
+
+function scoreFreshness(posting: Posting): { score: number; flags: string[] } {
+  const flags: string[] = [];
+  const ageDays = postingAgeDays(posting);
+  let score =
+    ageDays <= 3 ? 1 : ageDays <= 7 ? 0.9 : ageDays <= 14 ? 0.75 : ageDays <= 30 ? 0.55 : ageDays <= 60 ? 0.3 : 0.15;
+  // ATS-direct sources are ghost-free; nudge them above aggregators (§3)
+  if (posting.atsType !== "unknown") score += 0.1;
+  // a board that re-stamps dates can't prove recency — cap what its "posted today" earns
+  if (REDATED_SOURCES.has(posting.source)) score = Math.min(score, 0.55);
+  // no publish date at all (a dateless board's first poll): "first seen today" only means
+  // we just started looking, so its age is unknown — not new
+  if (!posting.postedAt) score = Math.min(score, 0.55);
+  if (EVERGREEN_TITLE_RE.test(posting.title) || TALENT_POOL_JD_RE.test(posting.jdText.slice(0, 2000))) {
+    score = Math.min(score, 0.15);
+    flags.push("Talent-pool / evergreen req — not a specific open seat");
+  } else if (ageDays > EVERGREEN_AFTER_DAYS) {
+    flags.push(`Open ~${Math.round(ageDays)} days — may be filled or an evergreen req`);
+  }
+
+  const sinceSeen = (Date.now() - new Date(posting.lastSeen as string | Date).getTime()) / 86_400_000;
+  if (sinceSeen > VERIFIED_WITHIN_DAYS) {
+    score *= 0.5;
+    flags.push(`Not re-verified in ${Math.round(sinceSeen)} days — may be closed`);
+  }
+  return { score: clamp(score), flags };
+}
+
+// ── salary ────────────────────────────────────────────────────────────────
+const SALARY_NEUTRAL = 0.6;
+/** how far a stated band of each confidence may move the score off neutral */
+const STATED_TRUST: Record<Posting["salary"]["confidence"], number> = { high: 1, medium_high: 0.8, medium: 0.5, low: 0.3 };
+
+/**
+ * Pay vs your floor (§11.4), converted into your currency (nominal FX — a USD offer pays
+ * USD wherever you sit). Stated pay moves the score by how sure the parse is; an ESTIMATE
+ * moves it by its confidenceScore, so a weak guess stays near neutral. A soft signal with an
+ * honest flag — the only hard gate is `hardExclude` on a stated, high-confidence ceiling.
+ */
+export function scoreSalary(posting: Posting, profile: Profile): { score: number; flag: string | null } {
+  const floor = profile.prefs.salaryFloor;
+  if (!floor) return { score: 0.7, flag: null };
+  const want = profile.prefs.currency;
+  const s = posting.salary;
+
+  const stated = s.source !== "none" ? (s.max ?? s.min) : null;
+  if (stated != null) {
+    const top = convertCurrency(stated, s.currency, want);
+    if (top == null) return { score: SALARY_NEUTRAL, flag: null };
+    const score = SALARY_NEUTRAL + STATED_TRUST[s.confidence] * (floorFit(top, floor) - SALARY_NEUTRAL);
+    // only a stated CEILING can be below the floor; a "from ₹X" says nothing about the top
+    const flag =
+      s.max != null && top < floor * 0.8
+        ? `Posted pay tops out at ~${formatSalary(top, want)}, below your floor (${formatSalary(floor, want)})`
+        : null;
+    return { score, flag };
+  }
+
+  const e = posting.salaryEstimate;
+  if (e) {
+    const top = convertCurrency(e.max, e.currency, want);
+    if (top == null) return { score: SALARY_NEUTRAL, flag: null };
+    const score = SALARY_NEUTRAL + e.confidenceScore * (floorFit(top, floor) - SALARY_NEUTRAL);
+    const flag =
+      e.confidenceScore >= 0.45 && top < floor * 0.8
+        ? `Estimated pay (~${formatSalary(top, want)} at the top, ${Math.round(e.confidenceScore * 100)}% confidence) likely below your floor`
+        : null;
+    return { score, flag };
+  }
+  return { score: SALARY_NEUTRAL, flag: null }; // unknown comp → neutral, never excluded on a guess
+}
+
+function floorFit(top: number, floor: number): number {
+  return top >= floor ? 1 : top >= floor * 0.8 ? 0.6 : 0.3;
+}
+
+// ── the only two hard exclusions (§11.3) ────────────────────────────────────
+function hardExclude(posting: Posting, profile: Profile): string | null {
+  // 1. salary genuinely below floor — only a HIGH-confidence STATED ceiling, in your own
+  //    currency (no FX guesswork at a hard gate). A floor-only band ("from ₹X") never
+  //    qualifies, and an estimate lives in `salaryEstimate`, never here.
+  const floor = profile.prefs.salaryFloor;
+  const top = posting.salary.max;
+  if (
+    floor > 0 &&
+    top != null &&
+    posting.salary.source !== "none" &&
+    posting.salary.confidence === "high" &&
+    posting.salary.currency === profile.prefs.currency &&
+    top < floor * 0.7
+  ) {
+    return `Comp ${top} ${posting.salary.currency} is well below your floor (${floor})`;
+  }
+
+  // 2. genuinely impossible location: onsite abroad, no sponsorship, you can't relocate
+  if (
+    (posting.location.mode === "onsite" || posting.location.mode === "hybrid") &&
+    posting.location.country != null &&
+    posting.location.country !== "India" &&
+    posting.location.sponsorship === false &&
+    !profile.prefs.relocate
+  ) {
+    return `Onsite ${posting.location.country}, no sponsorship, relocation off`;
+  }
+
+  // 2b. the remote twin of the same rule: a remote role that EXPLICITLY requires living
+  //     in / work authorization for a geo you've said you can't work from. Relocation
+  //     can't fix a remote-US role, so this is as impossible as onsite-no-sponsorship.
+  //     High confidence only — an inferred/ambiguous geo stays a soft down-weight (§11.3).
+  const loc = posting.location;
+  if (
+    loc.mode === "remote" &&
+    RESTRICTED_GEOS.has(loc.remoteGeo) &&
+    loc.confidence >= RESTRICTION_CONFIDENCE &&
+    !(profile.prefs.remoteGeoOk ?? []).includes(loc.remoteGeo)
+  ) {
+    return `Remote restricted to ${GEO_LABEL[loc.remoteGeo]} — outside your remote-geo prefs`;
+  }
+
+  return null;
+}
+
+const RESTRICTED_GEOS = new Set<RemoteGeo>(["us_only", "eu_only", "us_eu"]);
+/** the parser reports ≥0.85 for an explicit location field or explicit JD restriction. */
+const RESTRICTION_CONFIDENCE = 0.85;
+const GEO_LABEL: Partial<Record<RemoteGeo, string>> = { us_only: "US/Americas", eu_only: "EU/UK", us_eu: "US/EU" };
+
+function cap(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}

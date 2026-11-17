@@ -1,7 +1,8 @@
-import type { RawPosting } from "@jobflow/core";
+import type { RawPosting, SearchQuery } from "@jobflow/core";
 import { classifyLink, extractLinks, parseLocation } from "@jobflow/core";
 import { atsCandidates } from "../detector/index.js";
-import { httpJson, type FetchTarget, type SourceAdapter } from "../types.js";
+import { httpJson, type FetchTarget, type SearchCaps, type SearchTargetContext, type SourceAdapter } from "../types.js";
+import { queryTerms } from "../search.js";
 
 /**
  * HN "Ask HN: Who is hiring?" harvester (Tier 1, free, no auth). Founders post
@@ -32,12 +33,27 @@ interface HnItem {
 export class HnWhoIsHiringAdapter implements SourceAdapter {
   readonly source = "hn_whoishiring" as const;
   readonly tier = "tier1" as const;
+  readonly searchCaps: SearchCaps = {
+    keywords: true, location: false, country: false, remote: false, postedWithin: false, salaryMin: false, seniority: false, cost: "free",
+  };
+
+  /** the month's thread, filtered by each term (a keyword filter over the comments). */
+  toTargets(q: SearchQuery, _ctx: SearchTargetContext): FetchTarget[] {
+    return queryTerms(q).map((term) => ({ query: term, limit: 60 }));
+  }
 
   async fetch(target: FetchTarget): Promise<RawPosting[]> {
-    const search = await httpJson<HnSearchResp>(
-      "https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&hitsPerPage=3",
-    );
-    const story = (search?.hits ?? []).find((h) => /who is hiring/i.test(h.title));
+    // a specific thread (custom `hn_thread` source), else the latest "Who is hiring?"
+    const storyId = target.params?.storyId != null ? String(target.params.storyId).replace(/\D/g, "") : "";
+    let story: { objectID: string; created_at: string } | undefined;
+    if (storyId) {
+      story = { objectID: storyId, created_at: "" };
+    } else {
+      const search = await httpJson<HnSearchResp>(
+        "https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&hitsPerPage=3",
+      );
+      story = (search?.hits ?? []).find((h) => /who is hiring/i.test(h.title));
+    }
     if (!story) return [];
 
     const item = await httpJson<HnItem>(`https://hn.algolia.com/api/v1/items/${story.objectID}`);
