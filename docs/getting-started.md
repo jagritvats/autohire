@@ -22,13 +22,13 @@ pnpm jobflow init
 data export), shows what it extracted — contact details, skills, years of experience,
 level, and the bullet points that become your **Evidence Bank** — and lets you correct
 it. Then it asks where you want to work (home country, markets, remote regions, relocation),
-your salary floor, the kinds of roles you want, and which built-in discovery preset to start
-from (India, Global remote, United States, Europe & UK).
+your salary floor, the kinds of roles you want, and which built-in discovery presets to start
+from (India, Global remote, United States, Europe & UK — pick several if you like).
 
 Nothing is invented: every claim JobFlow will ever make for you comes from what you
 confirmed here. Prefer flags? `pnpm jobflow init --yes --resume ./cv.pdf --home US
 --markets US,CA --remote worldwide,us_only --floor "150000 USD" --roles backend,platform
---preset us`. Just exploring? `pnpm jobflow init --sample` loads a fictional candidate.
+--preset us,global-remote`. Just exploring? `pnpm jobflow init --sample` loads a fictional candidate.
 
 Your data lives in `~/.jobflow` (override with `JOBFLOW_DATA_DIR`): a local database,
 your uploaded résumé and generated documents. Nothing leaves your machine except requests

@@ -28,6 +28,7 @@ pnpm jobflow search "platform" --exclude-company "Acme" --limit 10 --json
 | `--must a,b` / `--nice a,b` | skills: must-haves hide roles that state other stacks; nice-to-haves only reorder |
 | `--sources a,b` | restrict to these sources |
 | `--exclude-company`, `--exclude` | drop companies / keywords |
+| `--preset a,b` | only roles from those presets' companies and feeds (a tag filter; with no `--sources`, searches those presets' feeds) |
 | `--ingest` | also add the results to your feed |
 | `--save-as NAME` | keep it as a saved search |
 
@@ -55,7 +56,8 @@ feed. In the web app: **/searches**, and "view in feed" shows the feed through i
 
 ## Discovery presets
 
-A preset is a curated starting set of companies and feeds:
+A preset is a curated starting set of companies and feeds. Switch on **as many as you like** —
+JobFlow polls the union:
 
 | Preset | What it covers |
 |---|---|
@@ -65,9 +67,22 @@ A preset is a curated starting set of companies and feeds:
 | `eu-uk` | EU/UK companies and boards |
 
 ```bash
-pnpm jobflow discovery presets
-pnpm jobflow discovery use us
+pnpm jobflow discovery presets              # all presets, on/off
+pnpm jobflow discovery use india,global-remote
 ```
+
+### Presets as tags
+
+Every posting is tagged with the presets it belongs to (its company is in the preset's list,
+or it came from one of the preset's feeds) — the cards show `#india`, `#us`, … Filter by them:
+
+```bash
+pnpm jobflow search "backend engineer" --preset us,eu-uk
+pnpm jobflow feed --preset india
+```
+
+In the web app, the feed sidebar has a **preset** filter and the search page has preset chips.
+Like every view filter, it only hides — scores never change — and the hidden count is shown.
 
 Turn individual preset feeds off in the web app (**/discovery**) or with
 `jobflow discovery disable <feed-id>`.
