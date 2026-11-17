@@ -73,7 +73,7 @@ export function register(program: Command, ctx: Ctx): void {
       const app = await trackApplication(await ctx.repo(), ctx.tenantId, posting.id, { status, ...(o.note != null ? { outcome: o.note } : {}) });
       ctx.out.emit(app, () => {
         ctx.out.ok(`${posting.title} · ${posting.companyName}: ${app.status}`);
-        if (status === "applied") ctx.out.hint(`Plan the follow-up: jobflow track next ${ref} "follow up" --due ${inDays(7)}`);
+        if (status === "applied") ctx.out.hint(`Plan the follow-up: jobflow track next ${ref.replace(/^#/, "")} "follow up" --due ${inDays(7)}`);
       });
     });
 

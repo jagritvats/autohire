@@ -59,6 +59,7 @@ every field and press submit yourself. Then record it: jobflow track status <ref
           ? await trackApplication(repo, ctx.tenantId, posting.id, { status: "ready", nextAction: ap.application?.nextAction ?? "review & submit" })
           : ap.application!;
 
+      ref = ref.replace(/^#/, ""); // hints must be copy-pasteable (an unquoted #3 is a shell comment)
       if (o.fill) return fill(ctx, ap, ref, o.browserProfile);
 
       let opened = false;

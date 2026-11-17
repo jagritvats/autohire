@@ -129,7 +129,7 @@ Without a model, résumés are built-in templates (labelled "builtin") and prose
           out.hint(`ATS keyword coverage ${Math.round(d.variants.atsKeywordCoverage * 100)}%${d.variants.missingKeywords.length ? ` · not in your material: ${d.variants.missingKeywords.slice(0, 6).join(", ")} (only add them if they're true)` : ""}`);
         }
         if (d.source === "builtin") out.hint(`For a tailored draft, ${SET_MODEL_HINT}`);
-        if (attached) out.hint(`saved to this posting's application — \`jobflow apply ${ref}\` will fill it in`);
+        if (attached) out.hint(`saved to this posting's application — \`jobflow apply ${ref.replace(/^#/, "")}\` will fill it in`);
         if (pdfPath) out.ok(`PDF attached to this application: ${pdfPath}`);
         out.hint("Review every line before you use it: it must all be true of you.");
       });

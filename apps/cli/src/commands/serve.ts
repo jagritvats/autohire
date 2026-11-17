@@ -40,28 +40,53 @@ export function register(program: Command, ctx: Ctx): void {
       const env = { ...process.env, JOBFLOW_STORE: "pglite", JOBFLOW_DATA_DIR: dataDir, PORT: String(port) };
       ctx.out.note(`${ctx.out.bold("JobFlow web")} · ${url} · data: ${dataDir} · next ${mode}`);
       ctx.out.note(ctx.out.dim("While this runs, other jobflow commands can't write your data (single-writer). Ctrl-C to stop."));
+      // its own process group, so a stop reaches the whole tree (pnpm → next → next-server),
+      // not just pnpm — a surviving next-server would keep the data dir locked
+      const posix = process.platform !== "win32";
       const child = spawn("pnpm", ["--silent", "--filter", "@jobflow/web", "exec", "next", mode, "-p", String(port)], {
         cwd: root,
         env,
         stdio: "inherit",
-        shell: process.platform === "win32",
+        shell: !posix,
+        detached: posix,
       });
       writeFileSync(info, JSON.stringify({ pid: child.pid ?? process.pid, url, port, startedAt: new Date().toISOString() }), { mode: 0o600 });
       const cleanup = () => rmSync(info, { force: true });
-      const forward = (sig: NodeJS.Signals) => () => child.kill(sig);
-      const onInt = forward("SIGINT");
-      const onTerm = forward("SIGTERM");
+      let exited = false;
+      const signalTree = (sig: NodeJS.Signals) => {
+        if (exited || !child.pid) return;
+        try {
+          if (posix) process.kill(-child.pid, sig);
+          else child.kill(sig);
+        } catch {
+          /* already gone */
+        }
+      };
+      const stop = (sig: NodeJS.Signals) => () => {
+        signalTree(sig);
+        // escalate if the tree doesn't go quietly
+        setTimeout(() => signalTree("SIGTERM"), 5000).unref();
+        setTimeout(() => signalTree("SIGKILL"), 10000).unref();
+      };
+      const onInt = stop("SIGINT");
+      const onTerm = stop("SIGTERM");
+      const onExit = () => signalTree("SIGTERM");
       process.on("SIGINT", onInt);
       process.on("SIGTERM", onTerm);
+      process.on("exit", onExit);
       const code = await new Promise<number>((resolve) => {
         child.once("error", (e) => {
           ctx.out.warn(`couldn't start the web app: ${e.message}`);
           resolve(1);
         });
-        child.once("exit", (c) => resolve(c ?? 0));
+        child.once("exit", (c, sig) => resolve(c ?? (sig ? 130 : 0)));
       });
+      // pnpm may exit before its children: make sure nothing of the group outlives us
+      signalTree("SIGTERM");
+      exited = true;
       process.off("SIGINT", onInt);
       process.off("SIGTERM", onTerm);
+      process.off("exit", onExit);
       cleanup();
       if (code !== 0 && code !== 130) ctx.exitCode = EXIT.error;
     });

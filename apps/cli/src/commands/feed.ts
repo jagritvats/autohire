@@ -44,7 +44,7 @@ export function register(program: Command, ctx: Ctx): void {
           return;
         }
         const polled = data.stats.lastPolledAt ? ` · last sync ${ago(Math.floor((Date.now() - Date.parse(data.stats.lastPolledAt)) / 86_400_000))}` : "";
-        out.line(out.dim(`${cards.length} of ${data.stats.ranked} ${scored ? "ranked" : "fresh"} · ${data.stats.postings} postings in your corpus${polled}`));
+        out.line(out.dim(`top ${cards.length}${scored ? " for you" : " (freshest)"} · ${data.stats.postings} postings in your corpus${polled}`));
         out.line();
         printCards(out, cards, { scored, format: o.format });
         if (data.stats.hiddenTotal) {
