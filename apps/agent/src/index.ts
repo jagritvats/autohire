@@ -1,5 +1,5 @@
 import { loadRootEnv, createRepository, type Repository } from "@jobflow/db";
-import { DEFAULT_TENANT } from "@jobflow/pipeline";
+import { agentTenant, resolveAgentTenant } from "./tenant.js";
 import { createProvider, providerEmbedder } from "@jobflow/llm";
 import type { AgentHeartbeat, Job, TenantConfig } from "@jobflow/core";
 import { effectiveFlags, type EffectiveFlags } from "./flags.js";
@@ -29,7 +29,7 @@ const MAX_BACKOFF_MS = 60_000;
 
 async function heartbeat(repo: Repository, flags: EffectiveFlags): Promise<void> {
   const hb: AgentHeartbeat = {
-    tenantId: DEFAULT_TENANT,
+    tenantId: agentTenant(),
     lastSeen: new Date(),
     version: VERSION,
     flags: { browserOn: flags.browserOn, mode: flags.mode, autosubmit: false, rate: flags.rate },
@@ -46,7 +46,7 @@ async function heartbeat(repo: Repository, flags: EffectiveFlags): Promise<void>
 async function readFlagsSafe(repo: Repository, errors: ErrorLog): Promise<EffectiveFlags> {
   let config: TenantConfig | null = null;
   try {
-    config = await repo.getConfig(DEFAULT_TENANT);
+    config = await repo.getConfig(agentTenant());
     errors.ok("config");
   } catch (e) {
     errors.fail("config", e);
@@ -85,6 +85,8 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   const repo = await createRepository();
+  const tenantId = await resolveAgentTenant(repo);
+  console.log(`agent: working for tenant ${tenantId.slice(0, 8)}…`);
   // blank/unset JOBFLOW_BROWSER_PROFILE → ~/.jobflow/browser-profile (resolved in autofill)
   const session = new AgentSession(process.env.JOBFLOW_BROWSER_PROFILE);
   const embedder = providerEmbedder(createProvider());
@@ -122,7 +124,7 @@ async function main(): Promise<void> {
   for (;;) {
     let job: Job | null;
     try {
-      job = await repo.claimJob("local");
+      job = await repo.claimJob("local", { tenantId: agentTenant() });
       errors.ok("claimJob");
     } catch (e) {
       // a DB error is NOT "no work" — say so, and back off instead of hammering the DB

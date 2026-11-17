@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { agentTenant } from "./tenant.js";
 import type { Job } from "@jobflow/core";
 import { COVER_LETTER_ANSWER_KEY, JOB_RUNTIME } from "@jobflow/core";
 import type { Repository } from "@jobflow/db";
@@ -32,7 +33,7 @@ import {
   type Tier3PollOptions,
   type Tier3PollTarget,
 } from "@jobflow/adapters";
-import { DEFAULT_TENANT, blankProfile, ingestCompany, ingestFromAdapter, type Embedder } from "@jobflow/pipeline";
+import { blankProfile, ingestCompany, ingestFromAdapter, type Embedder } from "@jobflow/pipeline";
 import type { AgentSession } from "./session.js";
 import type { EffectiveFlags } from "./flags.js";
 
@@ -80,10 +81,10 @@ async function importYc(repo: Repository, job: Job, ctx: HandlerCtx): Promise<Re
   const html = await ctx.session.localFetch(url);
   const text = htmlToText(html).slice(0, 6000);
   if (!text) return { imported: false, note: "no text captured — is the WaaS profile logged in / public?" };
-  const existing = await repo.getContext(DEFAULT_TENANT, "yc");
+  const existing = await repo.getContext(agentTenant(), "yc");
   await repo.upsertContext({
     id: existing?.id ?? randomUUID(),
-    tenantId: DEFAULT_TENANT,
+    tenantId: agentTenant(),
     source: "yc",
     handle: url,
     label: "YC / Work at a Startup",
@@ -110,10 +111,10 @@ async function formFill(repo: Repository, job: Job, ctx: HandlerCtx): Promise<Re
   const applyUrl = resolveApplyUrl(posting.atsType, posting.applyUrl, { slug: company?.atsSlug, jobId: posting.atsJobId });
   if (!applyUrl) throw new Error("posting has no apply URL");
 
-  const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? blankProfile();
+  const profile = (await repo.getProfile(agentTenant())) ?? blankProfile(agentTenant());
   // prefer answers passed on the job; else fall back to the tailored answers saved on
   // the application (the "Save to application" flow on the tailor page).
-  const app = await repo.getApplicationByPosting(DEFAULT_TENANT, postingId);
+  const app = await repo.getApplicationByPosting(agentTenant(), postingId);
   const { [COVER_LETTER_ANSWER_KEY]: coverLetter, ...answers } =
     (job.payload.answers as Record<string, string> | undefined) ?? app?.answers ?? {};
   const applicant = mapContactToApplicant(profile.prefs.contact, answers);
@@ -180,7 +181,7 @@ async function tier3Poll(repo: Repository, job: Job, ctx: HandlerCtx): Promise<R
   const adapter = tier3JobAdapter(source, tier3Context(ctx));
   if (!adapter) throw new Error(`No job adapter for Tier-3 source '${source}'`);
 
-  const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? blankProfile();
+  const profile = (await repo.getProfile(agentTenant())) ?? blankProfile(agentTenant());
   const targets: FetchTarget[] =
     source === "peerlist" || source === "wellfound"
       ? planFeedTargets(source, job.payload)
@@ -239,9 +240,9 @@ function planFeedTargets(source: "peerlist" | "wellfound", payload: Record<strin
  * several local jobs doesn't stack up N identical cloud re-ranks.
  */
 async function enqueueRank(repo: Repository): Promise<void> {
-  const recent = await repo.listJobs(DEFAULT_TENANT, 30);
+  const recent = await repo.listJobs(agentTenant(), 30);
   if (recent.some((j) => j.type === "rank" && j.status === "queued")) return;
-  await repo.enqueueJob({ tenantId: DEFAULT_TENANT, type: "rank", runtime: JOB_RUNTIME.rank, payload: {} });
+  await repo.enqueueJob({ tenantId: agentTenant(), type: "rank", runtime: JOB_RUNTIME.rank, payload: {} });
 }
 
 // ── local-only boards (Darwinbox) in the user's session ──

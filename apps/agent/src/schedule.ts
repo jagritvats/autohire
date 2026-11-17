@@ -1,7 +1,7 @@
 import type { Job, JobType } from "@jobflow/core";
+import { agentTenant } from "./tenant.js";
 import { JOB_RUNTIME } from "@jobflow/core";
 import type { Repository } from "@jobflow/db";
-import { DEFAULT_TENANT } from "@jobflow/pipeline";
 import type { EffectiveFlags } from "./flags.js";
 import { LOCAL_BOARD_SOURCES, TIER3_JOB_SOURCES } from "./handlers.js";
 
@@ -77,10 +77,10 @@ export async function maybeScheduleLocalPolls(
   log: (...a: unknown[]) => void,
 ): Promise<PlannedLocalJob[]> {
   if (!flags.browserOn || !(everyHours > 0)) return [];
-  const recent = await repo.listJobs(DEFAULT_TENANT, 200);
+  const recent = await repo.listJobs(agentTenant(), 200);
   const due = dueLocalJobs(recent, flags.enabledSources, everyHours);
   for (const d of due) {
-    await repo.enqueueJob({ tenantId: DEFAULT_TENANT, type: d.type, runtime: JOB_RUNTIME[d.type], payload: { source: d.source, scheduled: true } });
+    await repo.enqueueJob({ tenantId: agentTenant(), type: d.type, runtime: JOB_RUNTIME[d.type], payload: { source: d.source, scheduled: true } });
   }
   if (due.length) log(`⏰ scheduled ${due.map((d) => `${d.type}:${d.source}`).join(", ")} (every ${everyHours}h)`);
   return due;
