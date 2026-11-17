@@ -1,7 +1,6 @@
 import {
   discoverCompanies,
   pollAll,
-  rebuildMatches,
   enrichTopMatches,
   estimatePostingSalaries,
   refreshSalaryBenchmarks,
@@ -11,13 +10,12 @@ import {
   type BacktestReport,
   DEFAULT_TENANT,
   SEED_COMPANIES,
-  defaultProfile,
-  seedEvidence,
 } from "@jobflow/pipeline";
 import { createProvider, providerEmbedder } from "@jobflow/llm";
 import { loadRootEnv } from "@jobflow/db";
 import { makeRepository } from "./repo.js";
-import { narratorFor, runLoop } from "./jobs.js";
+import { handleJob, runLoop } from "./jobs.js";
+import type { Job } from "@jobflow/core";
 
 loadRootEnv();
 
@@ -45,20 +43,16 @@ async function poll(): Promise<void> {
 
 async function rank(): Promise<void> {
   const repo = await makeRepository();
-  // ensure a profile/evidence exists (single-tenant default for v1)
-  let profile = await repo.getProfile(DEFAULT_TENANT);
-  if (!profile) {
-    profile = defaultProfile();
-    await repo.saveProfile(profile);
-    for (const e of seedEvidence()) await repo.saveEvidence(e);
-  }
+  // the same per-tenant fan-out the scheduled rank job runs (never ranks an un-onboarded profile)
   const llm = createProvider();
-  const r = await rebuildMatches(repo, profile, { embedder: providerEmbedder(llm), narrator: await narratorFor(repo, llm, profile) });
-  log(`rank: ${r.scored} scored → ${r.ranked} ranked, ${r.excluded} excluded, ${r.narrated} narrated (${r.narratedFresh} new)`);
+  const job = { id: "cli", tenantId: DEFAULT_TENANT, type: "rank", runtime: "cloud", payload: { scheduled: true } } as unknown as Job;
+  const r = await handleJob(repo, job, { embedder: providerEmbedder(llm), llm });
+  log(`rank: ${r.tenants} tenant(s) ranked, ${r.skipped} not onboarded yet · ${r.scored} scored → ${r.ranked} ranked, ${r.narrated} narrated`);
 }
 
 async function enrich(): Promise<void> {
   const repo = await makeRepository();
+  // enrichment writes shared company/posting data; the default tenant's top matches pick targets
   const r = await enrichTopMatches(repo, { tenantId: DEFAULT_TENANT, limit: 40 });
   log(
     `enrich: ${r.companiesEnriched} companies (comp benchmark), ${r.companyLaddersFetched} employer level ladders, ` +

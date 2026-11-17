@@ -2,10 +2,11 @@ import type { Job, Profile } from "@jobflow/core";
 import { rerankMatch, type LlmProvider } from "@jobflow/llm";
 import { JOB_RUNTIME } from "@jobflow/core";
 import type { Repository } from "@jobflow/db";
+import { tenantProvider, operatorLlmAllowed } from "@jobflow/service";
 import {
   DEFAULT_TENANT,
   SEED_COMPANIES,
-  defaultProfile,
+  isOnboarded,
   discoverCompanies,
   pollAll,
   rebuildMatches,
@@ -34,7 +35,8 @@ export interface JobCtx {
  * Narratives are cached per posting, so a paid model only sees new or changed top cards.
  */
 export async function narratorFor(repo: Repository, llm: LlmProvider | undefined, profile: Profile): Promise<Narrator | undefined> {
-  const top = Number(process.env.JOBFLOW_RERANK_TOP ?? 15);
+  // a blank value (Actions var / docker env_file) means "default", not 0 = off
+  const top = Number(process.env.JOBFLOW_RERANK_TOP?.trim() || 15);
   if (!llm || llm.name === "echo" || !(top > 0)) return undefined;
   const evidence = await repo.listEvidence(profile.tenantId);
   return {
@@ -42,6 +44,27 @@ export async function narratorFor(repo: Repository, llm: LlmProvider | undefined
     top,
     narrate: (posting, prior) => rerankMatch(llm, profile, evidence, { posting, priorNotes: prior }),
   };
+}
+
+/** tenants worth ranking: active in the last 30 days (or never-tracked single-user ones). */
+async function rankableTenants(repo: Repository): Promise<string[]> {
+  const tenants = await repo.listTenants({ activeSinceDays: 30 });
+  const ids = tenants.map((t) => t.id);
+  return ids.length ? ids : [DEFAULT_TENANT];
+}
+
+/**
+ * Rank the shared corpus for one tenant, narrated by THAT tenant's model (their own key;
+ * the operator's only when allowed). Never ranks an un-onboarded profile — there's no
+ * candidate to score yet, so any score would be invented.
+ */
+async function rankTenant(repo: Repository, tenantId: string, ctx: JobCtx) {
+  const profile = await repo.getProfile(tenantId);
+  if (!profile || !isOnboarded(profile)) return null;
+  const config = await repo.getConfig(tenantId);
+  const llm = config ? tenantProvider(config) : operatorLlmAllowed() ? ctx.llm : undefined;
+  const narrator = await narratorFor(repo, llm, profile);
+  return rebuildMatches(repo, profile, { embedder: ctx.embedder, narrator });
 }
 
 export async function handleJob(repo: Repository, job: Job, ctx: JobCtx): Promise<Record<string, unknown>> {
@@ -68,14 +91,26 @@ export async function handleJob(repo: Repository, job: Job, ctx: JobCtx): Promis
       };
     }
     case "rank": {
-      const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? defaultProfile();
-      const narrator = await narratorFor(repo, ctx.llm, profile);
-      const r = await rebuildMatches(repo, profile, { embedder: ctx.embedder, narrator });
-      return { scored: r.scored, ranked: r.ranked, excluded: r.excluded, narrated: r.narrated, narratedFresh: r.narratedFresh };
+      // a scheduled rank (after the shared corpus was polled) re-ranks EVERY active tenant;
+      // a rank a user asked for re-ranks only theirs
+      const tenantIds = job.payload.scheduled ? await rankableTenants(repo) : [job.tenantId];
+      const out: Record<string, unknown> = { tenants: 0, skipped: 0, scored: 0, ranked: 0, narrated: 0 };
+      for (const tenantId of tenantIds) {
+        const r = await rankTenant(repo, tenantId, ctx);
+        if (!r) {
+          (out.skipped as number)++;
+          continue;
+        }
+        (out.tenants as number)++;
+        out.scored = (out.scored as number) + r.scored;
+        out.ranked = (out.ranked as number) + r.ranked;
+        out.narrated = (out.narrated as number) + r.narrated;
+      }
+      return out;
     }
     case "enrich_t1": {
       const limit = (job.payload.limit as number | undefined) ?? 40;
-      const r = await enrichTopMatches(repo, { tenantId: DEFAULT_TENANT, limit });
+      const r = await enrichTopMatches(repo, { tenantId: job.tenantId, limit });
       return {
         companiesEnriched: r.companiesEnriched,
         companyLaddersFetched: r.companyLaddersFetched,
@@ -105,9 +140,14 @@ export async function handleJob(repo: Repository, job: Job, ctx: JobCtx): Promis
     case "liveness": {
       // dead-link check on the top cards between polls (§3); retired cards leave the feed
       // at once (listMatches only returns active postings), so no re-rank is needed
+      // the union of every active tenant's top cards (a dead link is dead for everyone)
       const limit = (job.payload.limit as number | undefined) ?? 40;
-      const r = await checkLiveness(repo, { tenantId: DEFAULT_TENANT, limit });
-      return { ...r };
+      const totals: Record<string, number> = {};
+      for (const tenantId of await rankableTenants(repo)) {
+        const r = await checkLiveness(repo, { tenantId, limit });
+        for (const [k, v] of Object.entries(r)) if (typeof v === "number") totals[k] = (totals[k] ?? 0) + v;
+      }
+      return totals;
     }
     case "purge": {
       // Bulk soft-delete (markStale) / hard-delete postings older than a threshold.
@@ -142,15 +182,22 @@ export async function runLoop(
   const intervalMs = opts.intervalMs ?? 3000;
   const log = opts.log ?? ((m) => console.log(new Date().toISOString(), m));
   let lastScheduleCheck = 0;
+  // a runner that died mid-job left it `running` forever — and a stuck `poll` blocks
+  // the liveness scheduler (it waits for queued/running polls) indefinitely
+  await requeueStuck(repo, log);
   for (;;) {
     const job = await repo.claimJob("cloud");
     if (!job) {
       if (opts.once) return;
-      if (opts.scheduleEveryHours && Date.now() - lastScheduleCheck > 60_000) {
+      if (Date.now() - lastScheduleCheck > 60_000) {
         lastScheduleCheck = Date.now();
-        await maybeSchedulePoll(repo, opts.scheduleEveryHours, log).catch((e) => log(`schedule check failed: ${(e as Error).message}`));
-        if (opts.livenessEveryHours) {
-          await maybeScheduleLiveness(repo, opts.livenessEveryHours, log).catch((e) => log(`liveness schedule failed: ${(e as Error).message}`));
+        // requeue BEFORE scheduling, so a freed stuck poll counts as queued again
+        await requeueStuck(repo, log);
+        if (opts.scheduleEveryHours) {
+          await maybeSchedulePoll(repo, opts.scheduleEveryHours, log).catch((e) => log(`schedule check failed: ${(e as Error).message}`));
+          if (opts.livenessEveryHours) {
+            await maybeScheduleLiveness(repo, opts.livenessEveryHours, log).catch((e) => log(`liveness schedule failed: ${(e as Error).message}`));
+          }
         }
       }
       await sleep(intervalMs);
@@ -170,6 +217,18 @@ export async function runLoop(
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+/** cloud jobs (a full poll can take a while) count as orphaned after an hour `running` */
+const STUCK_AFTER_MINUTES = 60;
+
+async function requeueStuck(repo: Repository, log: (m: string) => void): Promise<void> {
+  try {
+    const n = await repo.requeueStuckJobs("cloud", STUCK_AFTER_MINUTES);
+    if (n > 0) log(`↺ re-queued ${n} cloud job(s) stuck in 'running' > ${STUCK_AFTER_MINUTES}m (a runner died mid-job)`);
+  } catch (e) {
+    log(`requeue of stuck jobs failed: ${(e as Error).message}`);
+  }
 }
 
 /**

@@ -20,9 +20,10 @@ playwright-report
 test-results
 .cache
 
-# vcs / editor / os
+# vcs / editor / os / tooling (.claude may hold whole agent worktrees)
 .git
 .github
+.claude
 .vscode
 .DS_Store
 Thumbs.db

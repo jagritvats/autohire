@@ -1,0 +1,69 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jsonresume/resume-schema/v1.0.0/schema.json",
+  "basics": {
+    "name": "Riley Sample",
+    "label": "Backend Engineer",
+    "email": "riley@example.com",
+    "phone": "+1 555 010 0199",
+    "summary": "Backend engineer with 6+ years of experience building payment and data services in Java and JavaScript.",
+    "location": { "city": "Austin", "region": "TX", "countryCode": "US" },
+    "profiles": [
+      { "network": "GitHub", "username": "riley-sample", "url": "https://github.com/riley-sample" },
+      { "network": "LinkedIn", "username": "riley-sample", "url": "https://www.linkedin.com/in/riley-sample" }
+    ]
+  },
+  "work": [
+    {
+      "name": "Example Fintech",
+      "position": "Senior Software Engineer",
+      "startDate": "2023-01-01",
+      "highlights": [
+        "Built an idempotent ledger service in Java and Spring Boot handling 2M transactions/day",
+        "Cut p99 API latency from 480ms to 120ms by adding Redis caching",
+        "Mentored 3 engineers on Kafka consumer design"
+      ]
+    },
+    {
+      "name": "Demo Health",
+      "position": "Contract Backend Engineer",
+      "startDate": "2021-03-01",
+      "endDate": "2021-09-30",
+      "highlights": ["Integrated a claims feed over gRPC for a pilot clinic network"]
+    },
+    {
+      "name": "Sample Retail Co",
+      "position": "Software Engineer",
+      "startDate": "2020-06-01",
+      "endDate": "2022-12-31",
+      "highlights": [
+        "Shipped a Node.js order API on PostgreSQL serving 300 req/s",
+        "Migrated deployments to Docker and Kubernetes, reducing release time by 60%"
+      ]
+    },
+    {
+      "name": "Placeholder Labs",
+      "position": "Software Engineering Intern",
+      "startDate": "2019-05-01",
+      "endDate": "2019-08-31",
+      "highlights": ["Wrote JavaScript tooling for internal dashboards"]
+    }
+  ],
+  "projects": [
+    {
+      "name": "Queue Lens",
+      "description": "open-source Kafka consumer-lag dashboard (TypeScript, React)",
+      "highlights": ["Used by 40 teams to spot stuck consumers"]
+    },
+    { "name": "Tiny Ledger", "description": "double-entry bookkeeping library in Go" }
+  ],
+  "skills": [
+    { "name": "Languages", "keywords": ["Java", "JavaScript", "TypeScript", "Go", "SQL"] },
+    { "name": "Backend", "keywords": ["Spring Boot", "Node.js", "Kafka", "REST APIs", "gRPC"] },
+    { "name": "Data", "keywords": ["PostgreSQL", "Redis"] },
+    { "name": "Infra", "keywords": ["Docker", "Kubernetes", "AWS", "Terraform"] },
+    { "name": "Other", "keywords": ["Figma", "Technical writing"] }
+  ],
+  "education": [
+    { "institution": "Example State University", "area": "Computer Science", "studyType": "B.S.", "startDate": "2015", "endDate": "2019" }
+  ]
+}

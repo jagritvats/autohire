@@ -1,80 +1,18 @@
-import { AtsType, SourceKind } from "@jobflow/core";
-import { atsAdapter, fetchTelegramChannel, getAdapter, type FetchTarget } from "@jobflow/adapters";
+import { AtsType, SourceKind, normCompany, type Company } from "@jobflow/core";
+import { atsAdapter, atsLinksFromRaws, fetchTelegramChannel, getAdapter, takeFeedError } from "@jobflow/adapters";
 import type { Repository } from "@jobflow/db";
 import { ingestCompany, ingestFromAdapter } from "./ingest.js";
-import { resolveDiscoveredCompanies } from "./discover.js";
+import { DEFAULT_CONCURRENCY, discoverCompanies, mapPoolKeyed, resolveDiscoveredCompanies, type SeedCompany } from "./discover.js";
 import { harvestLinks } from "./harvest.js";
 import { localEmbedder, type Embedder } from "./embedder.js";
 import { estimatePostingSalaries } from "./salary.js";
+import { resolveDiscoveryPlan, type CustomSourceTarget, type DiscoveryPlan, type SearchTarget } from "./discovery.js";
+import type { DiscoveryFeed } from "./presets/types.js";
 
-/**
- * One discovery feed = a cloud-safe board adapter + the searches to run on it. These
- * surface roles (and company names) outside the curated registry. Feeds are data, so
- * adding a source is one entry here plus its adapter — the poll loop never changes.
- */
-export interface DiscoveryFeed {
-  source: SourceKind;
-  targets: FetchTarget[];
-  /** rate-limited to minutes per request (Reddit) — skipped by request-bound refreshes. */
-  slow?: boolean;
-}
-
-/**
- * Default feeds, biased to what's workable from India (§11.3) and to early-/mid-career
- * roles: sources are queried with their own geo + experience facets where they have
- * one (Himalayas country + seniority, Hirist min/max exp). That shapes what we poll —
- * ranking still scores every role (invariant #4). Arbeitnow is deliberately absent:
- * it's a German-market board (mostly German-language, EU-onsite roles).
- */
-export const DEFAULT_DISCOVERY_FEEDS: DiscoveryFeed[] = [
-  {
-    source: "himalayas", // remote roles that explicitly name India as an allowed location
-    targets: [
-      { query: "backend", limit: 60, params: { country: "IN", seniority: "Entry-level,Mid-level" } },
-      { query: "software engineer", limit: 40, params: { country: "IN", seniority: "Entry-level,Mid-level" } },
-    ],
-  },
-  {
-    source: "hirist", // India tech board; overlapping 1–4 yr experience band
-    targets: [
-      { query: "backend developer", limit: 60, params: { minexp: 1, maxexp: 4 } },
-      { query: "java developer", limit: 40, params: { minexp: 1, maxexp: 4 } },
-    ],
-  },
-  {
-    source: "cutshort", // India startups; listing slugs are role × city
-    targets: [
-      { query: "backend-developer-jobs-in-bangalore-bengaluru", limit: 50 },
-      { query: "backend-developer-jobs-in-pune", limit: 50 },
-      { query: "backend-developer-jobs-in-hyderabad", limit: 50 },
-    ],
-  },
-  {
-    source: "timesjobs", // links go straight to the employer's own posting (board discovery)
-    targets: [
-      { query: "backend", limit: 60, params: { experience: 2 } },
-      { query: "java", limit: 40, params: { experience: 2 } },
-    ],
-  },
-  { source: "instahyre", targets: [{ limit: 40, params: { years: 2 } }] }, // product cos, ~2-yr band
-  { source: "wellfound", targets: [{ query: "backend-engineer", limit: 120, params: { location: "india", maxPages: 4 } }] },
-  { source: "reddit", slow: true, targets: [{ limit: 100, params: { subreddit: "developersIndia" } }] }, // monthly hiring thread
-  { source: "remotive", targets: [{ query: "backend", limit: 60 }] },
-  { source: "hn_whoishiring", targets: [{ query: "india", limit: 60 }, { query: "backend", limit: 60 }] },
-  // key-gated search APIs: no-ops (no request) until their keys are set — docs/SETUP.md "Optional sources"
-  {
-    source: "adzuna", // broad India aggregator; same free keys as the salary enricher
-    targets: [
-      { query: "backend", limit: 50, params: { titleOnly: true, maxDaysOld: 14 } },
-      { query: "software engineer", limit: 50, params: { titleOnly: true, maxDaysOld: 14 } },
-    ],
-  },
-  { source: "careerjet", targets: [{ query: "backend developer", limit: 50 }, { query: "software engineer", limit: 50 }] }, // en_IN index
-  {
-    source: "jsearch", // PAID: each target is called at most once per JSEARCH_MIN_HOURS (default 24h)
-    targets: [{ query: "backend developer", location: "India", limit: 50, params: { country: "in", datePosted: "week" } }],
-  },
-];
+// The feed/channel lists now live in the `india` preset (presets/india.ts) — re-exported
+// here so existing importers keep working.
+export type { DiscoveryFeed } from "./presets/types.js";
+export { DEFAULT_DISCOVERY_FEEDS, DEFAULT_TELEGRAM_CHANNELS } from "./presets/india.js";
 
 /**
  * Postings from non-board sources (aggregators, HN) have no per-company board to diff,
@@ -83,14 +21,6 @@ export const DEFAULT_DISCOVERY_FEEDS: DiscoveryFeed[] = [
  */
 export const FEED_TTL_DAYS = 14;
 
-/**
- * Public Telegram channels harvested by default. Picked from a 2026-09 review of ~100
- * Indian job channels: these three post the most DIRECT company-board links for 1–4 YoE
- * engineers (54–72%), with no scams; gocareers is usually first, the others add a few
- * unique roles a day. Most large "freshers" channels route 90%+ of links through
- * ad-funded blogs and were left out. Only links are used — postings come from the board.
- */
-export const DEFAULT_TELEGRAM_CHANNELS = ["gocareers", "techuprise_updates", "dot_aware"];
 /**
  * Any posting unseen this long is gone or unpollable (company paused/removed, board
  * emptied — an empty fetch never mass-stales, since it can't be told from an error).
@@ -107,7 +37,11 @@ export interface PollOptions {
   embedder?: Embedder;
   /** poll just this company (skips discovery feeds, resolution and the TTL sweep). */
   companyId?: string;
-  /** ISO country for boards that filter server-side (default JOBFLOW_POLL_COUNTRY or IN). */
+  /**
+   * ISO country for boards that filter server-side. Default: the discovery plan's
+   * `pollCountries` (JOBFLOW_POLL_COUNTRY → tenants' markets → preset markets → IN); a
+   * multi-market plan polls country-filtered boards once per country.
+   */
   country?: string;
   /** cap upserts per board (embedding cost); the fetch is always the full board. */
   limitPerCompany?: number;
@@ -119,17 +53,31 @@ export interface PollOptions {
    * over several runs instead of one hour-long burst against the same hosts.
    */
   maxBoards?: number;
+  /** discovery feeds to run. Default: the plan's (the tenants' presets — `india` by default). */
   feeds?: DiscoveryFeed[];
   /** max discovered company shells to resolve to ATS boards this run. */
   resolveMax?: number;
   /**
    * public Telegram channels to harvest for ATS/careers links (discovery only — see
-   * harvest.ts). Default: JOBFLOW_TELEGRAM_CHANNELS when set (empty = off), else
-   * DEFAULT_TELEGRAM_CHANNELS.
+   * harvest.ts). Default: JOBFLOW_TELEGRAM_CHANNELS when set (empty = off), else the plan's
+   * (preset channels + custom Telegram sources).
    */
   telegramChannels?: string[];
   /** skip feeds marked `slow` (a request-bound web refresh can't wait a minute per call). */
   skipSlowFeeds?: boolean;
+  /** a precomputed plan (else resolved from the repo). */
+  plan?: DiscoveryPlan;
+  /** run custom RSS/JSON/HN-thread sources (default true). */
+  customSources?: boolean;
+  /** run due saved searches against search-capable sources (default true). */
+  searches?: boolean;
+  /**
+   * register plan seed employers that aren't in the registry yet — a newly chosen preset,
+   * a custom company list (default true). Known companies are never re-probed here.
+   */
+  discoverNewSeeds?: boolean;
+  /** boards polled at once (default 8; ≤2 per host — politeness). */
+  concurrency?: number;
   log?: (m: string) => void;
 }
 
@@ -140,6 +88,10 @@ export interface PollStats {
   feeds: Record<string, number>;
   resolved: string[];
   expired: number;
+  /** postings fetched per custom source configKey */
+  custom?: Record<string, number>;
+  /** postings fetched per saved search id */
+  searches?: Record<string, number>;
   /** postings (re)priced by the offline salary estimator after the poll (§11.4) */
   salaryEstimated?: number;
   errors: string[];
@@ -147,10 +99,11 @@ export interface PollStats {
 
 /**
  * The single poll routine shared by the cron, the job runner and the web refresh:
- * boards due → discovery feeds → community links → resolve India-relevant shells →
- * expire postings nobody has re-confirmed. CLOUD-SAFE ONLY (invariant #1): feeds resolve
- * through the cloud registry (`getAdapter`), which never contains a Tier-3 adapter, and
- * the tier is re-checked.
+ * boards due → discovery feeds → custom sources → saved searches → community links →
+ * resolve relevant shells → expire postings nobody has re-confirmed. CLOUD-SAFE ONLY
+ * (invariant #1): every source resolves through the cloud registry (`getAdapter` /
+ * the plan's `cloudAdapter`), which never contains a Tier-3 adapter, and the tier is
+ * re-checked.
  */
 export async function pollAll(repo: Repository, opts: PollOptions = {}): Promise<PollStats> {
   const stats = await pollSources(repo, opts);
@@ -170,7 +123,40 @@ async function pollSources(repo: Repository, opts: PollOptions): Promise<PollSta
   const log = opts.log ?? (() => {});
   const stats: PollStats = { companiesPolled: 0, fetched: 0, staled: 0, feeds: {}, resolved: [], expired: 0, errors: [] };
 
-  // 1. registered ATS boards (the rich, ghost-free spine)
+  // what to poll: explicit options win; everything else comes from the tenants' plan
+  let plan = opts.plan;
+  if (!plan) {
+    try {
+      plan = await resolveDiscoveryPlan(repo);
+    } catch (e) {
+      stats.errors.push(`discovery plan: ${(e as Error).message}`);
+    }
+  }
+  const countries = opts.country ? [opts.country] : (plan?.pollCountries ?? []);
+
+  // 0. seed employers new to the registry (first run, a newly switched-on preset, a custom
+  //    company list) are resolved to boards FIRST, so this same run polls them — otherwise a
+  //    fresh install's first sync polls zero boards and only feeds
+  if (plan && opts.discoverNewSeeds !== false && !opts.companyId) {
+    const fresh: SeedCompany[] = [];
+    for (const s of plan.seeds) {
+      const c = await repo.findCompanyByNameNorm(normCompany(s.name));
+      if (!c) fresh.push(s);
+    }
+    if (fresh.length) {
+      try {
+        const d = await discoverCompanies(repo, fresh, { markets: plan.pollCountries });
+        log(`  seeds: ${fresh.length} new → ${d.resolved} boards`);
+      } catch (e) {
+        stats.errors.push(`seed discovery: ${(e as Error).message}`);
+      }
+    }
+    for (const id of plan.companyListSourceIds) {
+      await repo.recordDiscoverySourceRun(id, { status: "ok", count: fresh.length }).catch(() => {});
+    }
+  }
+
+  // 1. registered ATS boards (the rich, ghost-free spine) — pooled across hosts
   const companies = opts.companyId
     ? (await repo.listCompanies()).filter((c) => c.id === opts.companyId)
     : (await repo.listCompanies({ status: "active", dueForPoll: !opts.allCompanies }))
@@ -179,19 +165,32 @@ async function pollSources(repo: Repository, opts: PollOptions): Promise<PollSta
         .filter((c) => c.atsType !== "unknown" && c.atsSlug && atsAdapter(c.atsType))
         .sort((a, b) => polledAt(a) - polledAt(b))
         .slice(0, opts.maxBoards ?? DEFAULT_MAX_BOARDS);
-  for (const c of companies) {
-    if (c.atsType === "unknown" || !c.atsSlug) continue;
-    const r = await ingestCompany(repo, c, { embedder, limit: opts.limitPerCompany, country: opts.country });
-    stats.companiesPolled++;
-    stats.fetched += r.fetched;
-    stats.staled += r.staled;
-    stats.errors.push(...r.errors);
-  }
+  await mapPoolKeyed(
+    companies,
+    { concurrency: opts.concurrency ?? DEFAULT_CONCURRENCY, perKey: 2, key: boardHostKey },
+    async (c) => {
+      if (c.atsType === "unknown" || !c.atsSlug) return;
+      try {
+        const r = await ingestCompany(repo, c, {
+          embedder,
+          limit: opts.limitPerCompany,
+          ...(countries.length > 1 ? { countries } : { country: countries[0] }),
+        });
+        stats.companiesPolled++;
+        stats.fetched += r.fetched;
+        stats.staled += r.staled;
+        stats.errors.push(...r.errors);
+      } catch (e) {
+        stats.errors.push(`${c.name}: ${(e as Error).message}`);
+      }
+    },
+  );
   log(`poll: ${stats.companiesPolled} boards, ${stats.fetched} postings, ${stats.staled} staled`);
   if (opts.companyId) return stats;
 
   // 2. discovery feeds (tier 1-2 only)
-  for (const feed of (opts.feeds ?? DEFAULT_DISCOVERY_FEEDS).filter((f) => !(opts.skipSlowFeeds && f.slow))) {
+  const feeds = opts.feeds ?? plan?.feeds ?? [];
+  for (const feed of feeds.filter((f) => !(opts.skipSlowFeeds && f.slow))) {
     const adapter = getAdapter(feed.source);
     if (!adapter || (adapter.tier !== "tier1" && adapter.tier !== "tier2")) {
       stats.errors.push(`feed ${feed.source}: not a registered cloud adapter`);
@@ -203,14 +202,33 @@ async function pollSources(repo: Repository, opts: PollOptions): Promise<PollSta
       n += r.fetched;
       stats.errors.push(...r.errors);
     }
-    stats.feeds[feed.source] = n;
+    stats.feeds[feed.source] = (stats.feeds[feed.source] ?? 0) + n;
     stats.fetched += n;
     log(`  ${feed.source}: +${n}`);
   }
 
-  // 2b. community channels → company boards (the posting itself comes from the board)
+  // 2a. custom sources (RSS / JSON feeds / HN threads) — each run recorded on its rows
+  if (plan && opts.customSources !== false) {
+    stats.custom = {};
+    for (const t of [...plan.rssTargets, ...plan.jsonTargets, ...plan.threads]) {
+      const n = await runCustomSource(repo, t, embedder, stats);
+      stats.custom[t.configKey] = n;
+      stats.fetched += n;
+    }
+    if (plan.rssTargets.length + plan.jsonTargets.length + plan.threads.length) {
+      log(`  custom sources: +${Object.values(stats.custom).reduce((a, b) => a + b, 0)}`);
+    }
+  }
+
+  // 2b. due saved searches → search-capable sources (ingested like any feed — idempotent)
+  if (plan && opts.searches !== false && plan.searchTargets.length) {
+    stats.searches = await runSearchTargets(repo, plan.searchTargets, embedder, stats);
+    log(`  saved searches: ${Object.keys(stats.searches).length} run`);
+  }
+
+  // 2c. community channels → company boards (the posting itself comes from the board)
   const envChannels = process.env.JOBFLOW_TELEGRAM_CHANNELS;
-  const channels = opts.telegramChannels ?? (envChannels != null ? csv(envChannels) : DEFAULT_TELEGRAM_CHANNELS);
+  const channels = opts.telegramChannels ?? (envChannels != null ? csv(envChannels) : (plan?.telegramChannels ?? []));
   for (const channel of channels) {
     const msgs = await fetchTelegramChannel(channel, { pages: 2 });
     const h = await harvestLinks(repo, msgs, { origin: `telegram:${channel}` });
@@ -218,8 +236,8 @@ async function pollSources(repo: Repository, opts: PollOptions): Promise<PollSta
     log(`  telegram/${channel}: ${msgs.length} msgs → ${h.boards.length} boards (${h.skippedSuspicious} suspicious skipped)`);
   }
 
-  // 3. upgrade India-relevant company shells to their ATS boards (next poll hits them)
-  const res = await resolveDiscoveredCompanies(repo, { max: opts.resolveMax });
+  // 3. upgrade market-relevant company shells to their ATS boards (next poll hits them)
+  const res = await resolveDiscoveredCompanies(repo, { max: opts.resolveMax, markets: countries.length ? countries : undefined });
   stats.resolved.push(...res.resolved);
   if (res.tried) log(`  resolved ${res.resolved.length}/${res.tried} discovered companies`);
 
@@ -231,11 +249,94 @@ async function pollSources(repo: Repository, opts: PollOptions): Promise<PollSta
   return stats;
 }
 
+/** one custom source: ingest (SSRF-guarded fetch inside the adapter), record the run, harvest ATS links. */
+async function runCustomSource(repo: Repository, t: CustomSourceTarget, embedder: Embedder, stats: PollStats): Promise<number> {
+  const adapter = getAdapter(t.source);
+  let fetched = 0;
+  let error: string | null = null;
+  if (!adapter || (adapter.tier !== "tier1" && adapter.tier !== "tier2")) {
+    error = `${t.source}: not a registered cloud adapter`;
+  } else {
+    let atsLinks: string[] = [];
+    const r = await ingestFromAdapter(repo, adapter, t.target, {
+      embedder,
+      onRaws: (raws) => {
+        atsLinks = atsLinksFromRaws(raws).slice(0, MAX_HARVEST_PER_FEED);
+      },
+    });
+    fetched = r.fetched;
+    stats.errors.push(...r.errors);
+    const feedKey = String(t.target.params?.feedKey ?? "");
+    error = (feedKey ? takeFeedError(feedKey) : null) ?? r.errors[0] ?? null;
+    // an item that links to an employer's own ATS also discovers that employer's board
+    if (atsLinks.length) {
+      const h = await harvestLinks(
+        repo,
+        atsLinks.map((text) => ({ text, postedAt: null })),
+        { origin: `${t.source}:${feedKey || t.configKey.slice(0, 12)}` },
+      ).catch(() => null);
+      if (h) stats.resolved.push(...h.boards);
+    }
+  }
+  if (error) stats.errors.push(`custom ${t.source}: ${error}`);
+  const status = error ? "error" : fetched ? "ok" : "empty";
+  for (const id of t.sourceIds) {
+    await repo.recordDiscoverySourceRun(id, { status, count: fetched, error }).catch(() => {});
+  }
+  return fetched;
+}
+
+/** run the plan's search targets; returns fetched counts per saved-search id (and records each run). */
+export async function runSearchTargets(
+  repo: Repository,
+  targets: SearchTarget[],
+  embedder: Embedder,
+  stats?: Pick<PollStats, "fetched" | "errors">,
+): Promise<Record<string, number>> {
+  const perSearch: Record<string, number> = {};
+  const owners = new Map<string, string>();
+  const sourcesBySearch = new Map<string, Record<string, number>>();
+  for (const st of targets) {
+    const adapter = getAdapter(st.source);
+    if (!adapter || (adapter.tier !== "tier1" && adapter.tier !== "tier2")) continue; // invariant #1
+    const r = await ingestFromAdapter(repo, adapter, st.target, { embedder });
+    if (stats) {
+      stats.fetched += r.fetched;
+      stats.errors.push(...r.errors);
+    }
+    for (const s of st.searches) {
+      owners.set(s.searchId, s.tenantId);
+      perSearch[s.searchId] = (perSearch[s.searchId] ?? 0) + r.fetched;
+      const bySource = sourcesBySearch.get(s.searchId) ?? {};
+      bySource[st.source] = (bySource[st.source] ?? 0) + r.fetched;
+      sourcesBySearch.set(s.searchId, bySource);
+    }
+  }
+  for (const [searchId, tenantId] of owners) {
+    await repo
+      .recordSavedSearchRun(tenantId, searchId, { fetched: perSearch[searchId] ?? 0, sources: sourcesBySearch.get(searchId) ?? {}, via: "poll" })
+      .catch(() => {});
+  }
+  return perSearch;
+}
+
 const DEFAULT_MAX_BOARDS = 80;
+/** ATS links harvested from one custom feed per run (one detector probe each). */
+const MAX_HARVEST_PER_FEED = 10;
 
 /** never-polled boards first (0), then oldest poll first */
 function polledAt(c: { lastPolled: string | Date | null }): number {
   return c.lastPolled ? new Date(c.lastPolled as string | Date).getTime() : 0;
+}
+
+/**
+ * The host a board is served from, for per-host politeness: multi-tenant hosts
+ * (Workday "{host}/{tenant}/{site}", Eightfold "{host}/{domain}") by their host, shared
+ * APIs (Greenhouse, Lever, Ashby…) by ATS.
+ */
+function boardHostKey(c: Company): string {
+  const first = (c.atsSlug ?? "").split("/")[0] ?? "";
+  return first.includes(".") ? first.toLowerCase() : c.atsType;
 }
 
 function csv(v: string | undefined): string[] {

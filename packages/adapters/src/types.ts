@@ -1,4 +1,4 @@
-import type { ExecutionTier, LevelBand, RawPosting, SourceKind } from "@jobflow/core";
+import type { ExecutionTier, LevelBand, RawPosting, SearchQuery, SourceKind } from "@jobflow/core";
 
 /**
  * The one interface every source implements (§ Source Adapters). The orchestrator
@@ -21,6 +21,47 @@ export interface SourceAdapter {
    * that renders the same either way). A posting is only ever retired on `false`.
    */
   isLive?(job: LivenessTarget): Promise<boolean | null>;
+  /**
+   * Search-capable sources map a user's SearchQuery onto their own fetch targets (saved
+   * searches, ad-hoc search). Pure, no I/O, at most 3 targets per query (politeness/cost).
+   * [] = this source can't serve the query (wrong market, remote-only board vs "exclude").
+   */
+  toTargets?(q: SearchQuery, ctx: SearchTargetContext): FetchTarget[];
+  /** what the source can filter on server-side, and what a call costs. */
+  readonly searchCaps?: SearchCaps;
+}
+
+export interface SearchTargetContext {
+  /** ISO-2 markets the searcher works in (their effective markets). */
+  markets: string[];
+  /** the searcher's years of experience (experience facets). */
+  yoe: number;
+}
+
+export interface SearchCaps {
+  keywords: boolean;
+  location: boolean;
+  country: boolean;
+  remote: boolean;
+  postedWithin: boolean;
+  salaryMin: boolean;
+  seniority: boolean;
+  /** free = no key; keyed = free key required; paid = every call spends credits. */
+  cost: "free" | "keyed" | "paid";
+}
+
+/**
+ * A fetch result that is NOT the whole board (an unfiltered fallback list, a list cut at
+ * its cap). `markStale` must never diff against it (invariant #5) — ingest checks
+ * `isPartialFetch` and leaves retiring to the lastSeen TTL sweep.
+ */
+const PARTIAL = new WeakSet<object>();
+export function markPartial<T extends object[]>(raws: T): T {
+  PARTIAL.add(raws);
+  return raws;
+}
+export function isPartialFetch(raws: readonly object[]): boolean {
+  return PARTIAL.has(raws);
 }
 
 export interface LivenessTarget {

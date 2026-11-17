@@ -6,3 +6,4 @@ export * from "./salary/index.js";
 export * from "./util/vector.js";
 export * from "./util/embed.js";
 export * from "./util/latex.js";
+export * from "./resume/index.js";

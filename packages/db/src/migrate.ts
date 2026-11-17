@@ -1,58 +1,40 @@
-import { readdir, readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import pg from "pg";
 import { loadRootEnv } from "./env.js";
+import { storeKind } from "./factory.js";
+import { MIGRATIONS_DIR, runMigrations } from "./migrations.js";
+import { defaultDataDir } from "./paths.js";
+import type { SqlClient } from "./sql.js";
 
 loadRootEnv();
 
 /**
- * Minimal forward-only migrator. Applies every .sql in migrations/ in name order,
- * once, tracked in a _migrations table. Idempotent to re-run.
- *   DATABASE_URL=... pnpm --filter @jobflow/db migrate
+ * Apply pending migrations (forward-only, tracked in `_migrations`, idempotent):
+ *   DATABASE_URL=...           pnpm --filter @jobflow/db migrate   # Postgres / Supabase
+ *   JOBFLOW_STORE=pglite       pnpm --filter @jobflow/db migrate   # local PGlite (~/.jobflow)
  */
-async function migrate(): Promise<void> {
-  const url = process.env.DATABASE_URL;
-  if (!url) {
-    console.error("DATABASE_URL not set — nothing to migrate (the in-memory repo needs no migration).");
+async function main(): Promise<void> {
+  const kind = storeKind();
+  let client: SqlClient;
+  if (kind === "postgres") {
+    const { pgPoolClient } = await import("./sql.js");
+    client = pgPoolClient(process.env.DATABASE_URL, { max: 1 });
+  } else if (kind === "pglite") {
+    const dir = defaultDataDir();
+    console.log(`PGlite data dir: ${dir}`);
+    const { openPglite } = await import("./pglite.js");
+    client = await openPglite(dir, { migrate: false });
+  } else {
+    console.error("DATABASE_URL not set — nothing to migrate (the in-memory repo needs no migration; JOBFLOW_STORE=pglite for the local store).");
     process.exit(1);
   }
-  const dir = join(dirname(fileURLToPath(import.meta.url)), "..", "migrations");
-  const files = (await readdir(dir)).filter((f) => f.endsWith(".sql")).sort();
-
-  const client = new pg.Client({
-    connectionString: url,
-    ssl: /supabase|amazonaws|render|neon/.test(url) ? { rejectUnauthorized: false } : undefined,
-  });
-  await client.connect();
-  await client.query(`create table if not exists _migrations (name text primary key, applied_at timestamptz default now())`);
-  const { rows } = await client.query<{ name: string }>("select name from _migrations");
-  const applied = new Set(rows.map((r) => r.name));
-
-  for (const file of files) {
-    if (applied.has(file)) {
-      console.log(`· skip ${file} (already applied)`);
-      continue;
-    }
-    const sql = await readFile(join(dir, file), "utf8");
-    try {
-      await client.query("begin");
-      await client.query(sql);
-      await client.query("insert into _migrations (name) values ($1)", [file]);
-      await client.query("commit");
-      console.log(`✓ applied ${file}`);
-    } catch (e) {
-      await client.query("rollback");
-      console.error(`✗ failed ${file}:`, (e as Error).message);
-      await client.end();
-      process.exit(1);
-    }
+  try {
+    await runMigrations(client, MIGRATIONS_DIR, (l) => console.log(l));
+    console.log("migrations up to date.");
+  } finally {
+    await client.close();
   }
-  await client.end();
-  console.log("migrations up to date.");
 }
 
-migrate().catch((e) => {
-  console.error(e);
+main().catch((e) => {
+  console.error(`✗ ${(e as Error).message}`);
   process.exit(1);
 });

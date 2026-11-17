@@ -1,5 +1,6 @@
-import type { RawPosting } from "@jobflow/core";
-import { httpText, type FetchTarget, type SourceAdapter } from "../types.js";
+import type { RawPosting, SearchQuery } from "@jobflow/core";
+import { httpText, type FetchTarget, type SearchCaps, type SearchTargetContext, type SourceAdapter } from "../types.js";
+import { crossCapped, queryCity, queryCountries, queryTerms, slugifyTerm } from "../search.js";
 
 /**
  * Wellfound (Tier 2, fragile: public server-rendered role×location pages, no login to
@@ -32,11 +33,45 @@ interface WfStartup {
   highlightedJobListings?: Array<{ __ref?: string }>;
 }
 
+/** ISO-2 → Wellfound's country location slug. */
+const WELLFOUND_COUNTRY: Record<string, string> = {
+  IN: "india",
+  US: "united-states",
+  GB: "united-kingdom",
+  DE: "germany",
+  CA: "canada",
+  NL: "netherlands",
+  FR: "france",
+  SG: "singapore",
+  AU: "australia",
+};
+
 const REPOSTER = /^\W*apply here\W*:\s*https?:\/\//i;
 
 export class WellfoundAdapter implements SourceAdapter {
   readonly source = "wellfound" as const;
   readonly tier = "tier2" as const;
+  readonly searchCaps: SearchCaps = {
+    keywords: true, location: true, country: true, remote: true, postedWithin: false, salaryMin: false, seniority: false, cost: "free",
+  };
+
+  /**
+   * Role × location pages (`/role/l/{role}/{location}`): the term becomes the role slug,
+   * the city or country the location slug, "remote" for a remote-only query. Fragile and
+   * paged, so at most 2 targets of 2 pages each.
+   */
+  toTargets(q: SearchQuery, ctx: SearchTargetContext): FetchTarget[] {
+    const roles = queryTerms(q).map(slugifyTerm).filter(Boolean);
+    if (!roles.length) return [];
+    const places =
+      q.remote === "only"
+        ? ["remote"]
+        : queryCountries(q, ctx)
+            .map((c) => slugifyTerm(queryCity(q, c) ?? WELLFOUND_COUNTRY[c] ?? ""))
+            .filter(Boolean);
+    if (!places.length) return [];
+    return crossCapped(roles, places, 2).map(([role, location]) => ({ query: role, limit: 60, params: { location, maxPages: 2 } }));
+  }
 
   async fetch(target: FetchTarget): Promise<RawPosting[]> {
     const role = (target.query ?? "backend-engineer").replace(/[^a-z0-9-]/gi, "");

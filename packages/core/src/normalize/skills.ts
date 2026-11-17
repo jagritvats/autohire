@@ -105,3 +105,61 @@ export function parseRequirements(text: string): Requirement[] {
 function rank(s: RequirementStrength): number {
   return s === "must_have" ? 2 : s === "nice_to_have" ? 1 : 0;
 }
+
+// ── token-level matching (résumé skills sections — onboarding, §4) ──
+
+/** Every canonical skill id the alias dictionary knows. */
+export const CANONICAL_SKILLS: readonly string[] = Object.keys(SKILL_ALIASES);
+
+/**
+ * Display forms the prose-oriented aliases deliberately don't match on their own ("Go"
+ * needs a language cue inside a JD sentence; alone in a skills list it IS the language).
+ * Keys are lower-cased whole tokens.
+ */
+const EXACT_SKILL_TOKENS: Record<string, string> = {
+  go: "go",
+  "c#": "csharp",
+  "c++": "cpp",
+  rest: "rest",
+  "rest api": "rest",
+  "rest apis": "rest",
+  "restful apis": "rest",
+  "ci/cd": "ci_cd",
+  cicd: "ci_cd",
+  ml: "ml",
+};
+
+/**
+ * Same aliases, but whole-word on both sides: a skills-list token must BE the skill, so
+ * "Reactive" isn't React and "Trust & Safety" isn't Rust. `java` stays bounded, so
+ * "JavaScript" canonicalizes to javascript, never java.
+ */
+const TOKEN_COMPILED: Array<[string, RegExp]> = Object.entries(SKILL_ALIASES).map(
+  ([skill, aliases]) => [skill, new RegExp(`(?<![\\w])(${aliases.join("|")})(?![\\w])`, "i")],
+);
+
+/**
+ * `extractSkills` with whole-word aliases on both sides — for a candidate's own prose,
+ * where the JD extractor's substring aliases misfire ("storage" ⊃ "rag", "weeks" ⊃ "eks").
+ */
+export function extractSkillsStrict(text: string): string[] {
+  if (!text) return [];
+  return TOKEN_COMPILED.filter(([, re]) => re.test(text)).map(([skill]) => skill);
+}
+
+/**
+ * Canonicalize ONE token from a skills list ("PostgreSQL" → "postgres", "Go" → "go").
+ * Null when the dictionary doesn't know it — callers keep those as `unrecognized`
+ * instead of guessing. Long phrases (> 4 words) never canonicalize: a sentence that
+ * merely mentions a skill isn't a skills-list entry.
+ */
+export function matchSkillToken(token: string): string | null {
+  const t = token.trim().replace(/\s+/g, " ").replace(/[.:;,]+$/, "");
+  if (!t || t.length > 40 || t.split(" ").length > 4) return null;
+  const lower = t.toLowerCase();
+  const exact = EXACT_SKILL_TOKENS[lower];
+  if (exact) return exact;
+  if (Object.prototype.hasOwnProperty.call(SKILL_ALIASES, lower)) return lower;
+  for (const [skill, re] of TOKEN_COMPILED) if (re.test(t)) return skill;
+  return null;
+}

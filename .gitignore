@@ -21,3 +21,12 @@ test-results/
 # os
 .DS_Store
 Thumbs.db
+
+# user uploads / local data — never commit résumés or personal files
+uploads/
+**/uploads/
+.jobflow-data/
+docs/screenshots/.tmp/
+
+# agent worktrees
+.claude/worktrees/

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { TokensPanel } from "./TokensPanel";
 import type { Profile, TenantConfig } from "@jobflow/core";
 import { EvidenceEditor, type PromoteItem } from "./EvidenceEditor";
 
@@ -92,6 +93,9 @@ export function SettingsForm({
       llmApiKey: "",
       llmBaseUrl: "",
       digestCadence: "daily",
+      discoveryPresets: [],
+      discoveryPreset: "india",
+      presetFeedsDisabled: [],
     };
     // defensive: tolerate older/snake-cased rows so the UI never crashes on undefined arrays
     const af = (base.automationFlags ?? {}) as Partial<TenantConfig["automationFlags"]> & { tier3_sources?: string[] };
@@ -705,7 +709,14 @@ export function SettingsForm({
             <input
               type="password"
               value={config.llmApiKey}
-              placeholder={activeProvider.key ? `or set ${activeProvider.key}` : "n/a"}
+              autoComplete="off"
+              placeholder={
+                (config as { llmApiKeySet?: boolean }).llmApiKeySet
+                  ? "•••••••• saved — type to replace"
+                  : activeProvider.key
+                    ? `or set ${activeProvider.key}`
+                    : "n/a"
+              }
               disabled={config.llmChoice === "echo"}
               onChange={(e) => setConfig({ ...config, llmApiKey: e.target.value })}
             />
@@ -737,6 +748,11 @@ export function SettingsForm({
       </section>
 
       {/* ── automation / sources ── */}
+      <section className="card-block">
+        <h3>API tokens <span className="hint">— for the CLI, the browser extension and your local agent</span></h3>
+        <TokensPanel />
+      </section>
+
       <section className="card-block danger">
         <h3>Automation <span className="hint">— local agent only (§7.1). Off by default. Autosubmit is locked false.</span></h3>
         <div className="field-row">

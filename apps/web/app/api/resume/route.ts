@@ -1,78 +1,53 @@
 import { NextResponse } from "next/server";
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { DEFAULT_TENANT, defaultProfile } from "@jobflow/pipeline";
-import { latexToText, type Profile } from "@jobflow/core";
+import { blankProfile } from "@jobflow/pipeline";
+import type { Profile } from "@jobflow/core";
+import { ImportError, importResume } from "@jobflow/service";
 import { getRepo, ensureTenant } from "@/lib/repo";
+import { getFileStore } from "@/lib/files";
+import { guard } from "@/lib/auth";
 
 // pdf-parse + filesystem need the node runtime, not the edge.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const UPLOAD_DIR = join(process.cwd(), "uploads");
-
 /**
- * Upload a base resume (PDF / .txt / .md / .tex). We extract the text into
- * `profile.masterResume` (what generation grounds on) and store the file, pointing
- * `contact.resumePath` at it so the local autofill agent can attach the real file
- * later (§7.1). A .tex is also kept raw in `profile.resumeLatex` — the template the
- * tailor rewrites. Only stored values are ever used; nothing here submits anything.
+ * Replace your base résumé from Settings (PDF / DOCX / .tex / .md / .txt / JSON Resume).
+ * The extracted text becomes `profile.masterResume` (what generation grounds on); the file
+ * is stored in YOUR data dir (never the source tree) and `contact.resumePath` points at it
+ * so the local form-filler can attach the real file. A .tex is also kept raw in
+ * `profile.resumeLatex` — the template the tailor rewrites. Stack, evidence and preferences
+ * are left alone here; use onboarding to review and import those.
  */
 export async function POST(req: Request) {
+  const auth = await guard(req);
+  if (auth instanceof Response) return auth;
   const form = await req.formData();
   const file = form.get("file");
-  if (!(file instanceof File)) {
-    return NextResponse.json({ error: "no file" }, { status: 400 });
-  }
-  const name = file.name || "resume";
-  const lower = name.toLowerCase();
-  const buf = Buffer.from(await file.arrayBuffer());
-
-  let text: string;
-  let latex = ""; // raw .tex when a LaTeX résumé is imported
-  try {
-    if (lower.endsWith(".pdf") || file.type === "application/pdf") {
-      // import the lib path directly — the package's index.js runs a debug shim
-      // that reads a bundled test PDF when required as the main module.
-      const { default: pdfParse } = await import("pdf-parse/lib/pdf-parse.js");
-      const parsed = await pdfParse(buf);
-      text = parsed.text;
-    } else if (lower.endsWith(".tex")) {
-      latex = buf.toString("utf8");
-      text = latexToText(latex);
-    } else if (lower.endsWith(".txt") || lower.endsWith(".md") || file.type.startsWith("text/")) {
-      text = buf.toString("utf8");
-    } else {
-      return NextResponse.json(
-        { error: "Unsupported file. Upload a PDF, .tex, .txt, or .md (or paste the text)." },
-        { status: 415 },
-      );
-    }
-  } catch (e) {
-    return NextResponse.json({ error: `Could not read the file: ${(e as Error).message}` }, { status: 422 });
-  }
-
-  text = text.replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
-
-  // persist the file alongside the extracted text
-  const safe = `${Date.now()}-${name.replace(/[^\w.\-]+/g, "_")}`;
-  let resumePath = "";
-  try {
-    await mkdir(UPLOAD_DIR, { recursive: true });
-    resumePath = join(UPLOAD_DIR, safe);
-    await writeFile(resumePath, buf);
-  } catch {
-    resumePath = ""; // text extraction still succeeded; storing the file is best-effort
-  }
+  if (!(file instanceof File)) return NextResponse.json({ error: "no file" }, { status: 400 });
 
   const repo = await getRepo();
-  await ensureTenant(repo);
-  const current = (await repo.getProfile(DEFAULT_TENANT)) ?? defaultProfile();
+  const files = getFileStore();
+  let draft, stored;
+  try {
+    ({ draft, file: stored } = await importResume(repo, files, auth.tenantId, {
+      file: { filename: file.name || "resume", mime: file.type || undefined, bytes: new Uint8Array(await file.arrayBuffer()) },
+    }));
+  } catch (e) {
+    if (e instanceof ImportError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
+  const text = draft.text;
+  const latex = draft.latex;
+  const resumePath = stored ? ((await files.localPath(stored.key)) ?? "") : "";
+
+  await ensureTenant(repo, auth.tenantId);
+  const current = (await repo.getProfile(auth.tenantId)) ?? blankProfile(auth.tenantId);
   const next: Profile = {
     ...current,
     masterResume: text,
     // keep the raw .tex when a LaTeX résumé is imported (the tailor template)
     resumeLatex: latex || current.resumeLatex,
+    resumeFile: stored ?? current.resumeFile,
     // resume changed → drop the cached embedding so the next rank re-embeds
     profileEmbedding: null,
     prefs: {
@@ -85,5 +60,14 @@ export async function POST(req: Request) {
   // a PDF/text upload doesn't touch the LaTeX template — say so, since LaTeX tailoring
   // keeps rewriting that older .tex until it's replaced or cleared
   const latexKept = !latex && !!current.resumeLatex.trim();
-  return NextResponse.json({ text, fileName: name, resumePath, chars: text.length, isLatex: !!latex, latex, latexKept });
+  return NextResponse.json({
+    text,
+    fileName: file.name,
+    resumePath,
+    chars: text.length,
+    isLatex: !!latex,
+    latex,
+    latexKept,
+    warnings: draft.warnings,
+  });
 }

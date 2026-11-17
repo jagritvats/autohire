@@ -1,5 +1,6 @@
-import type { RawPosting } from "@jobflow/core";
-import { htmlToText, httpStatus, liveFromStatus, type FetchTarget, type SourceAdapter, type LivenessTarget } from "../types.js";
+import type { RawPosting, SearchQuery } from "@jobflow/core";
+import { htmlToText, httpStatus, liveFromStatus, type FetchTarget, type SourceAdapter, type LivenessTarget, type SearchCaps, type SearchTargetContext } from "../types.js";
+import { crossCapped, inIndia, queryTerms, slugifyTerm } from "../search.js";
 
 /**
  * Cutshort (Tier 2: public, server-rendered, no login) — Indian startup/product-company
@@ -25,9 +26,36 @@ interface CsJob {
   locationsText?: string;
 }
 
+/** city name → Cutshort listing slug (verified live 2026-09). */
+export const CUTSHORT_CITY_SLUGS: Readonly<Record<string, string>> = {
+  bengaluru: "bangalore-bengaluru",
+  bangalore: "bangalore-bengaluru",
+  pune: "pune",
+  hyderabad: "hyderabad",
+};
+
 export class CutshortAdapter implements SourceAdapter {
   readonly source = "cutshort" as const;
   readonly tier = "tier2" as const;
+  readonly searchCaps: SearchCaps = {
+    keywords: true, location: true, country: false, remote: false, postedWithin: false, salaryMin: false, seniority: false, cost: "free",
+  };
+
+  /**
+   * Listing slugs are `{role}-jobs-in-{city}`; only city slugs verified live are used
+   * (an unknown city slug is a 404). India only; no named city → the verified hubs.
+   */
+  toTargets(q: SearchQuery, ctx: SearchTargetContext): FetchTarget[] {
+    if (!inIndia(q, ctx)) return [];
+    const roles = queryTerms(q).map(slugifyTerm).filter(Boolean);
+    if (!roles.length) return [];
+    const named = q.locations
+      .map((l) => CUTSHORT_CITY_SLUGS[(l.city ?? "").trim().toLowerCase()])
+      .filter((s): s is string => !!s);
+    if (q.locations.some((l) => l.city) && !named.length) return []; // cities we have no slug for
+    const cities = named.length ? [...new Set(named)] : [...new Set(Object.values(CUTSHORT_CITY_SLUGS))];
+    return crossCapped(roles, cities).map(([role, city]) => ({ query: `${role}-jobs-in-${city}`, limit: 50 }));
+  }
 
   /** the public job page: 404 once removed (verified 2026-09) */
   async isLive(job: LivenessTarget): Promise<boolean | null> {

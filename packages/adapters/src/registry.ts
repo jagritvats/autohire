@@ -31,6 +31,8 @@ import { AdzunaSearchAdapter } from "./aggregators/adzuna.js";
 import { CareerjetAdapter } from "./aggregators/careerjet.js";
 import { JSearchAdapter } from "./aggregators/jsearch.js";
 import { HnWhoIsHiringAdapter } from "./hn/whoishiring.js";
+import { RssFeedAdapter } from "./feeds/rss.js";
+import { JsonFeedAdapter } from "./feeds/jsonfeed.js";
 
 /** Singleton adapters keyed by source. Add a source = register one line here. */
 export const ADAPTERS: Record<string, SourceAdapter> = {
@@ -61,7 +63,7 @@ export const ADAPTERS: Record<string, SourceAdapter> = {
   // key-gated search APIs: return [] (no request) until their env keys are set
   adzuna: new AdzunaSearchAdapter(),
   careerjet: new CareerjetAdapter(),
-  jsearch: new JSearchAdapter(), // paid — see docs/SETUP.md "Optional sources"
+  jsearch: new JSearchAdapter(), // paid — see docs/configuration.md "Optional sources"
   // India tech boards (tier 2: public, no login)
   hirist: new HiristAdapter(),
   cutshort: new CutshortAdapter(),
@@ -69,6 +71,9 @@ export const ADAPTERS: Record<string, SourceAdapter> = {
   instahyre: new InstahyreAdapter(),
   wellfound: new WellfoundAdapter(),
   reddit: new RedditHiringAdapter(),
+  // user-configured feeds (tier 1): fetched only through the SSRF guard (net.ts)
+  rss: new RssFeedAdapter(),
+  json_feed: new JsonFeedAdapter(),
 };
 
 export function getAdapter(source: SourceKind): SourceAdapter | undefined {
@@ -84,4 +89,15 @@ export function atsAdapter(ats: AtsType): SourceAdapter | undefined {
 /** Cloud-safe adapters only (tier 1-2). The orchestrator never runs tier 3 here. */
 export function cloudAdapters(): SourceAdapter[] {
   return Object.values(ADAPTERS).filter((a) => a.tier === "tier1" || a.tier === "tier2");
+}
+
+/** a cloud adapter by source, or undefined — re-checks the tier (invariant #1). */
+export function cloudAdapter(source: string): SourceAdapter | undefined {
+  const a = ADAPTERS[source];
+  return a && (a.tier === "tier1" || a.tier === "tier2") ? a : undefined;
+}
+
+/** cloud adapters that can map a SearchQuery onto their own targets (`toTargets`). */
+export function searchCapableAdapters(): SourceAdapter[] {
+  return cloudAdapters().filter((a) => typeof a.toTargets === "function");
 }

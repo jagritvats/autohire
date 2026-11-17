@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { JOB_RUNTIME } from "@jobflow/core";
-import { DEFAULT_TENANT } from "@jobflow/pipeline";
 import { getRepo } from "@/lib/repo";
+import { guard } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +12,8 @@ export const dynamic = "force-dynamic";
  * job for the worker to drain rather than executing synchronously.
  */
 export async function POST(req: Request) {
+  const auth = await guard(req, { admin: true });
+  if (auth instanceof Response) return auth;
   const repo = await getRepo();
   const body = await req.json().catch(() => ({}));
   const olderThanDays = Number(body?.olderThanDays);
@@ -20,7 +22,7 @@ export async function POST(req: Request) {
   }
   const field = body?.field === "firstSeen" ? "firstSeen" : "lastSeen";
   const job = await repo.enqueueJob({
-    tenantId: DEFAULT_TENANT,
+    tenantId: auth.tenantId,
     type: "purge",
     runtime: JOB_RUNTIME["purge"],
     payload: { olderThanDays, field, hard: !!body?.hard },

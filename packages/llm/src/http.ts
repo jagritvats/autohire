@@ -1,3 +1,5 @@
+import { redactSecrets } from "./redact.js";
+
 /**
  * Resilience helpers for LLM providers (§ Customize — visible progress + retries).
  * Mirrors the adapters' `httpJson` AbortController pattern. Only *transient* failures
@@ -12,10 +14,12 @@ export class ProviderError extends Error {
   /** honored by withRetry as the backoff delay when the server sent Retry-After. */
   retryAfterMs?: number;
   constructor(userMessage: string, detail: string, status?: number, retryAfterMs?: number) {
-    super(userMessage);
+    // both strings can reach logs, job rows and the browser — never carry a key (redact.ts)
+    const msg = redactSecrets(userMessage);
+    super(msg);
     this.name = "ProviderError";
-    this.userMessage = userMessage;
-    this.detail = detail;
+    this.userMessage = msg;
+    this.detail = redactSecrets(detail);
     this.status = status;
     this.retryAfterMs = retryAfterMs;
   }
@@ -24,9 +28,16 @@ export class ProviderError extends Error {
 /** HTTP statuses worth retrying (rate limit / transient upstream / overloaded). */
 export const RETRYABLE = [408, 425, 429, 500, 502, 503, 504, 529];
 
-/** Map a provider HTTP error to a friendly message + keep the raw body as detail. */
-export function mapProviderError(status: number, body: string, name = "provider", retryAfterMs?: number): ProviderError {
-  const detail = `${name} ${status}: ${body}`.slice(0, 2000);
+/** Map a provider HTTP error to a friendly message + keep the (redacted) raw body as
+ *  detail. `secrets` are exact values to mask (the key in use) on top of the patterns. */
+export function mapProviderError(
+  status: number,
+  body: string,
+  name = "provider",
+  retryAfterMs?: number,
+  secrets: Array<string | undefined> = [],
+): ProviderError {
+  const detail = redactSecrets(`${name} ${status}: ${body}`, secrets).slice(0, 2000);
   let msg: string;
   if (status === 401 || status === 403) msg = "Invalid API key — check Settings › Generation model.";
   else if (status === 404) msg = "Model or endpoint not found — check the model name / base URL in Settings.";
@@ -43,6 +54,26 @@ export function truncatedOutputError(name: string, maxTokens: number | undefined
   return new ProviderError(
     `${name} stopped at its output limit before finishing — regenerate, or pick a model with a larger output limit.`,
     `${name}: output hit max_tokens=${maxTokens ?? "default"}`,
+    422,
+  );
+}
+
+/** The model produced no usable text before its output limit (a thinking model can spend
+ *  the whole budget reasoning). 422 → not retried. */
+export function emptyOutputError(name: string, maxTokens: number | undefined): ProviderError {
+  return new ProviderError(
+    `${name} used its whole output budget before writing an answer — retry, or raise the limit / pick a faster model.`,
+    `${name}: no text before max_tokens=${maxTokens ?? "default"}`,
+    422,
+  );
+}
+
+/** The provider's safety layer declined the request (Anthropic `stop_reason: "refusal"`,
+ *  OpenAI `finish_reason: "content_filter"`). Never returned as text, never retried. */
+export function refusalError(name: string, detail: string): ProviderError {
+  return new ProviderError(
+    `${name} declined to answer this request (safety filter). Rephrase the input or try another model.`,
+    `${name}: refusal ${detail}`.slice(0, 2000),
     422,
   );
 }

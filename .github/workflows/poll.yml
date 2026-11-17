@@ -8,11 +8,20 @@ name: jobflow-poll
 # without one the worker falls back to an in-memory store that dies with the runner, so a
 # cron poll would hit every board every 6h and persist nothing. The gate job skips those
 # runs; "Run workflow" (workflow_dispatch) always goes ahead, as an end-to-end smoke test.
+# The secret must include ?sslmode=require for hosted Postgres — TLS follows sslmode only.
+#
+# FORKS: GitHub disables scheduled workflows on forks. To use this cron on your fork,
+# enable Actions in the fork's "Actions" tab and add the secrets below (at least
+# DATABASE_URL); optional repository variables: LLM_PROVIDER, LLM_MODEL_CHEAP,
+# LLM_MODEL_STRONG, JOBFLOW_POLL_COUNTRY, JOBFLOW_RERANK_TOP.
 
 on:
   schedule:
     - cron: "0 */6 * * *" # every 6h
   workflow_dispatch: {}
+
+permissions:
+  contents: read
 
 concurrency:
   group: jobflow-poll
@@ -49,8 +58,14 @@ jobs:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'echo' }}
+      # blank → the provider's default models
+      LLM_MODEL_CHEAP: ${{ vars.LLM_MODEL_CHEAP }}
+      LLM_MODEL_STRONG: ${{ vars.LLM_MODEL_STRONG }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+      JOBFLOW_POLL_COUNTRY: ${{ vars.JOBFLOW_POLL_COUNTRY || 'IN' }}
+      JOBFLOW_RERANK_TOP: ${{ vars.JOBFLOW_RERANK_TOP || '15' }}
       ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
       ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
       # optional discovery APIs — each feed is a no-op until its secret exists
@@ -70,7 +85,9 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm -r build
+      # No build step: the worker runs through tsx on the workspace packages' TS sources
+      # (their package.json "main" points at src/). `pnpm -r build` also ran `next build`
+      # for the web app — minutes of CI time this job never used.
       # a hosted DB must have the schema the code writes (e.g. 0013's salary columns);
       # the migrator is idempotent and tracks what it has applied
       - name: migrate

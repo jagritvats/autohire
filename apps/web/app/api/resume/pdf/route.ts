@@ -1,20 +1,21 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
-import { DEFAULT_TENANT, defaultProfile } from "@jobflow/pipeline";
+import { blankProfile } from "@jobflow/pipeline";
 import type { Application } from "@jobflow/core";
 import { candidateName, markdownToLatex } from "@jobflow/llm";
+import { defaultDataDir, ensurePrivateDir } from "@jobflow/db";
 import { getRepo, ensureTenant } from "@/lib/repo";
 import { generateTailored } from "@/lib/tailor";
 import { compileLatex } from "@/lib/latex";
+import { guard } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-const UPLOAD_DIR = join(process.cwd(), "uploads");
 const Body = z.object({
   postingId: z.string().uuid(),
   latex: z.string().max(200_000).optional(), // the (possibly user-edited) .tex to compile
@@ -31,6 +32,8 @@ const Body = z.object({
  * .tex download (Overleaf). `save:true` persists the PDF as this application's attachment.
  */
 export async function POST(req: Request) {
+  const auth = await guard(req);
+  if (auth instanceof Response) return auth;
   const parsed = Body.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.message }, { status: 400 });
   const { postingId, save, force } = parsed.data;
@@ -38,7 +41,7 @@ export async function POST(req: Request) {
   let latex = parsed.data.latex ?? (parsed.data.markdown !== undefined ? markdownToLatex(parsed.data.markdown) : undefined);
   if (!latex) {
     try {
-      latex = (await generateTailored({ postingId, kind: "resume_latex", force })).text;
+      latex = (await generateTailored(auth.tenantId, { postingId, kind: "resume_latex", force })).text;
     } catch (e) {
       const pe = e as Error & { userMessage?: string; detail?: string };
       return NextResponse.json({ error: pe.userMessage ?? pe.message, detail: pe.detail }, { status: 400 });
@@ -57,19 +60,21 @@ export async function POST(req: Request) {
   if (save) {
     try {
       const repo = await getRepo();
-      await ensureTenant(repo);
+      await ensureTenant(repo, auth.tenantId);
       // the ATS shows the uploaded file's name to the recruiter — make it a normal one
-      const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? defaultProfile();
+      const profile = (await repo.getProfile(auth.tenantId)) ?? blankProfile(auth.tenantId);
       const who = candidateName(profile).replace(/[^\p{L}\p{N}]+/gu, "_").replace(/^_+|_+$/g, "");
-      const dir = join(UPLOAD_DIR, "tailored", postingId);
-      await mkdir(dir, { recursive: true });
+      // the caller's own dir under the data dir — never the source tree; a plain file name
+      // because the ATS shows it to the recruiter
+      const dir = join(defaultDataDir(), "files", "tenants", auth.tenantId, "tailored", postingId);
+      ensurePrivateDir(dir);
       const path = join(dir, `${who ? `${who}_` : ""}Resume.pdf`);
-      await writeFile(path, result.pdf);
+      await writeFile(path, result.pdf, { mode: 0o600 });
       // attach to THIS application (not the global profile) so tailoring role B doesn't
       // clobber role A's attachment; the agent prefers this over the base résumé.
-      const existing = await repo.getApplicationByPosting(DEFAULT_TENANT, postingId);
+      const existing = await repo.getApplicationByPosting(auth.tenantId, postingId);
       const app: Application = existing ?? {
-        id: randomUUID(), tenantId: DEFAULT_TENANT, postingId, status: "drafting",
+        id: randomUUID(), tenantId: auth.tenantId, postingId, status: "drafting",
         appliedVia: null, tailoredResumeUrl: null, resumeVariant: null, answers: {},
         submittedAt: null, nextAction: null, nextActionAt: null, outcome: null,
       };

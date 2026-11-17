@@ -1,5 +1,6 @@
-import type { RawPosting } from "@jobflow/core";
-import { httpJson, type FetchTarget, type SourceAdapter } from "../types.js";
+import type { RawPosting, SearchQuery } from "@jobflow/core";
+import { httpJson, type FetchTarget, type SearchCaps, type SearchTargetContext, type SourceAdapter } from "../types.js";
+import { crossCapped, queryCity, queryCountries, queryTerms } from "../search.js";
 import { highlightedToText } from "./text.js";
 
 /**
@@ -39,6 +40,31 @@ export interface CareerjetResponse {
 }
 
 const UA = "JobFlow/0.1 (+personal job-search; contact via app)";
+
+/** ISO-2 → Careerjet locale (one national index each). */
+export const CAREERJET_LOCALES: Readonly<Record<string, string>> = {
+  IN: "en_IN",
+  US: "en_US",
+  GB: "en_GB",
+  IE: "en_IE",
+  CA: "en_CA",
+  AU: "en_AU",
+  NZ: "en_NZ",
+  SG: "en_SG",
+  ZA: "en_ZA",
+  AE: "en_AE",
+  DE: "de_DE",
+  AT: "de_AT",
+  CH: "de_CH",
+  FR: "fr_FR",
+  NL: "nl_NL",
+  BE: "nl_BE",
+  ES: "es_ES",
+  IT: "it_IT",
+  PL: "pl_PL",
+  PT: "pt_PT",
+  SE: "sv_SE",
+};
 const PAGE_SIZE = 50;
 
 export function hasCareerjetKey(): boolean {
@@ -48,6 +74,20 @@ export function hasCareerjetKey(): boolean {
 export class CareerjetAdapter implements SourceAdapter {
   readonly source = "careerjet" as const;
   readonly tier = "tier1" as const;
+  readonly searchCaps: SearchCaps = {
+    keywords: true, location: true, country: true, remote: false, postedWithin: false, salaryMin: false, seniority: false, cost: "keyed",
+  };
+
+  /** the country picks the Careerjet index (locale); the city goes in `location`. */
+  toTargets(q: SearchQuery, ctx: SearchTargetContext): FetchTarget[] {
+    const terms = queryTerms(q);
+    const countries = queryCountries(q, ctx).filter((c) => CAREERJET_LOCALES[c]);
+    if (!terms.length || !countries.length) return [];
+    return crossCapped(terms, countries).map(([term, country]) => {
+      const city = queryCity(q, country);
+      return { query: term, limit: 50, params: { locale: CAREERJET_LOCALES[country]! }, ...(city ? { location: city } : {}) };
+    });
+  }
 
   async fetch(target: FetchTarget): Promise<RawPosting[]> {
     if (!hasCareerjetKey()) return []; // key-gated: no key, no request

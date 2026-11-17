@@ -1,5 +1,6 @@
-import type { RawPosting } from "@jobflow/core";
-import { htmlToText, httpJson, type FetchTarget, type SourceAdapter } from "../types.js";
+import type { RawPosting, SearchQuery } from "@jobflow/core";
+import { htmlToText, httpJson, type FetchTarget, type SearchCaps, type SearchTargetContext, type SourceAdapter } from "../types.js";
+import { isEuropean, queryCountries, queryTerms } from "../search.js";
 
 /**
  * Arbeitnow job board API (Tier 1, free, no auth):
@@ -26,6 +27,18 @@ interface AnResponse {
 export class ArbeitnowAdapter implements SourceAdapter {
   readonly source = "arbeitnow" as const;
   readonly tier = "tier1" as const;
+  readonly searchCaps: SearchCaps = {
+    keywords: true, location: false, country: false, remote: false, postedWithin: false, salaryMin: false, seniority: false, cost: "free",
+  };
+
+  /**
+   * German-market board (mostly German-language, EU-onsite): only for a query in a
+   * European market. One fetch returns the whole board, so one term is enough per call.
+   */
+  toTargets(q: SearchQuery, ctx: SearchTargetContext): FetchTarget[] {
+    if (!queryCountries(q, ctx).some(isEuropean)) return [];
+    return queryTerms(q).map((term) => ({ query: term, limit: 60 }));
+  }
 
   async fetch(target: FetchTarget): Promise<RawPosting[]> {
     const data = await httpJson<AnResponse>("https://www.arbeitnow.com/api/job-board-api");

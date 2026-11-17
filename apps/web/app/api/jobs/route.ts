@@ -2,17 +2,19 @@ import { NextResponse } from "next/server";
 import { JobType, JOB_RUNTIME } from "@jobflow/core";
 import { atsAdapter } from "@jobflow/adapters";
 import type { Repository } from "@jobflow/db";
-import { DEFAULT_TENANT } from "@jobflow/pipeline";
 import { getRepo } from "@/lib/repo";
+import { guard } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 /** Recent jobs + local-agent heartbeat (for the activity panel). */
-export async function GET() {
+export async function GET(req: Request) {
+  const auth = await guard(req);
+  if (auth instanceof Response) return auth;
   const repo = await getRepo();
   const [jobs, heartbeat] = await Promise.all([
-    repo.listJobs(DEFAULT_TENANT, 25),
-    repo.getHeartbeat(DEFAULT_TENANT),
+    repo.listJobs(auth.tenantId, 25),
+    repo.getHeartbeat(auth.tenantId),
   ]);
   const agentOnline = heartbeat ? Date.now() - new Date(heartbeat.lastSeen as string).getTime() < 90_000 : false;
   return NextResponse.json({ jobs, heartbeat, agentOnline });
@@ -25,14 +27,23 @@ export async function GET() {
  * runs them. Dispatching a local job while the agent is offline just queues it.
  */
 export async function POST(req: Request) {
+  const auth = await guard(req);
+  if (auth instanceof Response) return auth;
   const repo = await getRepo();
   const { type, payload } = await req.json();
   const parsed = JobType.safeParse(type);
   if (!parsed.success) return NextResponse.json({ error: "invalid job type" }, { status: 400 });
   const jobType = await routePoll(repo, parsed.data, payload);
-  const job = await repo.enqueueJob({ tenantId: DEFAULT_TENANT, type: jobType, runtime: JOB_RUNTIME[jobType], payload: payload ?? {} });
+  // instance-wide jobs touch the SHARED corpus — on a multi-user instance only an admin queues them
+  const companyPoll = jobType === "poll" && typeof payload?.companyId === "string";
+  if (GLOBAL_JOBS.has(jobType) && !companyPoll && auth.role !== "admin") {
+    return NextResponse.json({ error: "Only an admin can run instance-wide jobs; your feed re-ranks after each scheduled poll." }, { status: 403 });
+  }
+  const job = await repo.enqueueJob({ tenantId: auth.tenantId, type: jobType, runtime: JOB_RUNTIME[jobType], payload: payload ?? {} });
   return NextResponse.json(job);
 }
+
+const GLOBAL_JOBS = new Set<JobType>(["discover", "poll", "recheck", "purge", "liveness"]);
 
 /**
  * "Poll this company" for a board with no cloud adapter (Darwinbox is Cloudflare-blocked

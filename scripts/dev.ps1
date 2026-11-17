@@ -1,18 +1,25 @@
 #!/usr/bin/env pwsh
-# Local (no-Docker) dev: install, migrate if a DB is configured, then run the
-# control plane (web) + cloud worker together. Ctrl-C stops the web process.
+# Local (no-Docker) dev: install, migrate ONLY if a database is configured AND
+# reachable, then run the control plane (web) + cloud worker together. Ctrl-C stops the web process.
+# No Postgres needed: with DATABASE_URL blank the default store is used (see .env.example).
 $ErrorActionPreference = "Stop"
 Set-Location (Join-Path $PSScriptRoot "..")
 
 if (-not (Test-Path .env)) { Write-Host "creating .env from .env.example"; Copy-Item .env.example .env }
 pnpm install
 
-if (Select-String -Path .env -Pattern '^DATABASE_URL=.+' -Quiet) {
-  Write-Host "applying migrations..."
+$dbState = node scripts/db-reachable.mjs
+$dbCode = $LASTEXITCODE
+if ($dbCode -eq 0) {
+  Write-Host "database $dbState - applying migrations..."
   pnpm --filter @jobflow/db migrate
-  if ($LASTEXITCODE -ne 0) { Write-Host "migrate failed (is the DB up?) - continuing" }
+  if ($LASTEXITCODE -ne 0) { Write-Host "migrate failed - check DATABASE_URL; continuing" }
+} elseif ($dbCode -eq 1) {
+  Write-Host "no DATABASE_URL - using the default local store (set JOBFLOW_STORE / DATABASE_URL in .env for durability)"
 } else {
-  Write-Host "no DATABASE_URL set - running with the in-memory repo (not durable)"
+  Write-Host "DATABASE_URL is set but $dbState."
+  Write-Host "  Start it (Docker's Postgres: 'docker compose up -d db' -> localhost:5433) or blank DATABASE_URL in .env."
+  Write-Host "  Skipping migrations; the app will fail to reach the DB until it is up."
 }
 
 Write-Host "starting worker (background) + web..."

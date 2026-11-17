@@ -1,5 +1,6 @@
-import type { RawPosting } from "@jobflow/core";
-import { htmlToText, httpJson, type FetchTarget, type SourceAdapter } from "../types.js";
+import type { RawPosting, SearchQuery } from "@jobflow/core";
+import { htmlToText, httpJson, type FetchTarget, type SearchCaps, type SearchTargetContext, type SourceAdapter } from "../types.js";
+import { queryTerms } from "../search.js";
 
 /**
  * Remotive (Tier 1, free, no auth). Remote-job aggregator; good discovery + surfaces
@@ -26,6 +27,15 @@ interface RemotiveResponse {
 export class RemotiveAdapter implements SourceAdapter {
   readonly source = "remotive" as const;
   readonly tier = "tier1" as const;
+  readonly searchCaps: SearchCaps = {
+    keywords: true, location: false, country: false, remote: true, postedWithin: false, salaryMin: false, seniority: false, cost: "free",
+  };
+
+  /** remote-only, keyword search: one target per term. */
+  toTargets(q: SearchQuery, _ctx: SearchTargetContext): FetchTarget[] {
+    if (q.remote === "exclude") return [];
+    return queryTerms(q).map((term) => ({ query: term, limit: 50 }));
+  }
 
   async fetch(target: FetchTarget): Promise<RawPosting[]> {
     const params = new URLSearchParams({ category: "software-dev" });

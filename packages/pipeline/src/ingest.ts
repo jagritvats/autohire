@@ -2,14 +2,14 @@ import { createHash } from "node:crypto";
 import type { Company, Posting, RawPosting } from "@jobflow/core";
 import {
   embedOrigin,
-  isIndiaWorkable,
+  isWorkableIn,
   normalizePosting,
   parseLocation,
   repostSafeDates,
   scopedJobId,
   type NormalizedPosting,
 } from "@jobflow/core";
-import { getAdapter, type FetchTarget, type SourceAdapter } from "@jobflow/adapters";
+import { getAdapter, isPartialFetch, type FetchTarget, type SourceAdapter } from "@jobflow/adapters";
 import type { NewPosting, Repository } from "@jobflow/db";
 import { localEmbedder, type Embedder } from "./embedder.js";
 
@@ -23,8 +23,44 @@ export interface IngestStats {
 /**
  * Country the big-employer boards are polled for (server-side filter — they list
  * thousands of global roles). Shapes what we poll; ranking still scores location.
+ * Read at CALL time: apps load `.env` after this module is imported, so a module-level
+ * constant missed JOBFLOW_POLL_COUNTRY. A comma list names several; this is the first.
+ */
+export function defaultPollCountry(): string {
+  return csvCountries(process.env.JOBFLOW_POLL_COUNTRY)[0] ?? "IN";
+}
+
+/**
+ * @deprecated read at module load (before `.env` is applied) — use `defaultPollCountry()`
+ * or the discovery plan's `pollCountries`. Kept for existing importers.
  */
 export const DEFAULT_POLL_COUNTRY = process.env.JOBFLOW_POLL_COUNTRY ?? "IN";
+
+/** "IN, us" → ["IN", "US"] (ISO-2 only, deduped). */
+export function csvCountries(v: string | undefined): string[] {
+  return [...new Set((v ?? "").split(",").map((x) => x.trim().toUpperCase()).filter((x) => /^[A-Z]{2}$/.test(x)))];
+}
+
+/**
+ * Boards whose adapters filter by `location` server-side — the only ones a multi-market
+ * poll fetches once per country. Every other board returns the same full list whatever
+ * the country, so it's fetched once.
+ */
+export const COUNTRY_FILTERED_ATS: ReadonlySet<string> = new Set([
+  "workday",
+  "eightfold",
+  "amazon",
+  "oracle",
+  "smartrecruiters",
+  "rippling",
+  "jobvite",
+  "atlassian",
+  "jibe",
+  "talentbrew",
+]);
+
+/** company tag recording the market set a country-filtered board was last polled for. */
+export const MARKETS_TAG_PREFIX = "poll-markets:";
 
 /**
  * Poll one registered company via its ATS adapter, normalize, idempotently upsert,
@@ -43,7 +79,25 @@ export async function ingestCompany(
      * session-bound Tier-3 board adapters (Darwinbox) so they share this diff/stale logic.
      */
     adapter?: SourceAdapter;
+    /**
+     * poll for SEVERAL countries (multi-market tenants): country-filtered boards are fetched
+     * once per country and merged by id. Wins over `country` when it has 2+ entries.
+     */
+    countries?: string[];
   } = {},
+): Promise<IngestStats> {
+  const countries = [...new Set((opts.countries ?? []).map((c) => c.trim().toUpperCase()).filter(Boolean))];
+  if (countries.length > 1 && COUNTRY_FILTERED_ATS.has(opts.adapter?.source ?? company.atsType)) {
+    return ingestCompanyMulti(repo, company, { ...opts, countries });
+  }
+  const country = opts.country ?? (countries.length === 1 ? countries[0] : undefined);
+  return ingestCompanySingle(repo, company, { ...opts, country });
+}
+
+async function ingestCompanySingle(
+  repo: Repository,
+  company: Company,
+  opts: { embedder?: Embedder; limit?: number; country?: string; adapter?: SourceAdapter },
 ): Promise<IngestStats> {
   const embedder = opts.embedder ?? localEmbedder;
   const stats: IngestStats = { fetched: 0, upserted: 0, staled: 0, errors: [] };
@@ -60,9 +114,9 @@ export async function ingestCompany(
   // server-side — it shapes what we poll, it is not a match filter (invariant #4).
   // `known` lets boards with per-posting detail calls skip re-fetching stored JDs.
   const existing = await repo.listPostingsByCompany(company.id);
-  const stored = new Map(existing.map((p) => [p.atsJobId, p]));
   const known = new Set(existing.filter((p) => p.jdText.trim()).map((p) => p.atsJobId));
-  const raws = await adapter.fetch({ slug: company.atsSlug, location: opts.country ?? DEFAULT_POLL_COUNTRY, known });
+  const country = opts.country ?? defaultPollCountry();
+  const raws = await adapter.fetch({ slug: company.atsSlug, location: country, known });
   stats.fetched = raws.length;
 
   // Adapters return [] on a recoverable error (invariant), which is indistinguishable
@@ -73,9 +127,103 @@ export async function ingestCompany(
     return stats;
   }
 
+  // a company last polled for several markets: its stored set no longer matches this one
+  const marketsTag = company.tags.find((t) => t.startsWith(MARKETS_TAG_PREFIX));
+  const marketsChanged = !!marketsTag && marketsTag !== marketsTagFor([country]);
+  await upsertBoard(repo, company, adapter, raws, existing, known, embedder, stats, {
+    limit: opts.limit,
+    markets: [country],
+    // a partial list (an unfiltered fallback, a list cut at its cap) or a changed market set
+    // can't be diffed: what's missing may still be live (invariant #5) — the TTL sweep retires
+    stale: !isPartialFetch(raws) && !marketsChanged,
+  });
+  if (marketsChanged) await repo.updateCompany(company.id, { tags: company.tags.filter((t) => t !== marketsTag) });
+  await repo.touchPolled(company.id);
+  return stats;
+}
+
+/**
+ * Multi-market poll of a country-filtered board: one fetch per country, merged by id.
+ * markStale runs only when EVERY per-country fetch returned something (an empty one can't
+ * be told from an error), none was partial, and the market set is the one polled last
+ * time — otherwise a role listed only in a country that failed (or wasn't polled before)
+ * would be soft-deleted. The lastSeen TTL sweeps retire what's truly gone.
+ */
+async function ingestCompanyMulti(
+  repo: Repository,
+  company: Company,
+  opts: { embedder?: Embedder; limit?: number; adapter?: SourceAdapter; countries: string[] },
+): Promise<IngestStats> {
+  const embedder = opts.embedder ?? localEmbedder;
+  const stats: IngestStats = { fetched: 0, upserted: 0, staled: 0, errors: [] };
+  const adapter = opts.adapter ?? (company.atsType !== "unknown" ? getAdapter(company.atsType) : undefined);
+  if (!adapter || !company.atsSlug) {
+    stats.errors.push(`No adapter/slug for ${company.name} (${company.atsType})`);
+    return stats;
+  }
+  const existing = await repo.listPostingsByCompany(company.id);
+  const known = new Set(existing.filter((p) => p.jdText.trim()).map((p) => p.atsJobId));
+
+  const merged = new Map<string, RawPosting>();
+  let anyEmpty = false;
+  let anyPartial = false;
+  for (const country of opts.countries) {
+    let batch: RawPosting[] = [];
+    try {
+      batch = await adapter.fetch({ slug: company.atsSlug, location: country, known });
+    } catch (e) {
+      stats.errors.push(`${company.name} [${country}]: ${(e as Error).message}`);
+    }
+    if (!batch.length) anyEmpty = true;
+    if (isPartialFetch(batch)) anyPartial = true;
+    for (const raw of batch) {
+      const id = scopedJobId(raw);
+      const prev = merged.get(id);
+      // the same role listed for two countries: keep the richer copy (one with a JD)
+      if (!prev || (!prev.jdText.trim() && raw.jdText.trim())) merged.set(id, raw);
+    }
+  }
+  const raws = [...merged.values()];
+  stats.fetched = raws.length;
+  const tag = marketsTagFor(opts.countries);
+  const previousTag = company.tags.find((t) => t.startsWith(MARKETS_TAG_PREFIX));
+  const marketsChanged = previousTag !== tag;
+
+  if (raws.length) {
+    await upsertBoard(repo, company, adapter, raws, existing, known, embedder, stats, {
+      limit: opts.limit,
+      markets: opts.countries,
+      stale: !anyEmpty && !anyPartial && !marketsChanged,
+    });
+  }
+  if (marketsChanged) {
+    await repo.updateCompany(company.id, { tags: [...company.tags.filter((t) => !t.startsWith(MARKETS_TAG_PREFIX)), tag] });
+  }
+  await repo.touchPolled(company.id);
+  return stats;
+}
+
+/** canonical market-set tag, e.g. "poll-markets:DE+GB+IN". */
+export function marketsTagFor(countries: string[]): string {
+  return `${MARKETS_TAG_PREFIX}${[...new Set(countries.map((c) => c.toUpperCase()))].sort().join("+")}`;
+}
+
+/** normalize + upsert one board's fetch, re-confirm the rest, and (when allowed) diff-stale. */
+async function upsertBoard(
+  repo: Repository,
+  company: Company,
+  adapter: SourceAdapter,
+  raws: RawPosting[],
+  existing: Posting[],
+  known: Set<string>,
+  embedder: Embedder,
+  stats: IngestStats,
+  opts: { limit?: number; markets: string[]; stale: boolean },
+): Promise<void> {
+  const stored = new Map(existing.map((p) => [p.atsJobId, p]));
   // `limit` caps the (embedding-costly) upserts, not the fetch. Global boards list
-  // hundreds of roles with a handful in India, so upsert India-workable ones first.
-  const toUpsert = opts.limit ? prioritizeIndiaWorkable(raws).slice(0, opts.limit) : raws;
+  // hundreds of roles with a handful in the polled markets, so upsert workable ones first.
+  const toUpsert = opts.limit ? prioritizeWorkable(raws, opts.markets).slice(0, opts.limit) : raws;
   // repost-proof publish dates from the WHOLE board (id order needs every neighbour)
   const dates = repostSafeDates(adapter.source, raws.map((raw) => ({ id: scopedJobId(raw), raw })), stored);
   const written = new Set<string>();
@@ -93,18 +241,21 @@ export async function ingestCompany(
   // everything still listed but not re-written is re-confirmed, so it isn't flagged unverified
   const seenIds = raws.map((r) => scopedJobId(r));
   await repo.touchSeen(company.id, seenIds.filter((id) => !written.has(id) && known.has(id)));
-  stats.staled = await repo.markStale(company.id, seenIds);
-  await repo.touchPolled(company.id);
-  return stats;
+  if (opts.stale) stats.staled = await repo.markStale(company.id, seenIds);
 }
 
-/** Stable sort: India-workable roles first (cheap location-string parse only). */
-export function prioritizeIndiaWorkable(raws: RawPosting[]): RawPosting[] {
-  const rank = (r: RawPosting) => (isIndiaWorkable(parseLocation(r.locationRaw)) ? 0 : 1);
+/** Stable sort: roles workable in `markets` first (cheap location-string parse only). */
+export function prioritizeWorkable(raws: RawPosting[], markets: readonly string[]): RawPosting[] {
+  const rank = (r: RawPosting) => (isWorkableIn(parseLocation(r.locationRaw), markets) ? 0 : 1);
   return raws
     .map((r, i) => ({ r, i, k: rank(r) }))
     .sort((a, b) => a.k - b.k || a.i - b.i)
     .map((x) => x.r);
+}
+
+/** India wrapper (kept for callers): `prioritizeWorkable(raws, ["IN"])`. */
+export function prioritizeIndiaWorkable(raws: RawPosting[]): RawPosting[] {
+  return prioritizeWorkable(raws, ["IN"]);
 }
 
 /**
@@ -116,7 +267,11 @@ export async function ingestFromAdapter(
   repo: Repository,
   adapterOrSource: SourceAdapter | string,
   target: FetchTarget,
-  opts: { embedder?: Embedder } = {},
+  opts: {
+    embedder?: Embedder;
+    /** sees the fetched raw postings (e.g. to harvest ATS links from a custom feed). */
+    onRaws?: (raws: RawPosting[]) => void;
+  } = {},
 ): Promise<IngestStats> {
   const embedder = opts.embedder ?? localEmbedder;
   const adapter =
@@ -135,7 +290,18 @@ export async function ingestFromAdapter(
     return stats;
   }
   stats.fetched = raws.length;
+  opts.onRaws?.(raws);
+  stats.upserted = await ingestRaws(repo, adapter.source, raws, embedder);
+  return stats;
+}
 
+/**
+ * Upsert already-fetched discovery postings (company shells by name, idempotent on
+ * (atsType, atsJobId) — invariant #5). Returns the number upserted. Shared by
+ * `ingestFromAdapter` and an ad-hoc search the user chose to keep.
+ */
+export async function ingestRaws(repo: Repository, source: string, raws: RawPosting[], embedder: Embedder = localEmbedder): Promise<number> {
+  let upserted = 0;
   // what we already hold for these ids — an unchanged posting keeps its stored embedding
   const normalizedAll = raws.map((raw) => normalizePosting(raw));
   const prior = new Map<string, Posting>();
@@ -150,14 +316,14 @@ export async function ingestFromAdapter(
       nameNorm: normalized.companyNameNorm,
       atsType: normalized.atsType,
       atsSlug: normalized.companySlug,
-      tags: ["discovered", adapter.source],
+      tags: ["discovered", source],
     });
     const before = prior.get(`${normalized.atsType}:${normalized.atsJobId}`);
     const newPosting = await toNewPosting(normalized, company.id, company.name, embedder, before);
     await repo.upsertPosting(newPosting);
-    stats.upserted++;
+    upserted++;
   }
-  return stats;
+  return upserted;
 }
 
 export interface RecheckStats {

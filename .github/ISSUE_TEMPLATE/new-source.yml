@@ -1,0 +1,48 @@
+name: New job source
+description: Propose a job board, ATS or feed to support
+labels: [source]
+body:
+  - type: input
+    id: url
+    attributes:
+      label: Source URL
+    validations:
+      required: true
+  - type: dropdown
+    id: access
+    attributes:
+      label: How is the data exposed?
+      options:
+        - Public JSON API (no auth)
+        - API with a free key
+        - Paid API
+        - RSS / Atom feed
+        - HTML only
+        - Requires login
+    validations:
+      required: true
+  - type: dropdown
+    id: tier
+    attributes:
+      label: Proposed tier
+      description: Tier 1–2 may run in the cloud worker; anything needing a login or scraping a hostile site is Tier 3 (local agent only).
+      options:
+        - Tier 1 (official / public API)
+        - Tier 2 (public, low-risk)
+        - Tier 3 (local agent only)
+  - type: textarea
+    id: tos
+    attributes:
+      label: Terms of service / robots.txt summary
+  - type: textarea
+    id: sample
+    attributes:
+      label: Sample payload
+      description: A trimmed example response (no personal data).
+      render: json
+  - type: checkboxes
+    id: liveness
+    attributes:
+      label: Freshness
+      options:
+        - label: The source has a per-job endpoint that definitively says a job is gone (404/410 or a closed flag)

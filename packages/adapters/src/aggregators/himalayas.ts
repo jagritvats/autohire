@@ -1,5 +1,6 @@
-import { LevelBandOrder, type LevelBand, type RawPosting } from "@jobflow/core";
-import { htmlToText, httpJson, type FetchTarget, type SourceAdapter } from "../types.js";
+import { LevelBandOrder, type LevelBand, type RawPosting, type SearchQuery } from "@jobflow/core";
+import { htmlToText, httpJson, type FetchTarget, type SearchCaps, type SearchTargetContext, type SourceAdapter } from "../types.js";
+import { crossCapped, queryCountries, queryTerms } from "../search.js";
 
 /**
  * Himalayas (Tier 1, free, no auth) — remote board with STRUCTURED geo: every job lists
@@ -38,6 +39,23 @@ const PAGE_SIZE = 20;
 export class HimalayasAdapter implements SourceAdapter {
   readonly source = "himalayas" as const;
   readonly tier = "tier1" as const;
+  readonly searchCaps: SearchCaps = {
+    keywords: true, location: false, country: true, remote: true, postedWithin: false, salaryMin: false, seniority: true, cost: "free",
+  };
+
+  /** remote-only board: one target per (term × country), worldwide-eligible roles included. */
+  toTargets(q: SearchQuery, ctx: SearchTargetContext): FetchTarget[] {
+    if (q.remote === "exclude") return [];
+    const terms = queryTerms(q);
+    if (!terms.length) return [];
+    const countries = queryCountries(q, ctx);
+    const seniority = [...new Set(q.seniority.map((b) => HIMALAYAS_SENIORITY[b]))].join(",");
+    return crossCapped(terms, countries.length ? countries : [""]).map(([term, country]) => ({
+      query: term,
+      limit: 40,
+      params: { country, excludeWorldwide: false, ...(seniority ? { seniority } : {}) },
+    }));
+  }
 
   async fetch(target: FetchTarget): Promise<RawPosting[]> {
     const limit = target.limit ?? 40;
@@ -91,6 +109,19 @@ function toRaw(j: HimalayasJob): RawPosting {
     raw: { ...j, description: undefined } as unknown as Record<string, unknown>,
   };
 }
+
+/** our band → Himalayas' server-side seniority bucket. */
+const HIMALAYAS_SENIORITY: Record<LevelBand, string> = {
+  intern: "Entry-level",
+  junior: "Entry-level",
+  mid: "Mid-level",
+  senior: "Senior",
+  staff: "Senior",
+  lead: "Senior",
+  principal: "Senior",
+  manager: "Manager",
+  director: "Director",
+};
 
 const HIMALAYAS_LEVELS: Record<string, LevelBand> = {
   "entry-level": "junior",

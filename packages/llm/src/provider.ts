@@ -13,7 +13,11 @@ export interface CompletionRequest {
   system?: string;
   prompt: string;
   task?: LlmTask;
+  /** budget for the VISIBLE reply. Providers add headroom for models that reason before
+   *  answering (their thinking tokens count against the same limit). */
   maxTokens?: number;
+  /** a hint only: dropped for models that reject sampling params (current Claude
+   *  models, OpenAI reasoning models) — sending it there is a 400. */
   temperature?: number;
   /** ask the provider for strict JSON; the caller still validates with Zod */
   json?: boolean;
@@ -51,4 +55,15 @@ export interface ProviderConfig {
   strongModel?: string;
   apiKey?: string;
   baseUrl?: string;
+  /** false → never fall back to the operator's env API key (a tenant's own config must
+   *  not silently spend the operator's key). Default true. */
+  useEnvKey?: boolean;
+}
+
+/** Empty / whitespace-only config values count as unset (docker-compose passes
+ *  `${VAR:-}` as ""; a blank settings field is ""). */
+export function nonEmpty(v: string | null | undefined): string | undefined {
+  if (typeof v !== "string") return undefined;
+  const t = v.trim();
+  return t ? t : undefined;
 }

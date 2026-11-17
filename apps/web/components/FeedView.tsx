@@ -1,5 +1,6 @@
 "use client";
 
+import { AccountMenu } from "@/components/AccountMenu";
 import { useMemo, useState, useTransition } from "react";
 import type { FeedCard, FeedData, PostingView } from "@/lib/feed";
 import { MatchCard } from "./MatchCard";
@@ -19,7 +20,7 @@ const VIEW_TABS: Array<{ id: ActiveView; label: string }> = [
 
 const emptyViews: Record<PostingView, FeedCard[]> = { bookmarks: [], archived: [], invalidated: [] };
 
-export function FeedView({ initial }: { initial: FeedData }) {
+export function FeedView({ initial, viewName = null }: { initial: FeedData; viewName?: string | null }) {
   const [data, setData] = useState(initial);
   const [view, setView] = useState<ActiveView>("feed");
   const [viewData, setViewData] = useState<Record<PostingView, FeedCard[]>>(emptyViews);
@@ -27,6 +28,7 @@ export function FeedView({ initial }: { initial: FeedData }) {
   const [arch, setArch] = useState<Set<string>>(new Set());
   const [modes, setModes] = useState<Set<string>>(new Set());
   const [geos, setGeos] = useState<Set<string>>(new Set());
+  const [presetTags, setPresetTags] = useState<Set<string>>(new Set());
   const [minScore, setMinScore] = useState(0);
   const [maxYears, setMaxYears] = useState(0); // 0 = any; caps the role's minimum required YoE
   const [hideUsOnly, setHideUsOnly] = useState(false);
@@ -57,6 +59,8 @@ export function FeedView({ initial }: { initial: FeedData }) {
       // parsed minimum (min === null) are always kept — never hide on unknown (§11, invariant #4).
       if (maxYears > 0 && c.experience.min != null && c.experience.min > maxYears) return false;
       if (arch.size && !arch.has(c.archetype)) return false;
+      // preset TAG filter: only cards from the chosen presets' companies / feeds
+      if (presetTags.size && !(c.presets ?? []).some((p) => presetTags.has(p))) return false;
       if (modes.size && !modes.has(c.location.mode)) return false;
       if (geos.size && c.location.mode === "remote" && !geos.has(c.location.remoteGeo)) return false;
       if (hideUsOnly && c.location.remoteGeo === "us_only") return false;
@@ -64,7 +68,9 @@ export function FeedView({ initial }: { initial: FeedData }) {
       if (minTrust > 0 && c.trust * 100 < minTrust) return false;
       return true;
     });
-  }, [baseCards, arch, modes, geos, minScore, maxYears, hideUsOnly, hideServices, minTrust]);
+  }, [baseCards, arch, modes, geos, presetTags, minScore, maxYears, hideUsOnly, hideServices, minTrust]);
+  // the preset tags present in this feed (only offer filters that can match something)
+  const feedPresets = useMemo(() => [...new Set(baseCards.flatMap((c) => c.presets ?? []))].sort(), [baseCards]);
 
   // India-onsite "allowed" filter: fetch the India-workable feed on first toggle-on.
   const toggleIndia = () => {
@@ -221,9 +227,12 @@ export function FeedView({ initial }: { initial: FeedData }) {
         <div className="tagline">ranked match feed</div>
         <nav className="rail-nav">
           <a href="/" data-active="true">feed</a>
+          <a href="/searches">search</a>
+          <a href="/discovery">discovery</a>
           <a href="/applications">pipeline</a>
           <a href="/companies">registry</a>
           <a href="/settings">settings</a>
+          <AccountMenu />
           <span className="durable-pill" data-on={data.stats.durable}>
             {data.stats.durable ? "durable" : "in-memory"}
           </span>
@@ -250,6 +259,19 @@ export function FeedView({ initial }: { initial: FeedData }) {
             title="Hide roles asking for more than N years of experience. Roles with no stated minimum are kept."
           />
         </div>
+
+        {feedPresets.length > 0 && (
+          <div className="rail-group">
+            <h4>preset</h4>
+            <div className="chip-row">
+              {feedPresets.map((p) => (
+                <button key={p} className="chip" data-on={presetTags.has(p)} onClick={() => toggle(presetTags, p, setPresetTags)}>
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="rail-group">
           <h4>archetype</h4>
@@ -345,6 +367,33 @@ export function FeedView({ initial }: { initial: FeedData }) {
       </aside>
 
       <main className="main">
+        {data.stats.needsOnboarding && (
+          <div className="feed-banner">
+            These are the freshest postings, <b>unscored</b>. <a href="/onboarding">Add your résumé</a> to get ranked,
+            honest match cards.
+          </div>
+        )}
+        {viewName && (
+          <div className="feed-banner">
+            Viewing your feed through the saved search <b>{viewName}</b>
+            {data.stats.hiddenTotal ? (
+              <>
+                {" "}— {data.stats.hiddenTotal} hidden (
+                {Object.entries(data.stats.hidden ?? {})
+                  .filter(([, n]) => n > 0)
+                  .map(([k, n]) => `${n} ${k}`)
+                  .join(", ")}
+                ).
+              </>
+            ) : (
+              "."
+            )}{" "}
+            Scores are unchanged. <a href="/">show all</a>
+          </div>
+        )}
+        {data.stats.syncing && (
+          <div className="feed-banner">Fetching jobs from the built-in sources for the first time — refresh in a minute.</div>
+        )}
         <div className="statsbar">
           <Stat n={data.stats.companies} l="companies" />
           <Stat n={data.stats.postings} l="active postings" />

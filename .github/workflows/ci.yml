@@ -1,0 +1,50 @@
+name: ci
+
+# Build, typecheck and test every workspace package on each PR and on pushes to main.
+# Offline by design: tests use the echo LLM provider and the in-memory store, so no
+# secrets are needed (forks' PRs run the same).
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      LLM_PROVIDER: echo
+    steps:
+      - uses: actions/checkout@v4
+      # no `version:` — pnpm/action-setup reads package.json's "packageManager"
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r build
+      - run: pnpm -r typecheck
+      - run: pnpm -r test
+
+  guards:
+    # privacy + tenant-isolation regression guards (no install needed: plain node scripts)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: No personal data in tracked files
+        run: node scripts/check-pii.mjs
+      - name: Every API route resolves its caller
+        run: node scripts/check-tenant.mjs

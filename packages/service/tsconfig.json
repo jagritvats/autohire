@@ -1,0 +1,36 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "types": [
+      "node"
+    ]
+  },
+  "references": [
+    {
+      "path": "../core"
+    },
+    {
+      "path": "../autofill"
+    },
+    {
+      "path": "../adapters"
+    },
+    {
+      "path": "../db"
+    },
+    {
+      "path": "../llm"
+    },
+    {
+      "path": "../pipeline"
+    },
+    {
+      "path": "../resume-io"
+    }
+  ],
+  "include": [
+    "src/**/*"
+  ]
+}
