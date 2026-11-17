@@ -194,6 +194,8 @@ export class Ctx {
   }
   /** remember a listing so `#N` / `N` refer to its rows */
   rememberListing(kind: NonNullable<CliState["listing"]>["kind"], ids: string[], transient?: Record<string, Posting>): void {
+    // an empty listing keeps the previous one: `feed` on an empty corpus mustn't break `apply 1` from a search
+    if (!ids.length) return;
     const patch: Partial<CliState> = { listing: { kind, at: new Date().toISOString(), ids } };
     if (transient) patch.transient = transient;
     this.writeState(patch);
