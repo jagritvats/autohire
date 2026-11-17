@@ -1,16 +1,14 @@
 import type { PurgeOptions, Repository } from "@jobflow/db";
 import {
-  SEED_COMPANIES,
   blankProfile,
-  discoverCompanies,
   isOnboarded,
   pollAll,
   rebuildMatches,
   recheckPostings,
   type RecheckStats,
 } from "@jobflow/pipeline";
-import type { Match, Posting } from "@jobflow/core";
-import { formatSalary, isIndiaWorkable, postingAgeDays, scoreSourceTrust } from "@jobflow/core";
+import type { Match, Posting, SearchQueryInput, ViewHiddenReason } from "@jobflow/core";
+import { applyView, formatSalary, isIndiaWorkable, postingAgeDays, scoreSourceTrust } from "@jobflow/core";
 import { ensureTenant } from "./tenant.js";
 import { corpusEmbedder } from "./embedder.js";
 
@@ -83,6 +81,9 @@ export interface FeedData {
     needsOnboarding: boolean;
     /** a background corpus sync is running in this process. */
     syncing: boolean;
+    /** when a view was applied: how many cards it hid, per reason (never silent). */
+    hidden?: Record<ViewHiddenReason, number>;
+    hiddenTotal?: number;
   };
 }
 
@@ -93,6 +94,11 @@ export type PostingView = "bookmarks" | "archived" | "invalidated";
 export interface FeedOptions {
   /** soft VIEW filter (never a hard exclusion, invariant #4): only India-workable roles. */
   indiaOnly?: boolean;
+  /**
+   * a saved search (by id) or an ad-hoc query applied as a VIEW: it hides only on
+   * confidently-known values, never rescores, and the hidden counts are returned.
+   */
+  view?: string | SearchQueryInput | null;
   limit?: number;
   /**
    * when the shared corpus is empty, start ONE background sync (deduped across requests)
@@ -128,9 +134,15 @@ export function startCorpusSync(repo: Repository, after?: () => Promise<void>): 
 }
 
 /** discover seeds + poll boards/feeds — bounded, the same routine the worker runs. */
-export async function syncCorpus(repo: Repository): Promise<void> {
-  await discoverCompanies(repo, SEED_COMPANIES);
-  await pollAll(repo, { embedder: corpusEmbedder(), limitPerCompany: 50, maxBoards: 25, skipSlowFeeds: true, telegramChannels: [] });
+export async function syncCorpus(repo: Repository, opts: { full?: boolean } = {}): Promise<Awaited<ReturnType<typeof pollAll>>> {
+  // the discovery plan (each tenant's preset + custom sources + saved searches) decides
+  // WHAT is polled; a first/background sync stays small, `full` is the worker-sized sweep
+  return pollAll(
+    repo,
+    opts.full
+      ? { embedder: corpusEmbedder() }
+      : { embedder: corpusEmbedder(), limitPerCompany: 50, maxBoards: 25, skipSlowFeeds: true, telegramChannels: [] },
+  );
 }
 
 /**
@@ -168,7 +180,25 @@ export async function getFeed(repo: Repository, tenantId: string, opts: FeedOpti
     }
   }
   if (opts.indiaOnly) matches = matches.filter((m) => isIndiaWorkable(m.posting.location));
+  if (opts.view) {
+    const query = typeof opts.view === "string" ? (await repo.getSavedSearch(tenantId, opts.view))?.query : opts.view;
+    if (query) {
+      const v = applyView(matches, query);
+      const data = await shape(repo, tenantId, v.shown);
+      return { ...data, stats: { ...data.stats, hidden: v.hidden, hiddenTotal: v.hiddenTotal } };
+    }
+  }
   return shape(repo, tenantId, matches);
+}
+
+/** Cards for arbitrary postings (+ optional scores) — e.g. ad-hoc search results. */
+export async function toCards(
+  repo: Repository,
+  tenantId: string,
+  items: Array<{ posting: Posting; match: Pick<Match, "score" | "levelNote" | "stackNote" | "redFlags"> | null }>,
+): Promise<FeedCard[]> {
+  const ctx = await cardCtx(repo, tenantId);
+  return items.map((i) => buildCard(i.posting, i.match, ctx));
 }
 
 /** Force a fresh poll of the live Tier 1-2 sources + re-rank, then return the feed. */

@@ -6,3 +6,5 @@ export * from "./latex.js";
 export * from "./extension.js";
 export * from "./contexts.js";
 export * from "./onboarding.js";
+export * from "./search.js";
+export * from "./discovery.js";
