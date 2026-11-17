@@ -44,7 +44,7 @@ export const DEFAULT_DISCOVERY_FEEDS: DiscoveryFeed[] = [
   { source: "reddit", slow: true, targets: [{ limit: 100, params: { subreddit: "developersIndia" } }] }, // monthly hiring thread
   { source: "remotive", targets: [{ query: "backend", limit: 60 }] },
   { source: "hn_whoishiring", targets: [{ query: "india", limit: 60 }, { query: "backend", limit: 60 }] },
-  // key-gated search APIs: no-ops (no request) until their keys are set — docs/SETUP.md "Optional sources"
+  // key-gated search APIs: no-ops (no request) until their keys are set — docs/configuration.md "Optional sources"
   {
     source: "adzuna", // broad India aggregator; same free keys as the salary enricher
     targets: [

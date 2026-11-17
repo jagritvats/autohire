@@ -1,142 +1,119 @@
 # JobFlow
 
-**An all-in-one job discovery, prep, and assisted-application platform — built for one user, designed so the ingestion pipeline doubles as a portfolio-grade systems artifact.**
+**A local-first job search engine for one person: it finds roles across hundreds of company
+boards, ranks them against *your* résumé with honest match cards, tailors your documents
+from your own material, and pre-fills applications — then stops so you can review and
+submit.**
 
-Full TypeScript, end to end. Runs free on infra you already have. The three things it optimizes for: **good job finding**, **honest recommendations**, and **autofill up to a human review gate (never auto-submit)**.
+[![CI](https://github.com/jagritvats/autohire/actions/workflows/ci.yml/badge.svg)](https://github.com/jagritvats/autohire/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+![Node 20+](https://img.shields.io/badge/node-%E2%89%A520-brightgreen)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)
 
-> Full design rationale lives in the architecture spec. This README is the operational view: what's built, how it's shaped, and how to run it.
+![The ranked feed](docs/screenshots/feed.png)
+
+```bash
+git clone https://github.com/jagritvats/autohire.git jobflow && cd jobflow
+pnpm install && pnpm -r build
+pnpm jobflow init                                 # your résumé + preferences, reviewed by you
+pnpm jobflow search "backend engineer" --remote   # live search, scored against you
+pnpm jobflow apply '#1' --fill                    # pre-fill the form; you review and submit
+```
+
+No account, no server, no API keys needed. Your data stays in `~/.jobflow`.
 
 ---
 
-## The aim
+## Why JobFlow
 
-A platform like this lives or dies on the **data layer**. The bet:
+Job boards rank by recency and ads; most "AI apply" tools spray applications and invent
+experience. JobFlow takes the opposite bet:
 
-1. **ATS APIs are the spine.** Greenhouse / Lever / Ashby / Workable / SmartRecruiters expose free, no-auth JSON with full JD text — clean and ghost-free — and big India employers are polled India-only through their careers backends (Workday, Eightfold, Oracle HCM, Amazon, Jobvite), and Indian startups through the ATSes they actually use (Kula, Keka, Zoho Recruit, Freshteam). India-first boards (Himalayas India-restricted remote, Hirist, Cutshort, TimesJobs, Instahyre, Wellfound, the r/developersIndia hiring thread) plus Remotive and HN "Who is Hiring" add breadth and surface *company names*; the **ATS Detector** (URL → careers-page sniff → slug probe) resolves each to a board, and we poll the rich source directly. Community channels (three reviewed Telegram channels by default, WhatsApp chat exports) are discovery only: their links become boards; the posting is always read from the board.
-2. **Four execution tiers, one routing rule.** The **cloud only ever touches Tier 1–2** (free, legal, low-risk). Everything scrape-hostile (Naukri / Glassdoor / AmbitionBox / LinkedIn = Tier 3) runs **only on the local agent** — your own logged-in session, your IP, human-paced, flag-guarded **off by default**. Tier 4 (paid actors) is optional, never required.
-3. **Almost nothing is a hard filter.** Stack, seniority, and location are *soft-weighted scoring signals with honest flags* — a Java dev sees Go/Kotlin/Scala roles because the distributed-systems core transfers. Only **two** genuine hard exclusions: salary below your floor (high-confidence only), and a truly impossible location.
-4. **Evidence-grounded generation.** Every tailored bullet / answer cites a real entry in your **Evidence Bank**. If it's not in the bank, it doesn't get said — the direct fix for "tryhard / name-dropping things you don't know."
-5. **The match card is the product.** Not the ranked list — the honest card: *why it fits, the likely gap, probable comp, real red flags.* That's what makes you apply well or correctly skip.
+- **Good job finding.** ATS APIs (Greenhouse, Lever, Ashby, Workable, SmartRecruiters,
+  Workday and more) are the spine: clean, complete, ghost-free postings straight from the
+  employer. Aggregators, RSS/JSON feeds, HN "Who is hiring" and community channels add
+  breadth; an ATS detector turns any company name or careers URL into a pollable board.
+- **Honest recommendations.** The match card is the product: why it fits, the likely gap,
+  how far the stack is from yours, probable pay (stated or clearly marked as an estimate), and
+  red flags like a "remote" role that's US-only. Almost nothing is a hard filter — a Java
+  developer still sees Go roles, with an honest ramp note.
+- **Grounded applications.** Tailored résumés, cover letters and answers come only from your
+  résumé, your Evidence Bank and your declared skills — rephrased and trimmed, never extended.
+- **A human at the gate.** The form-filler types what you stored and stops at the review
+  screen. There is no auto-submit, by design and by test.
 
----
+## Features
 
-## What's built (and proven against live APIs)
+| | |
+|---|---|
+| **Résumé import** — PDF, DOCX, LaTeX, Markdown, JSON Resume or a LinkedIn export, parsed into skills, experience and citeable evidence you review | ![Onboarding](docs/screenshots/onboarding.png) |
+| **Search** — ask the search-capable boards a question now; results are scored with your profile, filters report what they hid; save it to run on a schedule | ![Search](docs/screenshots/search.png) |
+| **Configurable discovery** — start from a preset (India, Global remote, US, Europe & UK) and add your own companies, CSV lists, RSS/JSON feeds, Telegram channels and HN threads | ![Discovery](docs/screenshots/discovery.png) |
+| **Tailoring** — résumé variants, LaTeX/Markdown rewrites with PDF preview, cover letters, application answers | ![Tailor](docs/screenshots/tailor.png) |
+| **Pipeline** — track applications from saved to offer, with next actions and a don't-double-apply guard | ![Pipeline](docs/screenshots/applications.png) |
 
-Running `pnpm demo` exercises the whole spine end-to-end with **zero infra and zero API keys** (in-memory store, offline embeddings, echo LLM):
-
-```
-discover → resolve ATS boards → poll Greenhouse/Lever/Ashby → normalize →
-dedup → soft-weighted score + rule check → match cards →
-LLM re-rank narrative → evidence-grounded tailoring → autofill DRY RUN
-```
-
-A representative run: **~560 postings fetched → ~340 deduped → ~270 ranked, ~65 hard-excluded**, with honest cards like:
-
-```
-Edge Infrastructure Engineer · Palantir · Hybrid · Warsaw          Match 74
-  Stack: scala, postgres, cassandra, distributed_systems, kubernetes
-  Fit:   Primary language scala (transferable, ~1-2wk ramp); your
-         distributed_systems + postgres depth covers the hard part
-  Comp:  est. ₹20L–₹40L (high · jd_direct)
-```
-
-The **web feed** renders the same data as a dense, scannable terminal-style UI (see `apps/web`).
-
----
-
-## Repo shape (pnpm monorepo, full TS)
-
-```
-packages/
-  core/        Zod schemas + the brain — normalize, dedup, match (pure, testable)
-  adapters/    one SourceAdapter per source, tagged by tier; ATS Detector; Tier-3 (local-only)
-  db/          Repository interface + in-memory impl + Supabase migrations (RLS, pgvector)
-  llm/         swappable provider (echo|anthropic|grok|openai) + re-rank + grounded generation
-  pipeline/    orchestration: ingest, dedup, rank, discover, seed data
-  autofill/    flag-guarded Playwright form-filler with a review gate (never submits)
-apps/
-  cli/         `pnpm demo` — the whole pipeline on live APIs, in-memory
-  worker/      cloud cron entrypoint (Tier 1-2 ONLY) — discover | poll | rank
-  web/         Next.js feed UI (the match-card surface)
-  extension/   MV3 capture + inline match panel (read-only, local)
-.github/workflows/poll.yml   free GitHub Actions cron (every 6h)
-```
-
-The whole thing speaks **one set of types** (`@jobflow/core`), enforced from the ATS adapter through the worker, the API, the UI, the extension, and the Playwright runner.
-
----
+Also: salary estimates with confidence (stated pay is never mixed with estimates), freshness
+and liveness checks, a browser extension with an inline match panel, and an optional local
+agent for logged-in sites.
 
 ## Quick start
 
-```bash
-# Node 20+ and pnpm 9 (corepack enable && corepack prepare pnpm@9 --activate)
-pnpm install
-pnpm -r build
-
-# 1. See the whole pipeline run against live free APIs (no keys, ~20s):
-pnpm demo
-
-# 2. The web feed (live poll on first load, memoized 30m):
-pnpm web            # → http://localhost:3000
-
-# 3. The cloud worker (what the cron runs — Tier 1-2 only):
-pnpm --filter @jobflow/worker start          # discover + poll + rank
-```
-
-**Turning on real LLM output** (re-rank narratives, grounded answers): set `LLM_PROVIDER=anthropic` (or `grok`/`openai`) + the matching key in `.env`. Default is `echo` (offline stub) so everything runs without a key.
-
-**Local agent (Tier 3 + form-fill)** is off by default. See `.env.example` — `JOBFLOW_BROWSER`, `JOBFLOW_BROWSER_MODE`, `JOBFLOW_TIER3_SOURCES`. Autosubmit is hard-coded false (§7.1).
-
-### One command with Docker (durable, no Supabase needed)
-
-The whole cloud stack — **Postgres + migrations + web + worker** — comes up together:
+See **[docs/getting-started.md](docs/getting-started.md)**. The short version:
 
 ```bash
-pnpm docker:up          # = docker compose up -d --build
-#   web    → http://localhost:3000
-#   db     → localhost:5433   (named volume, survives restarts)
-#   worker → drains poll/discover/rank jobs
-pnpm docker:logs        # tail web + worker
-pnpm docker:down        # stop (add -- --volumes to also wipe the DB)
+pnpm jobflow init        # or: pnpm jobflow init --sample  (a fictional candidate)
+pnpm jobflow sync        # poll your discovery preset + sources, then rank
+pnpm jobflow feed        # ranked match cards
+pnpm jobflow search "data engineer" --loc "Berlin,DE" --posted 7d --save-as berlin-data
+pnpm jobflow tailor '#1'
+pnpm jobflow apply '#1' --fill
+pnpm jobflow track status '#1' applied
+pnpm jobflow serve       # the same data in the web UI at http://localhost:3000
 ```
 
-- The `migrate` service applies every migration before web/worker start.
-- LLM / Adzuna keys are read from your gitignored root `.env` (compose interpolation); `DATABASE_URL` is set automatically to the `db` service.
-- `INSTALL_LATEX=0 pnpm docker:up` skips the in-image TeX install (smaller image; the LaTeX→PDF feature then falls back to a `.tex` download).
-- The **local agent stays on your machine** (Tier-3 needs your own browser session): `pnpm agent`.
-
-Prefer no containers? `pnpm dev` (or `./scripts/dev.ps1`) runs web + worker locally; `pnpm db:migrate` applies migrations against the `DATABASE_URL` in your `.env`.
-
-### Durable mode + the web control plane (local Supabase)
-
-For the full control-plane experience (durable data, editable settings, the command plane, the registry UI), run a local Supabase and the worker:
+Add an LLM for richer write-ups and prose (optional):
 
 ```bash
-npx supabase start                     # local Postgres+studio via Docker (project "jobflow", ports 553xx)
-#   copy the DB URL into .env as DATABASE_URL (already set if you used the provided .env)
-pnpm --filter @jobflow/db migrate      # apply 0001/0002/0003, seed the default tenant
-
-# two processes (the two planes):
-pnpm web                                       # control plane UI  → http://localhost:3000
-pnpm --filter @jobflow/worker runner           # cloud job-runner (drains poll/discover/rank jobs)
+pnpm jobflow config set llm.provider anthropic
+pnpm jobflow config set llm.key --stdin
 ```
 
-Then in the UI: **/settings** to tune stack/comp/locations (saving re-ranks), **/companies** to add targets (the detector resolves the ATS board and auto-polls), and the **command bar** (Discover / Poll all / Re-rank) with a live activity panel. The worker runner is the second "plane"; the local agent for Tier-3 browsing is Phase 4.
+Always-on with Docker (Postgres + web + scheduled worker): `pnpm docker:up`.
 
----
+## Safety & ethics
 
-## The safety boundary (read before enabling the local agent)
+| Tier | Sources | Runs |
+|---|---|---|
+| 1–2 | ATS APIs, public boards, feeds you add | CLI, web app, worker |
+| 3 | LinkedIn, Naukri, Glassdoor, AmbitionBox | **only** the local agent, in your own browser, off by default |
 
-The cloud is permanently confined to Tier 1–2. Tier 3 (Naukri/Glassdoor/AmbitionBox/LinkedIn) and form-fill run **only locally**, through **your own session**, at **human pace**, and **never submit** — the review screen is the value. Layered gates: master flag → mode flag → per-action review → autosubmit (separate, off, locked). This is *you, automated* — not a bot farm. It's still your call and your risk, which is exactly why it's flag-guarded off and isolated behind clean interfaces you can rip out without touching the rest.
+- The server side never holds your session for a logged-in site.
+- The form-filler never submits; `JOBFLOW_AUTOSUBMIT` is hard-wired false.
+- User-supplied URLs are SSRF-guarded; uploads live outside the source tree.
+- Your terms-of-service obligations to each site are yours — see
+  [docs/legal-and-ethics.md](docs/legal-and-ethics.md).
 
----
+## Documentation
 
-## Vision, status & roadmap
+- [Getting started](docs/getting-started.md) · [CLI reference](docs/cli.md) · [Configuration](docs/configuration.md)
+- Guides: [résumé & profile](docs/guides/resume-and-profile.md) · [search & discovery](docs/guides/search-and-discovery.md) · [applying](docs/guides/apply.md) · [LLM providers](docs/guides/llm-providers.md) · [self-hosting for several people](docs/guides/self-hosting.md)
+- [Architecture](docs/architecture.md)
 
-- **[docs/VISION.md](docs/VISION.md)** — where this is going: one web control plane, two planes (cloud brain + local agent hands), configuration-as-data, honest by construction.
-- **[docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md)** — the phased plan from today's read-only feed to that control plane (configure + dispatch everything from the web, incl. LinkedIn/Naukri browsing via the local agent).
-- **[docs/STATUS.md](docs/STATUS.md)** — what's done, stubbed, and next.
-- **[docs/SETUP.md](docs/SETUP.md)** — every env var + external setup (Supabase, Adzuna, LLM, local agent / Playwright, GH Actions) and a "set up later" checklist.
-- **[CLAUDE.md](CLAUDE.md)** — working in the codebase + the invariants.
+## Repository
 
-Cost floor: **~$0 + LLM tokens.**
+```
+packages/  core · adapters · db · llm · pipeline · resume-io · service · autofill
+apps/      cli · web · worker · agent · extension
+```
+
+Full TypeScript, one Zod type system end to end. `pnpm -r test` runs ~600 tests offline.
+
+## Contributing
+
+Contributions are welcome — new job sources, ATS detectors, presets, parsers and UI. Read
+[CONTRIBUTING.md](CONTRIBUTING.md) for setup and the invariants every change keeps. Please
+report security issues privately ([SECURITY.md](SECURITY.md)).
+
+## License
+
+[MIT](LICENSE). Salary benchmarks from levels.fyi are shown with attribution.

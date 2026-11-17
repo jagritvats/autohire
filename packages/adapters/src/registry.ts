@@ -63,7 +63,7 @@ export const ADAPTERS: Record<string, SourceAdapter> = {
   // key-gated search APIs: return [] (no request) until their env keys are set
   adzuna: new AdzunaSearchAdapter(),
   careerjet: new CareerjetAdapter(),
-  jsearch: new JSearchAdapter(), // paid — see docs/SETUP.md "Optional sources"
+  jsearch: new JSearchAdapter(), // paid — see docs/configuration.md "Optional sources"
   // India tech boards (tier 2: public, no login)
   hirist: new HiristAdapter(),
   cutshort: new CutshortAdapter(),
