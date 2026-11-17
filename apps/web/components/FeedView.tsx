@@ -347,6 +347,15 @@ export function FeedView({ initial }: { initial: FeedData }) {
       </aside>
 
       <main className="main">
+        {data.stats.needsOnboarding && (
+          <div className="feed-banner">
+            These are the freshest postings, <b>unscored</b>. <a href="/onboarding">Add your résumé</a> to get ranked,
+            honest match cards.
+          </div>
+        )}
+        {data.stats.syncing && (
+          <div className="feed-banner">Fetching jobs from the built-in sources for the first time — refresh in a minute.</div>
+        )}
         <div className="statsbar">
           <Stat n={data.stats.companies} l="companies" />
           <Stat n={data.stats.postings} l="active postings" />

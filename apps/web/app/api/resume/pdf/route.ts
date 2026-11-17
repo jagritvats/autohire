@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import { blankProfile } from "@jobflow/pipeline";
 import type { Application } from "@jobflow/core";
 import { candidateName, markdownToLatex } from "@jobflow/llm";
+import { defaultDataDir, ensurePrivateDir } from "@jobflow/db";
 import { getRepo, ensureTenant } from "@/lib/repo";
 import { generateTailored } from "@/lib/tailor";
 import { compileLatex } from "@/lib/latex";
@@ -15,7 +16,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-const UPLOAD_DIR = join(process.cwd(), "uploads");
 const Body = z.object({
   postingId: z.string().uuid(),
   latex: z.string().max(200_000).optional(), // the (possibly user-edited) .tex to compile
@@ -64,10 +64,12 @@ export async function POST(req: Request) {
       // the ATS shows the uploaded file's name to the recruiter — make it a normal one
       const profile = (await repo.getProfile(auth.tenantId)) ?? blankProfile(auth.tenantId);
       const who = candidateName(profile).replace(/[^\p{L}\p{N}]+/gu, "_").replace(/^_+|_+$/g, "");
-      const dir = join(UPLOAD_DIR, "tailored", postingId);
-      await mkdir(dir, { recursive: true });
+      // the caller's own dir under the data dir — never the source tree; a plain file name
+      // because the ATS shows it to the recruiter
+      const dir = join(defaultDataDir(), "files", "tenants", auth.tenantId, "tailored", postingId);
+      ensurePrivateDir(dir);
       const path = join(dir, `${who ? `${who}_` : ""}Resume.pdf`);
-      await writeFile(path, result.pdf);
+      await writeFile(path, result.pdf, { mode: 0o600 });
       // attach to THIS application (not the global profile) so tailoring role B doesn't
       // clobber role A's attachment; the agent prefers this over the base résumé.
       const existing = await repo.getApplicationByPosting(auth.tenantId, postingId);

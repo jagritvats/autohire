@@ -95,6 +95,9 @@ importers:
       '@jobflow/pipeline':
         specifier: workspace:*
         version: link:../../packages/pipeline
+      '@jobflow/resume-io':
+        specifier: workspace:*
+        version: link:../../packages/resume-io
       '@jobflow/service':
         specifier: workspace:*
         version: link:../../packages/service
@@ -239,6 +242,9 @@ importers:
       '@jobflow/pipeline':
         specifier: workspace:*
         version: link:../pipeline
+      '@jobflow/resume-io':
+        specifier: workspace:*
+        version: link:../resume-io
 
 packages:
 

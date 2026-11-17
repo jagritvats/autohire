@@ -5,3 +5,4 @@ export * from "./tailor.js";
 export * from "./latex.js";
 export * from "./extension.js";
 export * from "./contexts.js";
+export * from "./onboarding.js";
