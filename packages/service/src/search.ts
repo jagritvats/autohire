@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Repository } from "@jobflow/db";
-import { SearchQuery, effectiveMarkets, type SavedSearch, type SearchQueryInput, type SourceKind } from "@jobflow/core";
+import { SearchQuery, effectiveMarkets, type Posting, type SavedSearch, type SearchQueryInput, type SourceKind } from "@jobflow/core";
 import { adhocSearch, loadProfile, runSavedSearch, type AdhocSearchResult } from "@jobflow/pipeline";
 import { corpusEmbedder } from "./embedder.js";
 import { rankTenant, toCards, type FeedCard } from "./feed.js";
@@ -13,13 +13,16 @@ import { ensureTenant } from "./tenant.js";
  */
 export interface SearchOutput extends Omit<AdhocSearchResult, "results"> {
   cards: Array<FeedCard & { relevance: number; inFeed: boolean }>;
+  /** with `withPostings`: the scored postings behind `cards` (same order) — transient
+   *  unless `inFeed`/ingested, so a local client can keep one the user picks */
+  postings?: Posting[];
 }
 
 export async function searchJobs(
   repo: Repository,
   tenantId: string,
   query: SearchQueryInput,
-  opts: { ingest?: boolean; limit?: number; sources?: SourceKind[]; sort?: "score" | "relevance" } = {},
+  opts: { ingest?: boolean; limit?: number; sources?: SourceKind[]; sort?: "score" | "relevance"; withPostings?: boolean } = {},
 ): Promise<SearchOutput> {
   await ensureTenant(repo, tenantId);
   const profile = await loadProfile(repo, tenantId);
@@ -42,7 +45,11 @@ export async function searchJobs(
     })),
   );
   const { results, ...rest } = r;
-  return { ...rest, cards: cards.map((c, i) => ({ ...c, relevance: results[i]!.relevance, inFeed: results[i]!.inFeed })) };
+  return {
+    ...rest,
+    cards: cards.map((c, i) => ({ ...c, relevance: results[i]!.relevance, inFeed: results[i]!.inFeed })),
+    ...(opts.withPostings ? { postings: results.map((x) => x.posting) } : {}),
+  };
 }
 
 // ── saved searches ──
