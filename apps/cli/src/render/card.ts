@@ -51,7 +51,7 @@ export function renderCard(out: Out, c: CardLike, idx: number, opts: { scored: b
   else if (c.skills.length) lines.push(`${indent}${out.cyan("stack")} ${c.skills.slice(0, 8).join(", ")}`);
   if (c.levelNote) lines.push(`${indent}${out.cyan("level")} ${c.levelNote}`);
   if (c.redFlags.length) lines.push(`${indent}${out.yellow("watch")} ${c.redFlags.join(" · ")}`);
-  const tags = [c.applied ? out.green("applied") : null, c.bookmarked ? "bookmarked" : null, c.inFeed === false ? out.dim("not in your feed yet") : null].filter(Boolean);
+  const tags = [(c.presets ?? []).length ? out.cyan((c.presets ?? []).map((p) => `#${p}`).join(" ")) : null, c.applied ? out.green("applied") : null, c.bookmarked ? "bookmarked" : null, c.inFeed === false ? out.dim("not in your feed yet") : null].filter(Boolean);
   if (tags.length) lines.push(indent + tags.join(" · "));
   if (c.applyUrl) lines.push(indent + out.dim(c.applyUrl));
   return lines.join("\n");
@@ -66,11 +66,12 @@ export function cardRows(out: Out, cards: CardLike[], scored: boolean): string[]
     locationLabel(c),
     compLabel(c) ?? "",
     ago(c.ageDays),
+    (c.presets ?? []).map((p) => `#${p}`).join(" "),
   ]);
 }
 
-export const CARD_HEADERS = ["#", "score", "title", "company", "location", "comp", "posted"];
-export const CARD_WIDTHS = [3, 5, 42, 22, 24, 30, 9];
+export const CARD_HEADERS = ["#", "score", "title", "company", "location", "comp", "posted", "tags"];
+export const CARD_WIDTHS = [3, 5, 42, 22, 24, 30, 9, 24];
 
 /** cards or a table, numbered so `jobflow show 3` / `apply 3` can refer to a row */
 export function printCards(out: Out, cards: CardLike[], opts: { scored: boolean; format?: string }): void {

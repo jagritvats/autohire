@@ -6,17 +6,19 @@ import {
   addSource,
   listDiscovery,
   removeDiscoverySource,
-  setPreset,
   setPresetFeed,
+  setPresets,
+  togglePreset,
   setSourceEnabledById,
 } from "@jobflow/service";
 import type { Ctx } from "../context.js";
 import { CliError, EXIT, notFound, usage } from "../errors.js";
-import { readUserFile } from "./shared.js";
+import { presetIds, readUserFile } from "./shared.js";
 
 /**
- * What `jobflow sync` polls: a built-in preset (india / global-remote / us / eu-uk) PLUS
- * your own sources. Everything stays Tier 1–2 public data (invariant #1); every URL you add
+ * What `jobflow sync` polls: the built-in presets you switch on (india / global-remote / us /
+ * eu-uk — several at once) PLUS your own sources. A preset is also a TAG: `jobflow search
+ * … --preset us` and `jobflow feed --preset india` filter by it. Everything stays Tier 1–2 public data (invariant #1); every URL you add
  * passes the SSRF guard before it's saved.
  */
 export function register(program: Command, ctx: Ctx): void {
@@ -25,32 +27,47 @@ export function register(program: Command, ctx: Ctx): void {
     .description("what `jobflow sync` polls (same as `discovery list`)")
     .action(() => listAll(ctx));
 
-  const d = program.command("discovery").description("choose a preset and add your own sources (RSS, JSON feeds, Telegram, HN, companies)");
+  const d = program.command("discovery").description("switch presets on/off and add your own sources (RSS, JSON feeds, Telegram, HN, companies)");
 
-  d.command("list", { isDefault: true }).description("your preset + custom sources").action(() => listAll(ctx));
+  d.command("list", { isDefault: true }).description("your presets + custom sources").action(() => listAll(ctx));
 
   d.command("presets")
-    .description("the built-in presets")
+    .description("the built-in presets, with which are on")
     .action(async () => {
       const { presets } = await listDiscovery(await ctx.repo(), ctx.tenantId);
       ctx.out.emit(presets, () => {
         for (const p of presets) {
-          ctx.out.line(`${p.active ? ctx.out.green("●") : " "} ${ctx.out.bold(p.id.padEnd(14))} ${p.label} ${ctx.out.dim(`· markets ${p.markets.join(",") || "any"} · ${p.feeds.length} feeds · ${p.companies} companies`)}`);
-          ctx.out.line(`  ${" ".repeat(14)} ${ctx.out.dim(p.description)}`);
+          ctx.out.line(`${p.active ? ctx.out.green("on ") : ctx.out.dim("off")} ${ctx.out.bold(p.id.padEnd(14))} ${p.label} ${ctx.out.dim(`· markets ${p.markets.join(",") || "any"} · ${p.feeds.length} feeds · ${p.companies} companies`)}`);
+          ctx.out.line(`    ${" ".repeat(14)} ${ctx.out.dim(p.description)}`);
         }
-        ctx.out.hint("switch: jobflow discovery use <preset>");
+        ctx.out.hint("choose: jobflow discovery use india,global-remote · or: jobflow discovery preset-on us / preset-off india");
       });
     });
 
   d.command("use")
-    .description("switch the discovery preset")
-    .argument("<preset>")
-    .action(async (preset: string) => {
-      await setPreset(await ctx.repo(), ctx.tenantId, preset.trim().toLowerCase()).catch((e: Error) => {
-        throw usage(e.message);
-      });
-      ctx.out.emit({ ok: true, preset }, () => ctx.out.ok(`Discovery preset: ${preset}. Run \`jobflow sync\` to poll it.`));
+    .description("switch on exactly these presets (one or several), e.g. india,global-remote")
+    .argument("<presets...>")
+    .action(async (words: string[]) => {
+      const on = await setPresets(await ctx.repo(), ctx.tenantId, presetIds(words));
+      ctx.out.emit({ ok: true, presets: on }, () => ctx.out.ok(`Discovery presets: ${on.join(", ")}. Run \`jobflow sync\` to poll them.`));
     });
+
+  for (const [name, on] of [
+    ["preset-on", true],
+    ["preset-off", false],
+  ] as const) {
+    d.command(name)
+      .description(`switch one preset ${on ? "on" : "off"}, keeping the others`)
+      .argument("<preset>")
+      .action(async (id: string) => {
+        const [preset] = presetIds(id);
+        if (!preset) throw usage("name a preset");
+        const now = await togglePreset(await ctx.repo(), ctx.tenantId, preset, on).catch((e: Error) => {
+          throw usage(e.message);
+        });
+        ctx.out.emit({ ok: true, presets: now }, () => ctx.out.ok(`Discovery presets: ${now.join(", ")}`));
+      });
+  }
 
   d.command("add-rss")
     .description("add an RSS/Atom job feed")
@@ -133,8 +150,7 @@ export function register(program: Command, ctx: Ctx): void {
       .action(async (id: string) => {
         const repo = await ctx.repo();
         const view = await listDiscovery(repo, ctx.tenantId);
-        const active = view.presets.find((p) => p.active);
-        const feed = active?.feeds.find((f) => f.id === id);
+        const feed = view.presets.filter((p) => p.active).flatMap((p) => p.feeds).find((f) => f.id === id);
         if (feed) {
           await setPresetFeed(repo, ctx.tenantId, feed.id, on);
           ctx.out.emit({ ok: true, feed: feed.id, enabled: on }, () => ctx.out.ok(`${on ? "Enabled" : "Disabled"} preset feed ${feed.id}`));
@@ -160,11 +176,17 @@ export function register(program: Command, ctx: Ctx): void {
 
 async function listAll(ctx: Ctx): Promise<void> {
   const v = await listDiscovery(await ctx.repo(), ctx.tenantId);
-  const active = v.presets.find((p) => p.active);
+  const active = v.presets.filter((p) => p.active);
   ctx.out.emit(v, () => {
     const out = ctx.out;
-    out.line(`${out.bold("Preset")}  ${active ? `${active.id} — ${active.label}` : "(none)"} ${out.dim(`· ${active?.companies ?? 0} seed companies`)}`);
-    for (const f of active?.feeds ?? []) out.line(`  ${f.enabled ? out.green("on ") : out.dim("off")} ${f.id} ${out.dim(`(${f.source})`)}`);
+    out.line(`${out.bold("Presets on")}  ${active.map((p) => p.id).join(", ") || "(none)"} ${out.dim(`· ${active.reduce((n, p) => n + p.companies, 0)} seed companies · all presets: jobflow discovery presets`)}`);
+    const seen = new Set<string>();
+    for (const p of active)
+      for (const f of p.feeds) {
+        if (seen.has(f.id)) continue;
+        seen.add(f.id);
+        out.line(`  ${f.enabled ? out.green("on ") : out.dim("off")} ${f.id} ${out.dim(`(${f.source} · ${p.id})`)}`);
+      }
     out.line();
     out.line(out.bold("Your sources"));
     if (!v.sources.length) out.line(out.dim("  none — add with: jobflow discovery add-rss|add-json|add-telegram|add-hn|add-company|import-companies"));

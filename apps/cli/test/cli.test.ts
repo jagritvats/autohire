@@ -285,6 +285,39 @@ describe("feed, posting refs, search, apply, tailor", () => {
   });
 });
 
+describe("discovery presets: multi-select, and usable as tags", () => {
+  it("discovery use a,b switches on exactly those; preset-on/off toggles one", async () => {
+    const use = await cli(["discovery", "use", "india,global-remote"]);
+    expect(use.code, use.err).toBe(0);
+    const on = (rows: Array<{ id: string; active: boolean }>) => rows.filter((p) => p.active).map((p) => p.id).sort();
+    expect(on((await cli(["--json", "discovery", "presets"])).json())).toEqual(["global-remote", "india"]);
+    expect((await cli(["discovery", "preset-on", "us"])).code).toBe(0);
+    expect((await cli(["discovery", "preset-off", "india"])).code).toBe(0);
+    expect(on((await cli(["--json", "discovery", "presets"])).json())).toEqual(["global-remote", "us"]);
+    expect((await cli(["--json", "config", "get", "discovery.presets"])).json().value).toBe("global-remote,us");
+    expect((await cli(["discovery", "use", "atlantis"])).code).toBe(2);
+  });
+
+  it("init --preset takes several", async () => {
+    const r = await cli(["init", "--yes", "--sample", "--preset", "us,eu-uk"]);
+    expect(r.code, r.err).toBe(0);
+    expect(r.out).toContain("discovery: us, eu-uk");
+  });
+
+  it("search --preset / --tag reaches the query (and unknown presets are a usage error)", async () => {
+    await cli(["init", "--yes", "--sample"]);
+    const s = await cli(["--json", "search", "backend", "--preset", "us,eu-uk", "--sources", "remotive"]);
+    expect(s.code, s.err).toBe(0);
+    expect(s.json().query.presets).toEqual(["us", "eu-uk"]);
+    const t = await cli(["--json", "search", "backend", "--tag", "india", "--sources", "remotive"]);
+    expect(t.code, t.err).toBe(0);
+    expect(t.json().query.presets).toEqual(["india"]);
+    expect((await cli(["search", "backend", "--preset", "mars"])).code).toBe(2);
+    expect((await cli(["feed", "--preset", "mars"])).code).toBe(2);
+    expect((await cli(["--json", "feed", "--preset", "india"])).code).toBe(0);
+  });
+});
+
 describe("the never-submit guarantee (invariant #2)", () => {
   it("no command, alias or option anywhere in the tree mentions submit", () => {
     const { program } = buildProgram();

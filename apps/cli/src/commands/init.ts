@@ -2,6 +2,7 @@ import type { Command } from "commander";
 import {
   LevelBand,
   RoleArchetype,
+  activePresets,
   countryCodeFromText,
   remoteGeosForCountry,
   type Contact,
@@ -21,6 +22,7 @@ import {
   levelBand,
   locationWeights,
   money,
+  presetIds,
   printProfile,
   readUserFile,
   remoteGeos,
@@ -79,7 +81,7 @@ export function register(program: Command, ctx: Ctx): void {
     .option("--floor <amount>", 'salary floor, e.g. "150000 USD" (only a confidently-stated lower salary is excluded)')
     .option("--roles <list>", `target role types: ${RoleArchetype.options.filter((r) => r !== "other").join(",")}`)
     .option("--locations <list>", "preferred cities/regions, most preferred first")
-    .option("--preset <id>", `discovery preset: ${listPresets().map((p) => p.id).join(" | ")}`)
+    .option("--preset <ids>", `discovery presets, one or several: ${listPresets().map((p) => p.id).join(", ")} (e.g. us,eu-uk)`)
     .option("--force", "re-run onboarding without asking even if you're set up")
     .action(async (opts: InitOpts) => {
       const res = opts.yes ? await initNonInteractive(ctx, opts) : await initInteractive(ctx, opts);
@@ -88,12 +90,12 @@ export function register(program: Command, ctx: Ctx): void {
       const profile = await loadProfile(repo, ctx.tenantId);
       const evidence = await repo.listEvidence(ctx.tenantId);
       out.emit(
-        { ok: true, sample: !!opts.sample, evidenceAdded: res.evidenceAdded, readiness: res.readiness, preset: res.preset, profile: { name: fullName(profile), email: profile.prefs.contact.email } },
+        { ok: true, sample: !!opts.sample, evidenceAdded: res.evidenceAdded, readiness: res.readiness, presets: res.presets, profile: { name: fullName(profile), email: profile.prefs.contact.email } },
         () => {
           out.line();
           printProfile(out, profile, evidence.length);
           out.line();
-          out.ok(`Profile saved${opts.sample ? " (fictional sample persona)" : ""} · discovery preset: ${res.preset}`);
+          out.ok(`Profile saved${opts.sample ? " (fictional sample persona)" : ""} · discovery: ${res.presets.join(", ")}`);
           if (!res.readiness.ready) out.hint(`Still missing: ${res.readiness.missing.join(", ")} — fix with \`jobflow profile set …\``);
           out.line(`next: ${out.bold("jobflow sync && jobflow feed")}   ${out.dim('(or: jobflow search "backend engineer" --remote)')}`);
         },
@@ -104,7 +106,7 @@ export function register(program: Command, ctx: Ctx): void {
 interface InitResult {
   evidenceAdded: number;
   readiness: { ready: boolean; missing: string[] };
-  preset: string;
+  presets: string[];
 }
 
 /** What the flags say, as an onboarding patch (only flags that were given). */
@@ -190,9 +192,9 @@ async function initNonInteractive(ctx: Ctx, opts: InitOpts): Promise<InitResult>
     if (opts.resume) throw usage("--sample and --resume are exclusive: the sample is a fictional persona.");
     await loadSampleProfile(repo, ctx.tenantId);
     const p = await loadProfile(repo, ctx.tenantId);
-    const preset = opts.preset ?? suggestPreset({ ...p.prefs, ...patch.prefs }).id;
-    const r = await finishOnboarding(repo, ctx.files(), ctx.tenantId, { ...patch, discoveryPreset: preset });
-    return { evidenceAdded: (await repo.listEvidence(ctx.tenantId)).length, readiness: r.readiness, preset };
+    const presets = opts.preset ? presetIds(opts.preset) : [suggestPreset({ ...p.prefs, ...patch.prefs }).id];
+    const r = await finishOnboarding(repo, ctx.files(), ctx.tenantId, { ...patch, discoveryPresets: presets });
+    return { evidenceAdded: (await repo.listEvidence(ctx.tenantId)).length, readiness: r.readiness, presets };
   }
   const imported = await importFrom(ctx, opts);
   if (imported && !ctx.out.json) printDraft(ctx, imported.draft);
@@ -203,7 +205,7 @@ async function initNonInteractive(ctx: Ctx, opts: InitOpts): Promise<InitResult>
   if (!prefs.remoteGeoOk && home) prefs.remoteGeoOk = remoteGeosForCountry(home);
   if (!prefs.targetArchetypes && imported?.draft.archetypes.length) prefs.targetArchetypes = imported.draft.archetypes.filter((a) => a !== "other");
   const current = await loadProfile(repo, ctx.tenantId);
-  const preset = opts.preset ?? suggestPreset({ ...current.prefs, ...prefs }).id;
+  const presets = opts.preset ? presetIds(opts.preset) : [suggestPreset({ ...current.prefs, ...prefs }).id];
   const r = await finishOnboarding(repo, ctx.files(), ctx.tenantId, {
     draft: imported?.draft ?? null,
     file: imported?.file ?? null,
@@ -213,9 +215,9 @@ async function initNonInteractive(ctx: Ctx, opts: InitOpts): Promise<InitResult>
     yoe: patch.yoe,
     levelBand: patch.levelBand,
     stackProfile: patch.stackProfile,
-    discoveryPreset: preset,
+    discoveryPresets: presets,
   });
-  return { evidenceAdded: r.evidenceAdded, readiness: r.readiness, preset };
+  return { evidenceAdded: r.evidenceAdded, readiness: r.readiness, presets };
 }
 
 function stripEmpty<T extends object>(o: T): Partial<T> {
@@ -232,7 +234,7 @@ async function initInteractive(ctx: Ctx, opts: InitOpts): Promise<InitResult> {
     if (!(await ctx.confirm("Run setup again (your answers replace the current ones)?", false))) {
       const evidence = await repo.listEvidence(ctx.tenantId);
       const { profileReadiness } = await import("@jobflow/pipeline");
-      return { evidenceAdded: 0, readiness: profileReadiness(current, evidence.length), preset: (await repo.getConfig(ctx.tenantId))?.discoveryPreset ?? "india" };
+      return { evidenceAdded: 0, readiness: profileReadiness(current, evidence.length), presets: activePresets(await repo.getConfig(ctx.tenantId)) };
     }
   }
 
@@ -318,11 +320,12 @@ async function initInteractive(ctx: Ctx, opts: InitOpts): Promise<InitResult> {
   // ── 4. discovery preset ──
   const suggested = opts.preset ?? suggestPreset({ ...current.prefs, ...prefs }).id;
   out.note("");
-  out.note(out.bold("Discovery preset") + out.dim(" — which boards and feeds `jobflow sync` polls (add your own later with `jobflow discovery`)"));
+  out.note(out.bold("Discovery presets") + out.dim(" — which boards and feeds `jobflow sync` polls; pick one or several (add your own later with `jobflow discovery`)"));
   for (const p of listPresets()) out.note(`  ${p.id.padEnd(14)} ${out.dim(p.description)}`);
-  const preset = await askValid(ctx, "Preset:", suggested, (v) => {
-    if (!listPresets().some((p) => p.id === v)) throw usage(`unknown preset "${v}"`);
-    return v;
+  const presets = await askValid(ctx, "Presets (comma-separated):", suggested, (v) => {
+    const ids = presetIds(v);
+    if (!ids.length) throw usage("pick at least one preset");
+    return ids;
   });
 
   const r = await finishOnboarding(repo, ctx.files(), ctx.tenantId, {
@@ -334,9 +337,9 @@ async function initInteractive(ctx: Ctx, opts: InitOpts): Promise<InitResult> {
     yoe,
     levelBand: level,
     stackProfile: sk.skills,
-    discoveryPreset: preset,
+    discoveryPresets: presets,
   });
-  return { evidenceAdded: r.evidenceAdded, readiness: r.readiness, preset };
+  return { evidenceAdded: r.evidenceAdded, readiness: r.readiness, presets };
 }
 
 /** ask until the answer parses (a bad answer re-asks instead of aborting the wizard) */

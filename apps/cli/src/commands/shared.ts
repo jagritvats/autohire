@@ -8,7 +8,7 @@ import {
   matchSkillToken,
   type Profile,
 } from "@jobflow/core";
-import { isOnboarded, loadProfile, makeSearchQuery, profileReadiness } from "@jobflow/pipeline";
+import { isOnboarded, listPresets, loadProfile, makeSearchQuery, profileReadiness } from "@jobflow/pipeline";
 import type { Ctx } from "../context.js";
 import { CliError, EXIT, needsSetup, usage } from "../errors.js";
 import type { Out } from "../output.js";
@@ -20,6 +20,14 @@ export function csv(v: string | string[] | undefined | null): string[] {
     .flatMap((x) => String(x).split(/[,;]/))
     .map((x) => x.trim())
     .filter(Boolean);
+}
+
+/** "us, eu-uk" → validated discovery-preset ids (multi-select; also used as search/feed tags) */
+export function presetIds(v: string | string[] | undefined): string[] {
+  const known = listPresets().map((p) => p.id);
+  const ids = [...new Set(csv(v).map((p) => p.toLowerCase()))];
+  for (const id of ids) if (!known.includes(id)) throw usage(`unknown preset "${id}"`, `Presets: ${known.join(", ")}`);
+  return ids;
 }
 
 /** commander collector for repeatable options */

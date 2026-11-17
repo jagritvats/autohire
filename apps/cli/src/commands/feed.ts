@@ -6,6 +6,8 @@ import { notFound, usage } from "../errors.js";
 import { ago } from "../output.js";
 import { compLabel, locationLabel, printCards, renderCard } from "../render/card.js";
 import { resolvePosting } from "../refs.js";
+import { presetIds } from "./shared.js";
+import type { SearchQueryInput } from "@jobflow/core";
 
 export function register(program: Command, ctx: Ctx): void {
   program
@@ -14,19 +16,22 @@ export function register(program: Command, ctx: Ctx): void {
     .option("-n, --limit <n>", "how many", "20")
     .option("--min-score <n>", "only matches scoring at least this")
     .option("--search <name>", "view through a saved search (what it hides is counted)")
+    .option("--preset <presets>", "only roles tagged with these discovery presets, e.g. india or us,eu-uk")
+    .option("--tag <presets>", "same as --preset")
     .option("--format <fmt>", "cards (default) | table")
-    .action(async (o: { limit: string; minScore?: string; search?: string; format?: string }) => {
+    .action(async (o: { limit: string; minScore?: string; search?: string; preset?: string; tag?: string; format?: string }) => {
       const repo = await ctx.repo();
       const limit = Math.max(1, Math.min(500, Number(o.limit) || 20));
       const min = o.minScore != null ? Number(o.minScore) : null;
       if (min != null && !Number.isFinite(min)) throw usage("--min-score must be a number");
-      let viewId: string | null = null;
+      const presets = presetIds([o.preset, o.tag].filter((x): x is string => !!x));
+      let view: string | SearchQueryInput | null = null;
       if (o.search) {
         const s = await findSearch(repo, ctx.tenantId, o.search);
         if (!s) throw notFound(`No saved search "${o.search}".`, "See them with `jobflow searches`.");
-        viewId = s.id;
-      }
-      const data = await getFeed(repo, ctx.tenantId, { limit: Math.max(limit * 4, 100), view: viewId, bootstrap: false });
+        view = presets.length ? { ...s.query, presets } : s.id;
+      } else if (presets.length) view = { presets };
+      const data = await getFeed(repo, ctx.tenantId, { limit: Math.max(limit * 4, 100), view, bootstrap: false });
       const scored = data.stats.mode === "ranked";
       const cards = data.cards.filter((c) => !c.archived && (min == null || c.score >= min)).slice(0, limit);
       ctx.rememberListing("feed", cards.map((c) => c.id));
@@ -49,7 +54,8 @@ export function register(program: Command, ctx: Ctx): void {
         printCards(out, cards, { scored, format: o.format });
         if (data.stats.hiddenTotal) {
           const h = Object.entries(data.stats.hidden ?? {}).filter(([, n]) => n > 0);
-          out.hint(`"${o.search}" hid ${data.stats.hiddenTotal}: ${h.map(([k, n]) => `${k} ${n}`).join(", ")}`);
+          const what = [o.search ? `"${o.search}"` : null, presets.length ? presets.map((p) => `#${p}`).join(" ") : null].filter(Boolean).join(" + ");
+          out.hint(`${what} hid ${data.stats.hiddenTotal}: ${h.map(([k, n]) => `${k} ${n}`).join(", ")}`);
         }
         out.hint("next: jobflow show 1 · jobflow tailor 1 · jobflow apply 1");
       });

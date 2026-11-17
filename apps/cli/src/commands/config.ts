@@ -1,10 +1,11 @@
 import type { Command } from "commander";
-import { LlmChoice, type TenantConfig } from "@jobflow/core";
+import { LlmChoice, activePresets, type TenantConfig } from "@jobflow/core";
 import { listPresets } from "@jobflow/pipeline";
-import { setPreset, tenantProvider } from "@jobflow/service";
+import { setPresets, tenantProvider } from "@jobflow/service";
 import type { Ctx } from "../context.js";
 import { notFound, usage } from "../errors.js";
 import { mask } from "../output.js";
+import { presetIds } from "./shared.js";
 
 /**
  * Settings that live in your TenantConfig (in the local database under the data dir —
@@ -55,10 +56,10 @@ export const KEYS: Record<string, KeyDef> = {
       return { ...c, automationFlags: { ...c.automationFlags, rate: r } };
     },
   },
-  "discovery.preset": {
-    help: `discovery preset: ${listPresets().map((p) => p.id).join(" | ")}`,
-    get: (c) => c.discoveryPreset,
-    set: (c) => c, // handled by setPreset (validates the id)
+  "discovery.presets": {
+    help: `discovery presets switched on, comma-separated: ${listPresets().map((p) => p.id).join(", ")}`,
+    get: (c) => activePresets(c).join(","),
+    set: (c) => c, // handled by setPresets (validates the ids)
   },
 };
 
@@ -69,7 +70,7 @@ async function config(ctx: Ctx): Promise<TenantConfig> {
 }
 
 function keyDef(key: string): KeyDef {
-  const def = KEYS[key];
+  const def = KEYS[key === "discovery.preset" ? "discovery.presets" : key];
   if (!def) throw usage(`unknown config key "${key}"`, `Keys: ${Object.keys(KEYS).join(", ")}`);
   return def;
 }
@@ -77,7 +78,7 @@ function keyDef(key: string): KeyDef {
 const shown = (def: KeyDef, v: string) => (def.secret ? mask(v) : v);
 
 export function register(program: Command, ctx: Ctx): void {
-  const cfg = program.command("config").description("settings: generation model + key, form-filler, discovery preset");
+  const cfg = program.command("config").description("settings: generation model + key, form-filler, discovery presets");
   const keysHelp = "\nKeys:\n" + Object.entries(KEYS).map(([k, d]) => `  ${k.padEnd(18)} ${d.help}`).join("\n");
 
   cfg.command("list", { isDefault: true })
@@ -118,7 +119,7 @@ export function register(program: Command, ctx: Ctx): void {
       if (v == null) throw usage(`give a value for ${key}${def.secret ? " (use --stdin for the key)" : ""}`);
       if (def.secret && value != null && !o.stdin) ctx.out.warn("a key passed as an argument is saved in your shell history — prefer `--stdin` next time.");
       const repo = await ctx.repo();
-      if (key === "discovery.preset") await setPreset(repo, ctx.tenantId, v.trim());
+      if (key.startsWith("discovery.preset")) await setPresets(repo, ctx.tenantId, presetIds(v));
       else await repo.saveConfig(def.set(await config(ctx), v));
       const after = await config(ctx);
       ctx.out.emit({ ok: true, key, value: shown(def, def.get(after)) }, () => {
@@ -135,7 +136,7 @@ export function register(program: Command, ctx: Ctx): void {
     .action(async (key: string) => {
       const def = keyDef(key);
       const repo = await ctx.repo();
-      if (key === "discovery.preset") throw usage("pick another preset instead: jobflow discovery use <preset>");
+      if (key.startsWith("discovery.preset")) throw usage("pick presets instead: jobflow discovery use <preset,preset>");
       await repo.saveConfig(def.set(await config(ctx), key === "llm.provider" ? "echo" : key === "automation.fill" ? "off" : key === "automation.rate" ? "human" : ""));
       ctx.out.emit({ ok: true, key }, () => ctx.out.ok(`${key} reset`));
     });

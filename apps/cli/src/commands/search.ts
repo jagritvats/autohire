@@ -1,12 +1,12 @@
 import type { Command } from "commander";
 import type { Posting, SearchQuery, SourceKind } from "@jobflow/core";
 import { searchCapableAdapters } from "@jobflow/adapters";
-import { isOnboarded, loadProfile, makeSearchQuery, type SearchFlags } from "@jobflow/pipeline";
+import { isOnboarded, loadProfile, makeSearchQuery, presetFeedSources, type SearchFlags } from "@jobflow/pipeline";
 import { saveSearch, searchJobs } from "@jobflow/service";
 import type { Ctx } from "../context.js";
 import { usage } from "../errors.js";
 import { printCards } from "../render/card.js";
-import { collect } from "./shared.js";
+import { collect, presetIds } from "./shared.js";
 
 /**
  * `jobflow search "<query>" [flags]` — the headline command. Asks the search-capable
@@ -30,6 +30,8 @@ export interface QueryOpts {
   title?: string[];
   excludeCompany?: string[];
   exclude?: string[];
+  preset?: string[];
+  tag?: string[];
 }
 
 /** the query flags shared by `search` and `searches add` */
@@ -48,7 +50,9 @@ export function addQueryOptions(cmd: Command): Command {
     .option("--nice <skills>", "skills that are a plus (repeatable)", collect)
     .option("--title <text>", "title must contain (repeatable)", collect)
     .option("--exclude-company <name>", "hide a company (repeatable)", collect)
-    .option("--exclude <keyword>", "hide roles mentioning this (repeatable)", collect);
+    .option("--exclude <keyword>", "hide roles mentioning this (repeatable)", collect)
+    .option("--preset <presets>", "only roles tagged with these discovery presets, e.g. us,eu-uk (searches their feeds)", collect)
+    .option("--tag <presets>", "same as --preset", collect);
 }
 
 /** shell args → the query text makeSearchQuery parses (multi-word args stay one phrase) */
@@ -72,6 +76,8 @@ export function buildQuery(words: string[], o: QueryOpts): SearchQuery {
   if (o.title?.length) flags.title = o.title;
   if (o.excludeCompany?.length) flags.excludeCompany = o.excludeCompany;
   if (o.exclude?.length) flags.exclude = o.exclude;
+  const tags = [...(o.preset ?? []), ...(o.tag ?? [])];
+  if (tags.length) flags.preset = presetIds(tags);
   const q = makeSearchQuery(queryText(words), flags);
   if (o.minSalary && !q.minSalary) throw usage(`couldn't read --min-salary "${o.minSalary}"`, 'Try "150000 USD", "150k USD" or "40L INR".');
   if (o.posted && !q.postedWithinDays) throw usage(`couldn't read --posted "${o.posted}"`, "Try 7d, 2w or 1m.");
@@ -93,6 +99,7 @@ export function describeQuery(q: SearchQuery): string {
   if (q.postedWithinDays) parts.push(`≤ ${q.postedWithinDays}d old`);
   if (q.mustSkills.length) parts.push(`must: ${q.mustSkills.join(", ")}`);
   if (q.sources.length) parts.push(`sources: ${q.sources.join(", ")}`);
+  if (q.presets.length) parts.push(q.presets.map((p) => `#${p}`).join(" "));
   return parts.join(" · ") || "(everything)";
 }
 
@@ -114,11 +121,12 @@ Examples:
   jobflow search "backend engineer" --remote
   jobflow search "staff platform" --loc "Berlin,DE" --seniority staff --min-salary "120000 EUR"
   jobflow search golang --must kafka --posted 7d --save-as go-kafka
+  jobflow search "backend" --preset us,eu-uk      (only roles tagged #us / #eu-uk)
 Then: jobflow show 1 · jobflow tailor 1 · jobflow apply 1`,
   );
   cmd.action(async (words: string[], o: QueryOpts & { limit: string; sort?: string; format?: string; ingest?: boolean; saveAs?: string }) => {
     const query = buildQuery(words, o);
-    if (!query.keywords.length && !query.titles.length && !query.mustSkills.length) {
+    if (!query.keywords.length && !query.titles.length && !query.mustSkills.length && !query.presets.length) {
       throw usage("Say what to search for, e.g. jobflow search \"backend engineer\" --remote");
     }
     const limit = Math.max(1, Math.min(100, Number(o.limit) || 15));
@@ -126,7 +134,7 @@ Then: jobflow show 1 · jobflow tailor 1 · jobflow apply 1`,
     const repo = await ctx.repo();
     const profile = await loadProfile(repo, ctx.tenantId);
     const scored = isOnboarded(profile);
-    const nSources = query.sources.length || searchCapableAdapters().length;
+    const nSources = query.sources.length || (query.presets.length ? presetFeedSources(query.presets).filter((s) => searchCapableAdapters().some((a) => a.source === s)).length : searchCapableAdapters().length);
     const spin = ctx.out.spinner(`Searching ${nSources} live source${nSources === 1 ? "" : "s"} for ${describeQuery(query)}`);
     const started = Date.now();
     let r: Awaited<ReturnType<typeof searchJobs>>;
