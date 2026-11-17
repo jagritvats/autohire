@@ -34,3 +34,17 @@ jobs:
       - run: pnpm -r build
       - run: pnpm -r typecheck
       - run: pnpm -r test
+
+  guards:
+    # privacy + tenant-isolation regression guards (no install needed: plain node scripts)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: No personal data in tracked files
+        run: node scripts/check-pii.mjs
+      - name: Every API route resolves its caller
+        run: node scripts/check-tenant.mjs
