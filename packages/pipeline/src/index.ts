@@ -10,3 +10,4 @@ export * from "./poll.js";
 export * from "./harvest.js";
 export * from "./liveness.js";
 export * from "./sample.js";
+export * from "./profile.js";

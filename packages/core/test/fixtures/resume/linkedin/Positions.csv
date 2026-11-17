@@ -1,0 +1,8 @@
+Company Name,Title,Description,Location,Started On,Finished On
+Example Fintech,Senior Software Engineer,"Built an idempotent ledger service in Java and Spring Boot handling 2M transactions/day
+Cut p99 API latency from 480ms to 120ms by adding Redis caching
+Mentored 3 engineers on Kafka consumer design","Austin, Texas, United States",Jan 2023,
+Demo Health,Contract Backend Engineer,Integrated a claims feed over gRPC for a pilot clinic network,Remote,Mar 2021,Sep 2021
+Sample Retail Co,Software Engineer,"Shipped a Node.js order API on PostgreSQL serving 300 req/s
+Migrated deployments to Docker and Kubernetes, reducing release time by 60%","Austin, Texas, United States",Jun 2020,Dec 2022
+Placeholder Labs,Software Engineering Intern,Wrote JavaScript tooling for internal dashboards,"Austin, Texas, United States",May 2019,Aug 2019
