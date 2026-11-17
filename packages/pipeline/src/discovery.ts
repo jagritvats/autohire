@@ -1,5 +1,5 @@
-import { effectiveMarkets, normCompany, type DiscoverySource, type Profile, type SavedSearch, type SourceKind, type TenantConfig } from "@jobflow/core";
-import { cloudAdapter, feedKeyFor, searchCapableAdapters, type FetchTarget, type SourceAdapter } from "@jobflow/adapters";
+import { classifyLink, effectiveMarkets, normCompany, type DiscoverySource, type Profile, type SavedSearch, type SourceKind, type TenantConfig } from "@jobflow/core";
+import { checkUrlSyntax, cloudAdapter, feedKeyFor, isSafeUrl, searchCapableAdapters, type FetchTarget, type SourceAdapter } from "@jobflow/adapters";
 import type { Repository } from "@jobflow/db";
 import type { SeedCompany } from "./discover.js";
 import { csvCountries } from "./ingest.js";
@@ -225,7 +225,12 @@ export async function resolveDiscoveryPlan(repo: Repository, opts: DiscoveryPlan
         addChannel(cfg.channel);
         break;
       case "company_list":
-        for (const c of cfg.companies) addSeed({ name: c.name, ...(c.careersUrl ? { careersUrl: c.careersUrl } : {}), tags: ["custom"] });
+        for (const c of cfg.companies) {
+          // a user-typed careers URL is fetched by the detector — only a safe one is kept
+          // (the company still goes in by name, for the detector's name probe)
+          const url = c.careersUrl && (await userUrlOk(c.careersUrl)) ? c.careersUrl : null;
+          addSeed({ name: c.name, ...(url ? { careersUrl: url } : {}), tags: ["custom"] });
+        }
         companyListSourceIds.push(src.id);
         break;
     }
@@ -281,6 +286,20 @@ export async function resolveDiscoveryPlan(repo: Repository, opts: DiscoveryPlan
     companyListSourceIds,
     searchTargets,
   };
+}
+
+/**
+ * SSRF check for a user-supplied careers URL (the detector fetches it): syntax always; a
+ * DNS check unless it's a known ATS host (a fixed public API — no lookup needed).
+ */
+async function userUrlOk(url: string): Promise<boolean> {
+  try {
+    checkUrlSyntax(url);
+  } catch {
+    return false;
+  }
+  if (classifyLink(url).kind === "ats") return true;
+  return isSafeUrl(url);
 }
 
 function runAt(s: Pick<SavedSearch, "lastRunAt">): number {

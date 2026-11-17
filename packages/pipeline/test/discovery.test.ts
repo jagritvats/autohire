@@ -137,7 +137,16 @@ describe("resolveDiscoveryPlan", () => {
     await repo.saveDiscoverySource(source(B, { kind: "telegram", channel: "remote_jobs_feed" }));
     await repo.saveDiscoverySource(source(B, { kind: "json_feed", url: "https://api.example.com/jobs.json", mapping: { itemsPath: "items", id: "id", title: "title", company: "company", url: "url", location: null, description: "content_html", postedAt: "date_published", salary: null } }));
     await repo.saveDiscoverySource(source(A, { kind: "hn_thread", storyId: "424242" }));
-    await repo.saveDiscoverySource(source(B, { kind: "company_list", companies: [{ name: "Stripe", careersUrl: null }, { name: "Hooli Labs", careersUrl: "https://boards.greenhouse.io/hooli" }] }));
+    await repo.saveDiscoverySource(
+      source(B, {
+        kind: "company_list",
+        companies: [
+          { name: "Stripe", careersUrl: null },
+          { name: "Hooli Labs", careersUrl: "https://boards.greenhouse.io/hooli" },
+          { name: "Sneaky", careersUrl: "http://169.254.169.254/latest/meta-data/" },
+        ],
+      }),
+    );
 
     // the same query saved by both tenants with the same market → one remotive target
     await repo.saveSavedSearch(search(A, "go remote", { keywords: ["golang"], remote: "only", sources: ["remotive"] }));
@@ -163,7 +172,9 @@ describe("resolveDiscoveryPlan", () => {
     expect(plan.telegramChannels).toContain("remote_jobs_feed");
     // company list: Stripe is already a preset seed (deduped), Hooli is added
     expect(plan.seeds.filter((s) => s.name === "Stripe")).toHaveLength(1);
-    expect(plan.seeds.some((s) => s.name === "Hooli Labs")).toBe(true);
+    expect(plan.seeds.find((s) => s.name === "Hooli Labs")!.careersUrl).toBe("https://boards.greenhouse.io/hooli");
+    // an unsafe user URL is dropped (the company stays, by name)
+    expect(plan.seeds.find((s) => s.name === "Sneaky")!.careersUrl).toBeUndefined();
     expect(plan.companyListSourceIds).toHaveLength(1);
     // markets of both tenants
     expect(plan.pollCountries).toEqual(["IN", "US"]);

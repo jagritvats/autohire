@@ -295,5 +295,8 @@ function getOnce(
     );
     req.on("timeout", () => req.destroy(new Error(`timed out after ${opts.timeoutMs} ms`)));
     req.on("error", reject);
+    // the socket timeout resets on every byte — a server dripping data would never trip it
+    const deadline = setTimeout(() => req.destroy(new Error(`no complete answer within ${2 * opts.timeoutMs} ms`)), 2 * opts.timeoutMs);
+    req.on("close", () => clearTimeout(deadline));
   });
 }
