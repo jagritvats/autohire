@@ -1,31 +1,30 @@
-#!/usr/bin/env node
-import { readFile } from "node:fs/promises";
-import { InMemoryRepository, createRepository, isDurable, loadRootEnv } from "@jobflow/db";
+import { InMemoryRepository } from "@jobflow/db";
 import {
   discoverCompanies,
   ingestCompany,
   ingestFromAdapter,
   rebuildMatches,
-  harvestLinks,
   DEFAULT_DISCOVERY_FEEDS,
+  DEFAULT_TENANT,
+  SEED_COMPANIES,
+  sampleProfile,
+  sampleEvidence,
 } from "@jobflow/pipeline";
-import { atsAdapter, fetchTelegramChannel, getAdapter } from "@jobflow/adapters";
-import { parseWhatsAppExport } from "@jobflow/core";
+import { atsAdapter, getAdapter } from "@jobflow/adapters";
 import { createProvider, rerankMatch, tailorResume, answerQuestion } from "@jobflow/llm";
 import { buildFillPlan, renderDryRun, resolveApplyUrl, type ApplicantData } from "@jobflow/autofill";
-import { DEFAULT_TENANT, SEED_COMPANIES, sampleProfile, sampleEvidence } from "./seed-data.js";
-import { renderMatchCard } from "./card.js";
+import { renderMatchCard } from "../render/match-card.js";
 
 /**
- * JobFlow CLI — runs the real pipeline against the live free APIs with the
- * in-memory repo (zero infra). `demo` exercises the whole spine:
- *   discover → poll ATS → normalize → dedup → rank → match cards.
+ * `jobflow demo` — runs the real pipeline against the live free APIs with a throwaway
+ * in-memory repo and the FICTIONAL sample candidate (never touches your data dir).
+ * Exercises the whole spine: discover → poll ATS → normalize → dedup → rank → match cards.
  */
 
 const log = (...a: unknown[]) => console.log(...a);
 const hr = () => log("─".repeat(78));
 
-async function demo(): Promise<void> {
+export async function demo(): Promise<void> {
   const repo = new InMemoryRepository();
   // the demo runs as the FICTIONAL sample candidate — never a real person's data
   const profile = sampleProfile();
@@ -209,57 +208,3 @@ function hostFamily(url: string): string {
     return "other";
   }
 }
-
-/**
- * `harvest --telegram chanA,chanB` | `harvest --whatsapp ./chat.txt` — pull ATS/careers
- * links out of community channels and register those companies' boards; the next poll
- * ingests their real postings. Persists when DATABASE_URL is set (in-memory otherwise).
- */
-async function harvest(args: string[]): Promise<void> {
-  loadRootEnv();
-  const repo = await createRepository();
-  const flag = (name: string) => {
-    const i = args.indexOf(name);
-    return i >= 0 ? args[i + 1] : undefined;
-  };
-  const maxAgeDays = Number(flag("--max-age-days") ?? 30);
-  const telegram = flag("--telegram");
-  const whatsapp = flag("--whatsapp");
-  if (!telegram && !whatsapp) {
-    log("usage: harvest --telegram <chan,chan> | --whatsapp <export.txt> [--max-age-days 30]");
-    process.exit(1);
-  }
-  for (const channel of (telegram ?? "").split(",").map((s) => s.trim()).filter(Boolean)) {
-    const msgs = await fetchTelegramChannel(channel, { pages: 3 });
-    const s = await harvestLinks(repo, msgs, { origin: `telegram:${channel}`, maxAgeDays });
-    log(`telegram/${channel}: ${s.messages} msgs (${s.skippedOld} stale, ${s.skippedSuspicious} suspicious) links=${JSON.stringify(s.links)}`);
-    for (const b of s.boards) log(`   + ${b}`);
-  }
-  if (whatsapp) {
-    const msgs = parseWhatsAppExport(await readFile(whatsapp, "utf8"));
-    const s = await harvestLinks(repo, msgs, { origin: "whatsapp:export", maxAgeDays });
-    log(`whatsapp: ${s.messages} msgs (${s.skippedOld} stale, ${s.skippedSuspicious} suspicious) links=${JSON.stringify(s.links)}`);
-    for (const b of s.boards) log(`   + ${b}`);
-  }
-  log(isDurable() ? "Registered boards are polled on the next poll run." : "(in-memory — set DATABASE_URL to persist)");
-}
-
-async function main(): Promise<void> {
-  const cmd = process.argv[2] ?? "demo";
-  switch (cmd) {
-    case "demo":
-      await demo();
-      break;
-    case "harvest":
-      await harvest(process.argv.slice(3));
-      break;
-    default:
-      log(`Unknown command: ${cmd}. Try: demo | harvest`);
-      process.exit(1);
-  }
-}
-
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
