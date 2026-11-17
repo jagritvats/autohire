@@ -40,6 +40,7 @@ const nextConfig = {
     "@jobflow/llm",
     "@jobflow/pipeline",
     "@jobflow/autofill",
+    "@jobflow/service",
   ],
   experimental: {
     externalDir: true,

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { JOB_RUNTIME } from "@jobflow/core";
-import { DEFAULT_TENANT } from "@jobflow/pipeline";
 import { getRepo } from "@/lib/repo";
+import { guard } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -12,12 +12,14 @@ export const dynamic = "force-dynamic";
  * than blocking the request). Returns the queued job; the feed refreshes when it lands.
  */
 export async function POST(req: Request) {
+  const auth = await guard(req);
+  if (auth instanceof Response) return auth;
   const repo = await getRepo();
   const body = await req.json().catch(() => ({}));
   const postingIds: string[] | undefined = Array.isArray(body?.postingIds) ? body.postingIds : undefined;
   const companyId: string | undefined = typeof body?.companyId === "string" ? body.companyId : undefined;
   const job = await repo.enqueueJob({
-    tenantId: DEFAULT_TENANT,
+    tenantId: auth.tenantId,
     type: "recheck",
     runtime: JOB_RUNTIME["recheck"],
     payload: { postingIds, companyId },

@@ -1,5 +1,6 @@
 "use client";
 
+import { AccountMenu } from "@/components/AccountMenu";
 import { useMemo, useState, useTransition } from "react";
 import type { FeedCard, FeedData, PostingView } from "@/lib/feed";
 import { MatchCard } from "./MatchCard";
@@ -224,6 +225,7 @@ export function FeedView({ initial }: { initial: FeedData }) {
           <a href="/applications">pipeline</a>
           <a href="/companies">registry</a>
           <a href="/settings">settings</a>
+          <AccountMenu />
           <span className="durable-pill" data-on={data.stats.durable}>
             {data.stats.durable ? "durable" : "in-memory"}
           </span>

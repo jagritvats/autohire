@@ -3,10 +3,12 @@ import { notFound } from "next/navigation";
 import { LEVELS_ATTRIBUTION } from "@jobflow/adapters";
 import { formatSalary, type Posting } from "@jobflow/core";
 import { getRepo } from "@/lib/repo";
+import { pageAuth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function CompanyPage({ params }: { params: { id: string } }) {
+  await pageAuth(`/company/${params.id}`);
   const repo = await getRepo();
   const company = await repo.getCompany(params.id);
   if (!company) notFound();

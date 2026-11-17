@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { capturePage, isAllowedOrigin } from "@/lib/extension";
+import { capturePage } from "@/lib/extension";
+import { guard } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,8 +16,9 @@ const Body = z.object({
 
 /** Browser extension: save the posting you're viewing into the feed (bookmarked). */
 export async function POST(req: Request) {
-  if (!isAllowedOrigin(req)) return NextResponse.json({ error: "origin not allowed" }, { status: 403 });
+  const auth = await guard(req, { scope: "extension" });
+  if (auth instanceof Response) return auth;
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.message }, { status: 400 });
-  return NextResponse.json(await capturePage(parsed.data));
+  return NextResponse.json(await capturePage(auth.tenantId, parsed.data));
 }

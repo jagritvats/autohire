@@ -9,14 +9,17 @@ import {
   removeSource,
   enqueueYcImport,
 } from "@/lib/sources";
+import { guard } from "@/lib/auth";
 
 // GitHub fetch + repo writes want the node runtime.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-export async function GET() {
-  return NextResponse.json({ sources: await listSources() });
+export async function GET(req: Request) {
+  const auth = await guard(req);
+  if (auth instanceof Response) return auth;
+  return NextResponse.json({ sources: await listSources(auth.tenantId) });
 }
 
 const Op = z.discriminatedUnion("op", [
@@ -28,24 +31,26 @@ const Op = z.discriminatedUnion("op", [
 ]);
 
 export async function POST(req: Request) {
+  const auth = await guard(req);
+  if (auth instanceof Response) return auth;
   const parsed = Op.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.message }, { status: 400 });
   const body = parsed.data;
   try {
     switch (body.op) {
       case "github_import":
-        return NextResponse.json(await importGithubSource(body.handle));
+        return NextResponse.json(await importGithubSource(auth.tenantId, body.handle));
       case "yc_paste":
-        return NextResponse.json(await saveYcPaste(body.content));
+        return NextResponse.json(await saveYcPaste(auth.tenantId, body.content));
       case "yc_agent": {
-        const jobId = await enqueueYcImport(body.url);
+        const jobId = await enqueueYcImport(auth.tenantId, body.url);
         return NextResponse.json({ queued: true, jobId });
       }
       case "toggle":
-        await setSourceEnabled(body.source, body.enabled);
+        await setSourceEnabled(auth.tenantId, body.source, body.enabled);
         return NextResponse.json({ ok: true });
       case "remove":
-        await removeSource(body.source);
+        await removeSource(auth.tenantId, body.source);
         return NextResponse.json({ ok: true });
     }
   } catch (e) {

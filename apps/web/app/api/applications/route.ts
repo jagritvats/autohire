@@ -1,15 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { ApplicationStatus, type Application } from "@jobflow/core";
-import { DEFAULT_TENANT } from "@jobflow/pipeline";
 import { getRepo } from "@/lib/repo";
+import { guard } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 /** CRM list — applications joined with their posting, ordered by next action. */
-export async function GET() {
+export async function GET(req: Request) {
+  const auth = await guard(req);
+  if (auth instanceof Response) return auth;
   const repo = await getRepo();
-  const apps = await repo.listApplicationsWithPosting(DEFAULT_TENANT);
+  const apps = await repo.listApplicationsWithPosting(auth.tenantId);
   return NextResponse.json({
     applications: apps.map((a) => ({
       id: a.id,
@@ -29,13 +31,15 @@ export async function GET() {
 
 /** Track a posting (create or fetch its application). Default status 'saved'. */
 export async function POST(req: Request) {
+  const auth = await guard(req);
+  if (auth instanceof Response) return auth;
   const repo = await getRepo();
   const { postingId, status } = await req.json();
   if (!postingId) return NextResponse.json({ error: "postingId required" }, { status: 400 });
-  const existing = await repo.getApplicationByPosting(DEFAULT_TENANT, postingId);
+  const existing = await repo.getApplicationByPosting(auth.tenantId, postingId);
   const app: Application = existing ?? {
     id: randomUUID(),
-    tenantId: DEFAULT_TENANT,
+    tenantId: auth.tenantId,
     postingId,
     status: ApplicationStatus.parse(status ?? "saved"),
     appliedVia: null,
@@ -54,13 +58,15 @@ export async function POST(req: Request) {
 
 /** Update status / next action / outcome from the CRM board. */
 export async function PATCH(req: Request) {
+  const auth = await guard(req);
+  if (auth instanceof Response) return auth;
   const repo = await getRepo();
   const body = await req.json();
   const id = body.id as string | undefined;
   const postingId = body.postingId as string | undefined;
   const current = postingId
-    ? await repo.getApplicationByPosting(DEFAULT_TENANT, postingId)
-    : (await repo.listApplications(DEFAULT_TENANT)).find((a) => a.id === id);
+    ? await repo.getApplicationByPosting(auth.tenantId, postingId)
+    : (await repo.listApplications(auth.tenantId)).find((a) => a.id === id);
   if (!current) return NextResponse.json({ error: "not found" }, { status: 404 });
 
   const next: Application = {

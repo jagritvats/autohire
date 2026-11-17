@@ -1,16 +1,19 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { DEFAULT_TENANT, blankProfile } from "@jobflow/pipeline";
+import { blankProfile } from "@jobflow/pipeline";
 import type { Profile } from "@jobflow/core";
 import { getRepo, ensureTenant } from "@/lib/repo";
 import { rerankOnly } from "@/lib/feed";
+import { guard } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
+  const auth = await guard(req);
+  if (auth instanceof Response) return auth;
   const repo = await getRepo();
-  await ensureTenant(repo);
-  const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? blankProfile();
+  await ensureTenant(repo, auth.tenantId);
+  const profile = (await repo.getProfile(auth.tenantId)) ?? blankProfile(auth.tenantId);
   return NextResponse.json(profile);
 }
 
@@ -43,10 +46,12 @@ const Patch = z.object({
 });
 
 export async function PUT(req: Request) {
+  const auth = await guard(req);
+  if (auth instanceof Response) return auth;
   const repo = await getRepo();
-  await ensureTenant(repo);
+  await ensureTenant(repo, auth.tenantId);
   const body = Patch.parse(await req.json());
-  const current = (await repo.getProfile(DEFAULT_TENANT)) ?? blankProfile();
+  const current = (await repo.getProfile(auth.tenantId)) ?? blankProfile(auth.tenantId);
 
   const resumeChanged = body.masterResume !== undefined && body.masterResume !== current.masterResume;
   const next: Profile = {
@@ -67,6 +72,6 @@ export async function PUT(req: Request) {
   await repo.saveProfile(next);
 
   // a settings change re-ranks (no re-poll needed)
-  const feed = await rerankOnly();
+  const feed = await rerankOnly(auth.tenantId);
   return NextResponse.json({ profile: next, feed });
 }

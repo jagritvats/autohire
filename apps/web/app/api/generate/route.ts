@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { GenerationKind } from "@jobflow/core";
 import { generateTailored, listTailored, clearTailored, saveEditedDraft } from "@/lib/tailor";
+import { guard } from "@/lib/auth";
 
 // Generation can call a real LLM — a full LaTeX résumé can take a couple of minutes.
 export const runtime = "nodejs";
@@ -18,10 +19,12 @@ function errorResponse(e: unknown) {
 
 /** Cached drafts for a posting (?postingId=) or the generic settings drafts (?postingId=null). */
 export async function GET(req: Request) {
+  const auth = await guard(req);
+  if (auth instanceof Response) return auth;
   const url = new URL(req.url);
   const raw = url.searchParams.get("postingId");
   const postingId = raw === null ? undefined : raw === "null" || raw === "" ? null : raw;
-  const drafts = await listTailored(postingId);
+  const drafts = await listTailored(auth.tenantId, postingId);
   return NextResponse.json({ drafts });
 }
 
@@ -35,10 +38,12 @@ const Body = z.object({
 
 /** Generate (or return cached) a draft. Grounded + honest-voice (invariant #3). */
 export async function POST(req: Request) {
+  const auth = await guard(req);
+  if (auth instanceof Response) return auth;
   const parsed = Body.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.message }, { status: 400 });
   try {
-    return NextResponse.json(await generateTailored(parsed.data));
+    return NextResponse.json(await generateTailored(auth.tenantId, parsed.data));
   } catch (e) {
     return errorResponse(e);
   }
@@ -53,10 +58,12 @@ const Edit = z.object({
 
 /** Save the user's edit of an existing draft (kept until regenerated). */
 export async function PATCH(req: Request) {
+  const auth = await guard(req);
+  if (auth instanceof Response) return auth;
   const parsed = Edit.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.message }, { status: 400 });
   try {
-    return NextResponse.json(await saveEditedDraft(parsed.data));
+    return NextResponse.json(await saveEditedDraft(auth.tenantId, parsed.data));
   } catch (e) {
     return errorResponse(e);
   }
@@ -64,9 +71,11 @@ export async function PATCH(req: Request) {
 
 /** Force-refresh: clear cached drafts (all, or ?postingId= for one posting). */
 export async function DELETE(req: Request) {
+  const auth = await guard(req);
+  if (auth instanceof Response) return auth;
   const url = new URL(req.url);
   const raw = url.searchParams.get("postingId");
   const postingId = raw === null ? undefined : raw === "null" || raw === "" ? null : raw;
-  const cleared = await clearTailored(postingId);
+  const cleared = await clearTailored(auth.tenantId, postingId);
   return NextResponse.json({ cleared });
 }

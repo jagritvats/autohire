@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { DEFAULT_TENANT, blankProfile, isSampleEvidence } from "@jobflow/pipeline";
+import { blankProfile, isSampleEvidence } from "@jobflow/pipeline";
+import { pageAuth } from "@/lib/auth";
 import { candidateName } from "@jobflow/llm";
 import { getRepo, ensureTenant } from "@/lib/repo";
 import { listTailored } from "@/lib/tailor";
@@ -10,16 +11,17 @@ import { TailorView, type Draft, type TailorInputs, type TailorPosting } from "@
 export const dynamic = "force-dynamic";
 
 export default async function TailorPage({ params }: { params: { postingId: string } }) {
+  const auth = await pageAuth(`/tailor/${params.postingId}`);
   const repo = await getRepo();
-  await ensureTenant(repo);
+  await ensureTenant(repo, auth.tenantId);
   const posting = await repo.getPosting(params.postingId);
   if (!posting) notFound();
 
   const [config, drafts, profile, evidence, texEngine] = await Promise.all([
-    repo.getConfig(DEFAULT_TENANT),
-    listTailored(posting.id),
-    repo.getProfile(DEFAULT_TENANT).then((p) => p ?? blankProfile()),
-    repo.listEvidence(DEFAULT_TENANT),
+    repo.getConfig(auth.tenantId),
+    listTailored(auth.tenantId, posting.id),
+    repo.getProfile(auth.tenantId).then((p) => p ?? blankProfile(auth.tenantId)),
+    repo.listEvidence(auth.tenantId),
     latexEngineAvailable(),
   ]);
   const llm = config?.llmChoice && config.llmChoice !== "echo" ? config.llmChoice : process.env.LLM_PROVIDER ?? "echo";

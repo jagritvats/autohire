@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { DEFAULT_TENANT, blankProfile } from "@jobflow/pipeline";
+import { blankProfile } from "@jobflow/pipeline";
 import { latexToText, type Profile } from "@jobflow/core";
 import { getRepo, ensureTenant } from "@/lib/repo";
+import { guard } from "@/lib/auth";
 
 // pdf-parse + filesystem need the node runtime, not the edge.
 export const runtime = "nodejs";
@@ -19,6 +20,8 @@ const UPLOAD_DIR = join(process.cwd(), "uploads");
  * tailor rewrites. Only stored values are ever used; nothing here submits anything.
  */
 export async function POST(req: Request) {
+  const auth = await guard(req);
+  if (auth instanceof Response) return auth;
   const form = await req.formData();
   const file = form.get("file");
   if (!(file instanceof File)) {
@@ -66,8 +69,8 @@ export async function POST(req: Request) {
   }
 
   const repo = await getRepo();
-  await ensureTenant(repo);
-  const current = (await repo.getProfile(DEFAULT_TENANT)) ?? blankProfile();
+  await ensureTenant(repo, auth.tenantId);
+  const current = (await repo.getProfile(auth.tenantId)) ?? blankProfile(auth.tenantId);
   const next: Profile = {
     ...current,
     masterResume: text,

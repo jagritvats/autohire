@@ -1,10 +1,13 @@
 import Link from "next/link";
+import { AccountMenu } from "@/components/AccountMenu";
+import { pageAuth } from "@/lib/auth";
 import { ActivityPanel } from "@/components/ActivityPanel";
 import { CompaniesView } from "@/components/CompaniesView";
 
 export const dynamic = "force-dynamic";
 
-export default function CompaniesPage() {
+export default async function CompaniesPage() {
+  await pageAuth("/companies");
   return (
     <div className="settings-shell">
       <header className="settings-head">
@@ -15,6 +18,7 @@ export default function CompaniesPage() {
           <Link href="/">feed</Link>
           <Link href="/companies" data-active="true">registry</Link>
           <Link href="/settings">settings</Link>
+          <AccountMenu />
         </nav>
       </header>
       <ActivityPanel />

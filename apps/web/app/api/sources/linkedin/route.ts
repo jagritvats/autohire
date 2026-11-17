@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { importLinkedinSource } from "@/lib/sources";
+import { guard } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,6 +11,8 @@ export const dynamic = "force-dynamic";
  * LinkedIn session (invariant #1). We just parse the files they already own.
  */
 export async function POST(req: Request) {
+  const auth = await guard(req);
+  if (auth instanceof Response) return auth;
   const form = await req.formData();
   const entries = form.getAll("files").filter((f): f is File => f instanceof File);
   if (entries.length === 0) {
@@ -21,7 +24,7 @@ export async function POST(req: Request) {
   }
   try {
     const files = await Promise.all(csvs.map(async (f) => ({ name: f.name, text: await f.text() })));
-    return NextResponse.json(await importLinkedinSource(files));
+    return NextResponse.json(await importLinkedinSource(auth.tenantId, files));
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 422 });
   }
