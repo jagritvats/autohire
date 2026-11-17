@@ -31,7 +31,7 @@ import {
   type Tier3PollOptions,
   type Tier3PollTarget,
 } from "@jobflow/adapters";
-import { DEFAULT_TENANT, defaultProfile, ingestCompany, ingestFromAdapter, type Embedder } from "@jobflow/pipeline";
+import { DEFAULT_TENANT, blankProfile, ingestCompany, ingestFromAdapter, type Embedder } from "@jobflow/pipeline";
 import type { AgentSession } from "./session.js";
 import type { EffectiveFlags } from "./flags.js";
 
@@ -104,7 +104,7 @@ async function formFill(repo: Repository, job: Job, ctx: HandlerCtx): Promise<Re
   const posting = await repo.getPosting(postingId);
   if (!posting?.applyUrl) throw new Error("posting has no apply URL");
 
-  const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? defaultProfile();
+  const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? blankProfile();
   // prefer answers passed on the job; else fall back to the tailored answers saved on
   // the application (the "Save to application" flow on the tailor page).
   const app = await repo.getApplicationByPosting(DEFAULT_TENANT, postingId);
@@ -173,7 +173,7 @@ async function tier3Poll(repo: Repository, job: Job, ctx: HandlerCtx): Promise<R
   const adapter = tier3JobAdapter(source, tier3Context(ctx));
   if (!adapter) throw new Error(`No job adapter for Tier-3 source '${source}'`);
 
-  const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? defaultProfile();
+  const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? blankProfile();
   const targets: FetchTarget[] =
     source === "peerlist" || source === "wellfound"
       ? planFeedTargets(source, job.payload)

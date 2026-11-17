@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { DEFAULT_TENANT, defaultProfile } from "@jobflow/pipeline";
+import { DEFAULT_TENANT, blankProfile } from "@jobflow/pipeline";
 import { latexToText, type Profile } from "@jobflow/core";
 import { getRepo, ensureTenant } from "@/lib/repo";
 
@@ -67,7 +67,7 @@ export async function POST(req: Request) {
 
   const repo = await getRepo();
   await ensureTenant(repo);
-  const current = (await repo.getProfile(DEFAULT_TENANT)) ?? defaultProfile();
+  const current = (await repo.getProfile(DEFAULT_TENANT)) ?? blankProfile();
   const next: Profile = {
     ...current,
     masterResume: text,

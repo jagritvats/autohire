@@ -13,7 +13,7 @@ import { fetchTelegramChannel, getAdapter } from "@jobflow/adapters";
 import { parseWhatsAppExport } from "@jobflow/core";
 import { createProvider, rerankMatch, tailorResume, answerQuestion } from "@jobflow/llm";
 import { buildFillPlan, renderDryRun, type ApplicantData } from "@jobflow/autofill";
-import { DEFAULT_TENANT, SEED_COMPANIES, defaultProfile, seedEvidence } from "./seed-data.js";
+import { DEFAULT_TENANT, SEED_COMPANIES, sampleProfile, sampleEvidence } from "./seed-data.js";
 import { renderMatchCard } from "./card.js";
 
 /**
@@ -27,9 +27,10 @@ const hr = () => log("─".repeat(78));
 
 async function demo(): Promise<void> {
   const repo = new InMemoryRepository();
-  const profile = defaultProfile();
+  // the demo runs as the FICTIONAL sample candidate — never a real person's data
+  const profile = sampleProfile();
   await repo.saveProfile(profile);
-  for (const e of seedEvidence()) await repo.saveEvidence(e);
+  for (const e of sampleEvidence()) await repo.saveEvidence(e);
 
   log("\n\x1b[1mJobFlow demo\x1b[0m — live pipeline on free APIs, in-memory store\n");
 
@@ -121,12 +122,13 @@ async function demo(): Promise<void> {
     hr();
     log(`\x1b[1m  AUTOFILL — DRY RUN\x1b[0m  (flag-guarded; never submits)`);
     hr();
+    const c = profile.prefs.contact;
     const applicant: ApplicantData = {
-      firstName: "Jagrit",
-      lastName: "—",
-      email: "jagritvats6@gmail.com",
-      github: "github.com/jagritvats",
-      linkedin: "linkedin.com/in/jagritvats",
+      firstName: c.firstName,
+      lastName: c.lastName,
+      email: c.email,
+      github: c.github,
+      linkedin: c.linkedin,
       resumePath: "~/resumes/tailored.pdf",
       answers: { "why do you want to work here": ans },
     };

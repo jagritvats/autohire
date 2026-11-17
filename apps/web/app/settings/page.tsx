@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { DEFAULT_TENANT, defaultProfile } from "@jobflow/pipeline";
+import { DEFAULT_TENANT, blankProfile } from "@jobflow/pipeline";
 import { getRepo, ensureTenant } from "@/lib/repo";
 import { listTailored } from "@/lib/tailor";
 import { listSources } from "@/lib/sources";
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export default async function SettingsPage() {
   const repo = await getRepo();
   await ensureTenant(repo);
-  const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? defaultProfile();
+  const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? blankProfile();
   const config = await repo.getConfig(DEFAULT_TENANT);
   // generic (no-posting) drafts for the Drafts card
   const drafts: GenericDraft[] = (await listTailored(null))

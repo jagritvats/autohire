@@ -1,7 +1,7 @@
 import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import type { Repository } from "@jobflow/db";
-import { DEFAULT_TENANT, defaultProfile } from "@jobflow/pipeline";
+import { DEFAULT_TENANT, blankProfile } from "@jobflow/pipeline";
 import {
   ProviderError,
   answerGeneric,
@@ -87,7 +87,7 @@ interface Inputs {
 
 async function loadInputs(repo: Repository, postingId: string | null): Promise<Inputs> {
   const [profile, evidence, config, contexts, posting] = await Promise.all([
-    repo.getProfile(DEFAULT_TENANT).then((p) => p ?? defaultProfile()),
+    repo.getProfile(DEFAULT_TENANT).then((p) => p ?? blankProfile()),
     repo.listEvidence(DEFAULT_TENANT),
     repo.getConfig(DEFAULT_TENANT),
     repo.listContexts(DEFAULT_TENANT),

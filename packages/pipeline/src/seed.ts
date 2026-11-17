@@ -158,25 +158,28 @@ function dedupeSeeds(seeds: SeedCompany[]): SeedCompany[] {
   });
 }
 
-/** Single-tenant default profile — encodes §0.2 + §11. */
-export function defaultProfile(): Profile {
+/**
+ * A blank profile for a real user's first run. Nothing about the candidate is assumed:
+ * the résumé, stack and Evidence Bank come from onboarding (web wizard / `jobflow init`),
+ * never from a built-in persona (invariant #3). Preferences start neutral.
+ */
+export function blankProfile(tenantId: string = DEFAULT_TENANT): Profile {
   return {
-    id: "00000000-0000-0000-0000-0000000000a1",
-    tenantId: DEFAULT_TENANT,
-    masterResume:
-      "Backend engineer, ~2 YoE. Java/Spring + TypeScript/Node. Distributed systems, " +
-      "Kafka (kafka-ui OSS contributor), Postgres, Redis, event-driven architecture, " +
-      "idempotent ledgers, double-entry accounting, production LLM infra. Built NexusAlgo " +
-      "(production LLM trading infra with live P&L), Verdict (full-stack ship-fast), Synapse, " +
-      "and contributed to kafka-ui. Strong on systems design, concurrency, and fintech domain.",
+    id: randomUUID(),
+    tenantId,
+    masterResume: "",
     resumeLatex: "",
     aboutText: "",
     profileEmbedding: null,
-    yoe: 2,
+    yoe: 0,
     levelBand: "mid",
+    onboardedAt: null,
+    resumeFile: null,
     prefs: {
-      salaryFloor: 2_000_000,
-      currency: "INR",
+      salaryFloor: 0,
+      currency: "USD",
+      homeCountry: "",
+      markets: [],
       contact: {
         firstName: "",
         lastName: "",
@@ -187,57 +190,17 @@ export function defaultProfile(): Profile {
         portfolio: "",
         resumePath: "",
       },
-      locationWeights: [
-        { label: "remote", weight: 1.0 },
-        { label: "bengaluru", weight: 0.85 },
-        { label: "bangalore", weight: 0.85 },
-        { label: "pune", weight: 0.85 },
-        { label: "mumbai", weight: 0.8 },
-        { label: "india", weight: 0.7 },
-        { label: "remote worldwide", weight: 0.95 },
-      ],
+      locationWeights: [{ label: "remote", weight: 1.0 }],
       stackMustHaves: [],
-      stackProfile: [
-        "java", "typescript", "javascript", "kafka", "postgres", "redis",
-        "distributed_systems", "microservices", "rest", "docker", "fintech_domain", "ml",
-      ],
-      remoteGeoOk: ["india_ok", "worldwide", "apac_ok"],
-      relocate: true,
-      targetArchetypes: ["backend", "platform", "infra_devops"],
+      stackProfile: [],
+      remoteGeoOk: ["worldwide"],
+      relocate: false,
+      targetArchetypes: [],
     },
   };
 }
 
-/** Evidence Bank seed (§4, §5) — the anti-hallucination spine. */
-export function seedEvidence(): Evidence[] {
-  const t = DEFAULT_TENANT;
-  const mk = (
-    project: string,
-    headline: string,
-    detail: string,
-    metric: string | null,
-    tags: string[],
-  ): Evidence => ({ id: randomUUID(), tenantId: t, project, headline, detail, metric, tags, embedding: null });
-  return [
-    mk("NexusAlgo", "Production LLM trading infrastructure with live P&L",
-      "Built an event-driven pipeline orchestrating LLM inference for trading signals; handled " +
-      "backpressure, idempotent state, and an ensemble scoring model under live capital.",
-      "live P&L; ensemble of N models",
-      ["llm", "ml", "distributed_systems", "fintech_domain", "backpressure", "production"]),
-    mk("kafka-ui", "Open-source contribution to kafka-ui",
-      "Contributed to the kafka-ui OSS project — real Kafka internals (consumer groups, offsets, " +
-      "partitions), not just 'used Kafka in a side project'.",
-      "merged OSS PRs", ["kafka", "oss", "distributed_systems", "java"]),
-    mk("Verdict", "Full-stack product, shipped fast",
-      "End-to-end TypeScript app (Next + Postgres) — demonstrates ship-fast full-stack and product sense.",
-      null, ["typescript", "fullstack", "postgres", "rest", "product"]),
-    mk("ZFH ledger/wallet", "Idempotent wallet/ledger with double-entry semantics",
-      "Designed a wallet + ledger with idempotency keys, double-entry accounting, a SIP engine, and " +
-      "offset-correct Mongo pagination — the fintech systems core.",
-      "idempotent; double-entry",
-      ["fintech_domain", "ledger", "idempotency", "distributed_systems", "java"]),
-    mk("Synapse", "Systems project",
-      "Backend systems work reinforcing distributed-systems and data-modelling depth.",
-      null, ["distributed_systems", "backend"]),
-  ];
+/** a profile counts as onboarded once it has grounding material and the user confirmed it. */
+export function isOnboarded(p: Profile | null | undefined): boolean {
+  return !!p && (p.onboardedAt != null || p.masterResume.trim().length > 0 || p.prefs.stackProfile.length > 0);
 }

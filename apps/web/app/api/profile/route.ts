@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { DEFAULT_TENANT, defaultProfile } from "@jobflow/pipeline";
+import { DEFAULT_TENANT, blankProfile } from "@jobflow/pipeline";
 import type { Profile } from "@jobflow/core";
 import { getRepo, ensureTenant } from "@/lib/repo";
 import { rerankOnly } from "@/lib/feed";
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const repo = await getRepo();
   await ensureTenant(repo);
-  const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? defaultProfile();
+  const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? blankProfile();
   return NextResponse.json(profile);
 }
 
@@ -46,7 +46,7 @@ export async function PUT(req: Request) {
   const repo = await getRepo();
   await ensureTenant(repo);
   const body = Patch.parse(await req.json());
-  const current = (await repo.getProfile(DEFAULT_TENANT)) ?? defaultProfile();
+  const current = (await repo.getProfile(DEFAULT_TENANT)) ?? blankProfile();
 
   const resumeChanged = body.masterResume !== undefined && body.masterResume !== current.masterResume;
   const next: Profile = {

@@ -3,7 +3,7 @@ import type { PurgeOptions, Repository } from "@jobflow/db";
 import {
   DEFAULT_TENANT,
   SEED_COMPANIES,
-  defaultProfile,
+  blankProfile,
   discoverCompanies,
   pollAll,
   rebuildMatches,
@@ -114,7 +114,7 @@ export async function refreshFeed(): Promise<FeedData> {
 /** Re-rank only (after a settings change) — no re-poll. */
 export async function rerankOnly(): Promise<FeedData> {
   const repo = await getRepo();
-  const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? defaultProfile();
+  const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? blankProfile();
   await rebuildMatches(repo, profile, { embedder: corpusEmbedder() });
   const matches = await repo.listMatches(DEFAULT_TENANT, 80);
   return shape(repo, matches);
@@ -125,7 +125,7 @@ async function ingestAndRank(repo: Repository): Promise<void> {
   // the same poll routine the worker runs; boards not yet due are skipped
   // a request-bound refresh stays small; the runner does the sweep
   await pollAll(repo, { embedder: corpusEmbedder(), limitPerCompany: 50, maxBoards: 25, skipSlowFeeds: true, telegramChannels: [] });
-  const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? defaultProfile();
+  const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? blankProfile();
   await rebuildMatches(repo, profile, { embedder: corpusEmbedder() });
 }
 
@@ -149,7 +149,7 @@ async function cardCtx(repo: Repository, companies?: Awaited<ReturnType<Reposito
     companies ?? repo.listCompanies(),
   ]);
   return {
-    yoe: (profile ?? defaultProfile()).yoe,
+    yoe: (profile ?? blankProfile()).yoe,
     appliedKeys,
     bookmarked: userState.bookmarked,
     archived: userState.archived,
@@ -250,7 +250,7 @@ export async function recheckFeed(postingIds: string[]): Promise<FeedData & { re
   const repo = await getRepo();
   await ensureTenant(repo);
   const recheck = await recheckPostings(repo, postingIds, { limit: 50, embedder: corpusEmbedder() });
-  const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? defaultProfile();
+  const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? blankProfile();
   await rebuildMatches(repo, profile, { embedder: corpusEmbedder() });
   const matches = await repo.listMatches(DEFAULT_TENANT, 80);
   return { ...(await shape(repo, matches)), recheck };

@@ -11,8 +11,7 @@ import {
   type BacktestReport,
   DEFAULT_TENANT,
   SEED_COMPANIES,
-  defaultProfile,
-  seedEvidence,
+  isOnboarded,
 } from "@jobflow/pipeline";
 import { createProvider, providerEmbedder } from "@jobflow/llm";
 import { loadRootEnv } from "@jobflow/db";
@@ -45,12 +44,11 @@ async function poll(): Promise<void> {
 
 async function rank(): Promise<void> {
   const repo = await makeRepository();
-  // ensure a profile/evidence exists (single-tenant default for v1)
-  let profile = await repo.getProfile(DEFAULT_TENANT);
-  if (!profile) {
-    profile = defaultProfile();
-    await repo.saveProfile(profile);
-    for (const e of seedEvidence()) await repo.saveEvidence(e);
+  // never rank against an invented candidate: no profile yet → onboard first
+  const profile = await repo.getProfile(DEFAULT_TENANT);
+  if (!isOnboarded(profile) || !profile) {
+    log("rank: skipped — no profile yet (onboard in the web app or run `jobflow init`)");
+    return;
   }
   const llm = createProvider();
   const r = await rebuildMatches(repo, profile, { embedder: providerEmbedder(llm), narrator: await narratorFor(repo, llm, profile) });

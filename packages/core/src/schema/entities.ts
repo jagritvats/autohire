@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   ApplicationStatus,
   AtsType,
+  EvidenceOrigin,
   ExecutionTier,
   JobRuntime,
   JobStatus,
@@ -18,6 +19,17 @@ import {
 
 const uuid = z.string().uuid();
 const ts = z.union([z.string().datetime({ offset: true }), z.date()]);
+
+/** A user-uploaded file kept OUTSIDE the repo tree (data dir or DB blob), keyed per tenant. */
+export const StoredFile = z.object({
+  key: z.string(),
+  filename: z.string(),
+  mime: z.string().default("application/octet-stream"),
+  sha256: z.string(),
+  bytes: z.number().int().nonnegative(),
+  uploadedAt: ts,
+});
+export type StoredFile = z.infer<typeof StoredFile>;
 
 /** A parsed JD requirement with strength — `must_have` → stretch flag, never a hard exclude (§11.1). */
 export const Requirement = z.object({
@@ -272,6 +284,8 @@ export const Evidence = z.object({
   metric: z.string().nullable().default(null),
   tags: z.array(z.string()).default([]),
   embedding: z.array(z.number()).nullable().default(null),
+  /** where the entry came from — `sample` entries are the fictional demo persona. */
+  origin: EvidenceOrigin.default("manual"),
 });
 export type Evidence = z.infer<typeof Evidence>;
 
@@ -292,7 +306,14 @@ export type Contact = z.infer<typeof Contact>;
 
 export const ProfilePrefs = z.object({
   salaryFloor: z.number().default(0),
-  currency: z.string().default("INR"),
+  currency: z.string().default("USD"),
+  /**
+   * ISO-3166 alpha-2 country the candidate lives/works in ("" = not set). Drives the
+   * "onsite in my own country" check and default polling markets — nothing is assumed.
+   */
+  homeCountry: z.string().default(""),
+  /** ISO-2 markets to search (boards polled per country, ad-hoc search defaults). [] → homeCountry. */
+  markets: z.array(z.string()).default([]),
   contact: Contact.default({}),
   /** weighted ranked location prefs, not binary (§11.3) */
   locationWeights: z
@@ -300,9 +321,9 @@ export const ProfilePrefs = z.object({
     .default([]),
   stackMustHaves: z.array(z.string()).default([]),
   stackProfile: z.array(z.string()).default([]),
-  remoteGeoOk: z.array(RemoteGeo).default(["india_ok", "worldwide"]),
-  relocate: z.boolean().default(true),
-  targetArchetypes: z.array(RoleArchetype).default(["backend", "platform"]),
+  remoteGeoOk: z.array(RemoteGeo).default(["worldwide"]),
+  relocate: z.boolean().default(false),
+  targetArchetypes: z.array(RoleArchetype).default([]),
 });
 export type ProfilePrefs = z.infer<typeof ProfilePrefs>;
 
@@ -319,6 +340,10 @@ export const Profile = z.object({
   yoe: z.number().default(0),
   levelBand: LevelBand.default("mid"),
   prefs: ProfilePrefs,
+  /** set when the user finished onboarding (web wizard / `jobflow init`); null = not yet. */
+  onboardedAt: ts.nullable().default(null),
+  /** the uploaded base résumé file (stored outside the repo tree), if any. */
+  resumeFile: StoredFile.nullable().default(null),
 });
 export type Profile = z.infer<typeof Profile>;
 
@@ -372,7 +397,7 @@ export const ConnectedContext = z.object({
   source: ProfileSourceKind,
   /** username / "export" / profile URL — identifies what was imported. */
   handle: z.string().default(""),
-  /** display label (e.g. "github.com/jagritvats"). */
+  /** display label (e.g. "github.com/octocat"). */
   label: z.string().default(""),
   /** rendered text fed to generation when `enabled`. */
   content: z.string().default(""),
@@ -470,6 +495,10 @@ export const TenantConfig = z.object({
   /** custom base URL / gateway (blank → the provider's default). */
   llmBaseUrl: z.string().default(""),
   digestCadence: z.enum(["off", "daily", "weekly"]).default("daily"),
+  /** built-in discovery preset (`india`, `global-remote`, `us`, `eu-uk`) — custom sources add to it. */
+  discoveryPreset: z.string().default("india"),
+  /** preset feed ids this tenant switched off. */
+  presetFeedsDisabled: z.array(z.string()).default([]),
 });
 export type TenantConfig = z.infer<typeof TenantConfig>;
 

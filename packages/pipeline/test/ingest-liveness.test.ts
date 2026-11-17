@@ -90,13 +90,13 @@ describe("dead-link check (§3)", () => {
 describe("LLM re-rank write-ups persist on matches (§11.6)", () => {
   it("narrates the top cards once, reapplies the cache on later ranks, and redoes it when inputs change", async () => {
     const { rebuildMatches } = await import("../src/match.js");
-    const { defaultProfile } = await import("../src/seed.js");
+    const { sampleProfile } = await import("../src/sample.js");
     const repo = new InMemoryRepository();
     const co = await repo.upsertCompany({ name: "Acme", nameNorm: "acme", atsType: "greenhouse", atsSlug: "acme" });
     for (const jobId of ["a", "b", "c"]) {
       await repo.upsertPosting(await toNewPosting({ ...normalized, atsJobId: jobId, dedupKey: `k${jobId}` }, co.id, "Acme", counting("x")));
     }
-    let profile = defaultProfile();
+    let profile = sampleProfile();
     await repo.saveProfile(profile);
     let calls = 0;
     const narrator = {

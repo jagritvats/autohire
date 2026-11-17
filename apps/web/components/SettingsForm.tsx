@@ -92,6 +92,8 @@ export function SettingsForm({
       llmApiKey: "",
       llmBaseUrl: "",
       digestCadence: "daily",
+      discoveryPreset: "india",
+      presetFeedsDisabled: [],
     };
     // defensive: tolerate older/snake-cased rows so the UI never crashes on undefined arrays
     const af = (base.automationFlags ?? {}) as Partial<TenantConfig["automationFlags"]> & { tier3_sources?: string[] };

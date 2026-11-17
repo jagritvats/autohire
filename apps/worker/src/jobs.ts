@@ -5,7 +5,7 @@ import type { Repository } from "@jobflow/db";
 import {
   DEFAULT_TENANT,
   SEED_COMPANIES,
-  defaultProfile,
+  blankProfile,
   discoverCompanies,
   pollAll,
   rebuildMatches,
@@ -68,7 +68,7 @@ export async function handleJob(repo: Repository, job: Job, ctx: JobCtx): Promis
       };
     }
     case "rank": {
-      const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? defaultProfile();
+      const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? blankProfile();
       const narrator = await narratorFor(repo, ctx.llm, profile);
       const r = await rebuildMatches(repo, profile, { embedder: ctx.embedder, narrator });
       return { scored: r.scored, ranked: r.ranked, excluded: r.excluded, narrated: r.narrated, narratedFresh: r.narratedFresh };

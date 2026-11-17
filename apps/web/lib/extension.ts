@@ -12,7 +12,7 @@ import {
   type RawPosting,
   type SourceKind,
 } from "@jobflow/core";
-import { DEFAULT_TENANT, defaultProfile, toNewPosting } from "@jobflow/pipeline";
+import { DEFAULT_TENANT, blankProfile, toNewPosting } from "@jobflow/pipeline";
 import type { Repository } from "@jobflow/db";
 import { corpusEmbedder } from "./embedder.js";
 import { ensureTenant, getRepo } from "./repo.js";
@@ -115,7 +115,7 @@ function toRaw(page: PageCapture): RawPosting {
 
 async function tenantProfile(repo: Repository): Promise<Profile> {
   await ensureTenant(repo);
-  const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? defaultProfile();
+  const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? blankProfile();
   if (profile.profileEmbedding) return profile;
   const text = `${profile.prefs.stackProfile.join(" ")} ${profile.prefs.targetArchetypes.join(" ")} ${profile.masterResume}`;
   return { ...profile, profileEmbedding: await corpusEmbedder()(text) };

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { DEFAULT_TENANT, defaultProfile, seedEvidence } from "@jobflow/pipeline";
+import { DEFAULT_TENANT, blankProfile, isSampleEvidence } from "@jobflow/pipeline";
 import { candidateName } from "@jobflow/llm";
 import { getRepo, ensureTenant } from "@/lib/repo";
 import { listTailored } from "@/lib/tailor";
@@ -18,7 +18,7 @@ export default async function TailorPage({ params }: { params: { postingId: stri
   const [config, drafts, profile, evidence, texEngine] = await Promise.all([
     repo.getConfig(DEFAULT_TENANT),
     listTailored(posting.id),
-    repo.getProfile(DEFAULT_TENANT).then((p) => p ?? defaultProfile()),
+    repo.getProfile(DEFAULT_TENANT).then((p) => p ?? blankProfile()),
     repo.listEvidence(DEFAULT_TENANT),
     latexEngineAvailable(),
   ]);
@@ -38,7 +38,6 @@ export default async function TailorPage({ params }: { params: { postingId: stri
   };
 
   // what tailoring will ground on — shown up top so a thin input is visible before generating
-  const samples = new Set(seedEvidence().map((e) => `${e.project}|${e.headline}`));
   const inputs: TailorInputs = {
     name: candidateName(profile),
     hasEmail: !!profile.prefs.contact.email.trim(),
@@ -47,7 +46,7 @@ export default async function TailorPage({ params }: { params: { postingId: stri
     aboutChars: profile.aboutText.trim().length,
     skills: profile.prefs.stackProfile.length,
     evidence: evidence.length,
-    sampleEvidence: evidence.filter((e) => samples.has(`${e.project}|${e.headline}`)).length,
+    sampleEvidence: evidence.filter(isSampleEvidence).length,
     offline: llm === "echo",
     texEngine,
   };

@@ -1,5 +1,12 @@
 import type {
   AgentHeartbeat,
+  ApiToken,
+  DiscoverySource,
+  SavedSearch,
+  Session,
+  Tenant,
+  User,
+  UserRole,
   Application,
   Company,
   CompanyCompBenchmark,
@@ -142,14 +149,77 @@ export interface Repository {
 
   // ── command plane: jobs (the web enqueues; worker/agent drain) ──
   enqueueJob(input: EnqueueJob): Promise<Job>;
-  /** atomically claim the oldest queued job for a runtime → status=running. */
-  claimJob(runtime: JobRuntime): Promise<Job | null>;
+  /**
+   * atomically claim the oldest queued job for a runtime → status=running. `tenantId`
+   * restricts the claim to one tenant's jobs (a local agent only ever drains its own).
+   */
+  claimJob(runtime: JobRuntime, opts?: { tenantId?: string }): Promise<Job | null>;
+  /**
+   * re-queue jobs stuck in `running` longer than `olderThanMinutes` (the process that
+   * claimed them died). Returns how many were re-queued.
+   */
+  requeueStuckJobs(runtime: JobRuntime, olderThanMinutes: number): Promise<number>;
   completeJob(id: string, status: Extract<JobStatus, "done" | "error">, payload: { result?: Record<string, unknown>; error?: string }): Promise<void>;
   listJobs(tenantId: string, limit?: number): Promise<Job[]>;
 
   // ── local-agent heartbeat (§7.1) ──
   upsertHeartbeat(h: AgentHeartbeat): Promise<void>;
   getHeartbeat(tenantId: string): Promise<AgentHeartbeat | null>;
+
+  // ── tenants + accounts (per-user capability) ──
+  /** create a tenant; `id` lets the first signup claim the default tenant. */
+  createTenant(input: { name: string; id?: string }): Promise<Tenant>;
+  getTenant(id: string): Promise<Tenant | null>;
+  /** tenants, optionally only those active in the last N days (worker rank fan-out). */
+  listTenants(opts?: { activeSinceDays?: number }): Promise<Tenant[]>;
+  touchTenantActive(id: string): Promise<void>;
+  createUser(input: { tenantId: string; email: string; passwordHash: string | null; role: UserRole }): Promise<User>;
+  countUsers(): Promise<number>;
+  /** case-insensitive lookup; the only method that returns the password hash. */
+  findUserByEmail(email: string): Promise<(User & { passwordHash: string | null }) | null>;
+  getUser(id: string): Promise<User | null>;
+  setUserPassword(id: string, passwordHash: string): Promise<void>;
+
+  // ── sessions + API tokens (secrets stored as sha256 only) ──
+  createSession(s: Session & { secretHash: string }): Promise<void>;
+  getSession(id: string): Promise<(Session & { secretHash: string }) | null>;
+  touchSession(id: string, expiresAt: Date): Promise<void>;
+  deleteSession(id: string): Promise<void>;
+  /** revoke every session of a user (password change), optionally keeping one. */
+  deleteUserSessions(userId: string, exceptId?: string): Promise<number>;
+  createApiToken(t: ApiToken & { secretHash: string }): Promise<void>;
+  getApiToken(id: string): Promise<(ApiToken & { secretHash: string }) | null>;
+  listApiTokens(tenantId: string): Promise<ApiToken[]>;
+  /** true if a live token of this tenant was revoked. */
+  revokeApiToken(tenantId: string, id: string): Promise<boolean>;
+  touchApiToken(id: string): Promise<void>;
+
+  // ── saved searches (tenant-scoped) ──
+  listSavedSearches(tenantId: string): Promise<SavedSearch[]>;
+  getSavedSearch(tenantId: string, id: string): Promise<SavedSearch | null>;
+  /** upsert by id; names are unique per tenant. */
+  saveSavedSearch(s: SavedSearch): Promise<SavedSearch>;
+  deleteSavedSearch(tenantId: string, id: string): Promise<void>;
+  recordSavedSearchRun(tenantId: string, id: string, result: Record<string, unknown>): Promise<void>;
+  /** every enabled source-search across tenants (the cron's union). */
+  listAllSourceSearches(): Promise<SavedSearch[]>;
+
+  // ── custom discovery sources (tenant-scoped config; the postings they find are global) ──
+  listDiscoverySources(tenantId: string): Promise<DiscoverySource[]>;
+  /** upsert by id; (tenant, configKey) is unique. */
+  saveDiscoverySource(s: DiscoverySource): Promise<DiscoverySource>;
+  deleteDiscoverySource(tenantId: string, id: string): Promise<void>;
+  recordDiscoverySourceRun(
+    id: string,
+    run: { status: "ok" | "empty" | "error"; count: number; error?: string | null },
+  ): Promise<void>;
+  /** every enabled custom source across tenants (deduped by configKey in the pipeline). */
+  listAllEnabledDiscoverySources(): Promise<DiscoverySource[]>;
+
+  // ── company follows (tenant-scoped overlay on the global registry) ──
+  followCompany(tenantId: string, companyId: string): Promise<void>;
+  unfollowCompany(tenantId: string, companyId: string): Promise<void>;
+  listFollowedCompanyIds(tenantId: string): Promise<string[]>;
 }
 
 export interface EnqueueJob {

@@ -1,6 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type {
   AgentHeartbeat,
+  ApiToken,
+  DiscoverySource,
+  SavedSearch,
+  Session,
+  Tenant,
+  User,
+  UserRole,
   Application,
   Company,
   ConnectedContext,
@@ -50,6 +57,16 @@ export class InMemoryRepository implements Repository {
   private contexts = new Map<string, ConnectedContext>(); // key: `${tenantId}:${source}`
   // per-user posting overlay (archive + bookmark), key: `${tenantId}:${postingId}`
   private postingState = new Map<string, { archived: boolean; bookmarked: boolean }>();
+  // per-user capability: tenants, accounts, sessions, tokens
+  private tenants = new Map<string, Tenant>([
+    ["00000000-0000-0000-0000-000000000001", { id: "00000000-0000-0000-0000-000000000001", name: "default", createdAt: new Date(0), lastActiveAt: null }],
+  ]);
+  private users = new Map<string, User & { passwordHash: string | null }>();
+  private sessions = new Map<string, Session & { secretHash: string }>();
+  private tokens = new Map<string, ApiToken & { secretHash: string }>();
+  private savedSearches = new Map<string, SavedSearch>();
+  private discoverySources = new Map<string, DiscoverySource>();
+  private follows = new Map<string, Set<string>>(); // tenantId → companyIds
 
   async upsertCompany(c: UpsertCompany): Promise<Company> {
     const existingId = this.companyByNorm.get(c.nameNorm);
@@ -542,9 +559,9 @@ export class InMemoryRepository implements Repository {
     this.jobs.push(job);
     return job;
   }
-  async claimJob(runtime: JobRuntime): Promise<Job | null> {
+  async claimJob(runtime: JobRuntime, opts?: { tenantId?: string }): Promise<Job | null> {
     const job = this.jobs
-      .filter((j) => j.runtime === runtime && j.status === "queued")
+      .filter((j) => j.runtime === runtime && j.status === "queued" && (!opts?.tenantId || j.tenantId === opts.tenantId))
       .sort((a, b) => +new Date(a.createdAt as Date) - +new Date(b.createdAt as Date))[0];
     if (!job) return null;
     job.status = "running";
@@ -563,6 +580,18 @@ export class InMemoryRepository implements Repository {
     job.error = payload.error ?? null;
     job.finishedAt = new Date();
   }
+  async requeueStuckJobs(runtime: JobRuntime, olderThanMinutes: number): Promise<number> {
+    const cutoff = Date.now() - olderThanMinutes * 60_000;
+    let n = 0;
+    for (const j of this.jobs) {
+      if (j.runtime === runtime && j.status === "running" && j.pickedAt && new Date(j.pickedAt as Date).getTime() < cutoff) {
+        j.status = "queued";
+        j.pickedAt = null;
+        n++;
+      }
+    }
+    return n;
+  }
   async listJobs(tenantId: string, limit = 30): Promise<Job[]> {
     return this.jobs
       .filter((j) => j.tenantId === tenantId)
@@ -577,6 +606,199 @@ export class InMemoryRepository implements Repository {
   async getHeartbeat(tenantId: string): Promise<AgentHeartbeat | null> {
     return this.heartbeats.get(tenantId) ?? null;
   }
+
+  // ── tenants + accounts ──
+  async createTenant(input: { name: string; id?: string }): Promise<Tenant> {
+    const id = input.id ?? randomUUID();
+    const existing = this.tenants.get(id);
+    if (existing) return existing;
+    const t: Tenant = { id, name: input.name, createdAt: new Date(), lastActiveAt: null };
+    this.tenants.set(id, t);
+    return t;
+  }
+  async getTenant(id: string): Promise<Tenant | null> {
+    return this.tenants.get(id) ?? null;
+  }
+  async listTenants(opts?: { activeSinceDays?: number }): Promise<Tenant[]> {
+    const all = [...this.tenants.values()];
+    if (opts?.activeSinceDays == null) return all;
+    const cutoff = Date.now() - opts.activeSinceDays * 86_400_000;
+    // a tenant never marked active (single-user / CLI) still counts — it is the operator
+    return all.filter((t) => t.lastActiveAt == null || new Date(t.lastActiveAt as Date).getTime() >= cutoff);
+  }
+  async touchTenantActive(id: string): Promise<void> {
+    const t = this.tenants.get(id);
+    if (t) t.lastActiveAt = new Date();
+  }
+  async createUser(input: { tenantId: string; email: string; passwordHash: string | null; role: UserRole }): Promise<User> {
+    const email = input.email.trim().toLowerCase();
+    if ([...this.users.values()].some((u) => u.email === email)) throw new Error("email already registered");
+    const u = {
+      id: randomUUID(),
+      tenantId: input.tenantId,
+      email,
+      role: input.role,
+      externalId: null,
+      createdAt: new Date(),
+      disabledAt: null,
+      passwordHash: input.passwordHash,
+    };
+    this.users.set(u.id, u);
+    return stripHash(u);
+  }
+  async countUsers(): Promise<number> {
+    return this.users.size;
+  }
+  async findUserByEmail(email: string): Promise<(User & { passwordHash: string | null }) | null> {
+    const e = email.trim().toLowerCase();
+    const u = [...this.users.values()].find((x) => x.email === e);
+    return u ? { ...u } : null;
+  }
+  async getUser(id: string): Promise<User | null> {
+    const u = this.users.get(id);
+    return u ? stripHash(u) : null;
+  }
+  async setUserPassword(id: string, passwordHash: string): Promise<void> {
+    const u = this.users.get(id);
+    if (u) u.passwordHash = passwordHash;
+  }
+
+  // ── sessions + tokens ──
+  async createSession(s: Session & { secretHash: string }): Promise<void> {
+    this.sessions.set(s.id, { ...s });
+  }
+  async getSession(id: string): Promise<(Session & { secretHash: string }) | null> {
+    const s = this.sessions.get(id);
+    return s ? { ...s } : null;
+  }
+  async touchSession(id: string, expiresAt: Date): Promise<void> {
+    const s = this.sessions.get(id);
+    if (s) {
+      s.lastSeenAt = new Date();
+      s.expiresAt = expiresAt;
+    }
+  }
+  async deleteSession(id: string): Promise<void> {
+    this.sessions.delete(id);
+  }
+  async deleteUserSessions(userId: string, exceptId?: string): Promise<number> {
+    let n = 0;
+    for (const [id, s] of this.sessions) {
+      if (s.userId === userId && id !== exceptId) {
+        this.sessions.delete(id);
+        n++;
+      }
+    }
+    return n;
+  }
+  async createApiToken(t: ApiToken & { secretHash: string }): Promise<void> {
+    this.tokens.set(t.id, { ...t });
+  }
+  async getApiToken(id: string): Promise<(ApiToken & { secretHash: string }) | null> {
+    const t = this.tokens.get(id);
+    return t ? { ...t } : null;
+  }
+  async listApiTokens(tenantId: string): Promise<ApiToken[]> {
+    return [...this.tokens.values()]
+      .filter((t) => t.tenantId === tenantId)
+      .map(({ secretHash: _s, ...rest }) => rest);
+  }
+  async revokeApiToken(tenantId: string, id: string): Promise<boolean> {
+    const t = this.tokens.get(id);
+    if (!t || t.tenantId !== tenantId || t.revokedAt) return false;
+    t.revokedAt = new Date();
+    return true;
+  }
+  async touchApiToken(id: string): Promise<void> {
+    const t = this.tokens.get(id);
+    if (t) t.lastUsedAt = new Date();
+  }
+
+  // ── saved searches ──
+  async listSavedSearches(tenantId: string): Promise<SavedSearch[]> {
+    return [...this.savedSearches.values()]
+      .filter((s) => s.tenantId === tenantId)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+  async getSavedSearch(tenantId: string, id: string): Promise<SavedSearch | null> {
+    const s = this.savedSearches.get(id);
+    return s && s.tenantId === tenantId ? s : null;
+  }
+  async saveSavedSearch(s: SavedSearch): Promise<SavedSearch> {
+    const clash = [...this.savedSearches.values()].find(
+      (x) => x.tenantId === s.tenantId && x.id !== s.id && x.name.toLowerCase() === s.name.toLowerCase(),
+    );
+    if (clash) throw new Error(`a saved search named "${s.name}" already exists`);
+    const existing = this.savedSearches.get(s.id);
+    if (existing && existing.tenantId !== s.tenantId) throw new Error("saved search belongs to another tenant");
+    this.savedSearches.set(s.id, { ...s });
+    return s;
+  }
+  async deleteSavedSearch(tenantId: string, id: string): Promise<void> {
+    const s = this.savedSearches.get(id);
+    if (s && s.tenantId === tenantId) this.savedSearches.delete(id);
+  }
+  async recordSavedSearchRun(tenantId: string, id: string, result: Record<string, unknown>): Promise<void> {
+    const s = this.savedSearches.get(id);
+    if (s && s.tenantId === tenantId) {
+      s.lastRunAt = new Date();
+      s.lastResult = result;
+    }
+  }
+  async listAllSourceSearches(): Promise<SavedSearch[]> {
+    return [...this.savedSearches.values()].filter((s) => s.enabled && s.asSource);
+  }
+
+  // ── discovery sources ──
+  async listDiscoverySources(tenantId: string): Promise<DiscoverySource[]> {
+    return [...this.discoverySources.values()].filter((s) => s.tenantId === tenantId);
+  }
+  async saveDiscoverySource(s: DiscoverySource): Promise<DiscoverySource> {
+    const dupe = [...this.discoverySources.values()].find(
+      (x) => x.tenantId === s.tenantId && x.configKey === s.configKey && x.id !== s.id,
+    );
+    if (dupe) return dupe;
+    const existing = this.discoverySources.get(s.id);
+    if (existing && existing.tenantId !== s.tenantId) throw new Error("source belongs to another tenant");
+    this.discoverySources.set(s.id, { ...s });
+    return s;
+  }
+  async deleteDiscoverySource(tenantId: string, id: string): Promise<void> {
+    const s = this.discoverySources.get(id);
+    if (s && s.tenantId === tenantId) this.discoverySources.delete(id);
+  }
+  async recordDiscoverySourceRun(
+    id: string,
+    run: { status: "ok" | "empty" | "error"; count: number; error?: string | null },
+  ): Promise<void> {
+    const s = this.discoverySources.get(id);
+    if (!s) return;
+    s.lastRunAt = new Date();
+    s.lastStatus = run.status;
+    s.lastCount = run.count;
+    s.lastError = run.error ?? null;
+  }
+  async listAllEnabledDiscoverySources(): Promise<DiscoverySource[]> {
+    return [...this.discoverySources.values()].filter((s) => s.enabled);
+  }
+
+  // ── follows ──
+  async followCompany(tenantId: string, companyId: string): Promise<void> {
+    const set = this.follows.get(tenantId) ?? new Set<string>();
+    set.add(companyId);
+    this.follows.set(tenantId, set);
+  }
+  async unfollowCompany(tenantId: string, companyId: string): Promise<void> {
+    this.follows.get(tenantId)?.delete(companyId);
+  }
+  async listFollowedCompanyIds(tenantId: string): Promise<string[]> {
+    return [...(this.follows.get(tenantId) ?? [])];
+  }
+}
+
+function stripHash(u: User & { passwordHash: string | null }): User {
+  const { passwordHash: _h, ...rest } = u;
+  return rest;
 }
 
 function isDue(c: Company): boolean {

@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
-import { DEFAULT_TENANT, defaultProfile } from "@jobflow/pipeline";
+import { DEFAULT_TENANT, blankProfile } from "@jobflow/pipeline";
 import type { Application } from "@jobflow/core";
 import { candidateName, markdownToLatex } from "@jobflow/llm";
 import { getRepo, ensureTenant } from "@/lib/repo";
@@ -59,7 +59,7 @@ export async function POST(req: Request) {
       const repo = await getRepo();
       await ensureTenant(repo);
       // the ATS shows the uploaded file's name to the recruiter — make it a normal one
-      const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? defaultProfile();
+      const profile = (await repo.getProfile(DEFAULT_TENANT)) ?? blankProfile();
       const who = candidateName(profile).replace(/[^\p{L}\p{N}]+/gu, "_").replace(/^_+|_+$/g, "");
       const dir = join(UPLOAD_DIR, "tailored", postingId);
       await mkdir(dir, { recursive: true });

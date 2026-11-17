@@ -2,8 +2,9 @@ import "server-only";
 import { createRepository, type Repository } from "@jobflow/db";
 import {
   DEFAULT_TENANT,
-  defaultProfile,
-  seedEvidence,
+  blankProfile,
+  sampleEvidence,
+  sampleProfile,
 } from "@jobflow/pipeline";
 import type { TenantConfig } from "@jobflow/core";
 
@@ -18,12 +19,20 @@ export function getRepo(): Promise<Repository> {
   return repoPromise;
 }
 
-/** Ensure the single-tenant profile/config/evidence exist (first-run bootstrap). */
+/**
+ * Ensure the tenant's profile/config exist (first-run bootstrap). Real users start
+ * BLANK and onboard with their own résumé; the fictional sample persona is loaded only
+ * when JOBFLOW_SAMPLE_PROFILE=1 (demos, screenshots).
+ */
 export async function ensureTenant(repo: Repository): Promise<void> {
   const profile = await repo.getProfile(DEFAULT_TENANT);
   if (!profile) {
-    await repo.saveProfile(defaultProfile());
-    for (const e of seedEvidence()) await repo.saveEvidence(e);
+    if (process.env.JOBFLOW_SAMPLE_PROFILE === "1") {
+      await repo.saveProfile(sampleProfile());
+      for (const e of sampleEvidence()) await repo.saveEvidence(e);
+    } else {
+      await repo.saveProfile(blankProfile());
+    }
   }
   const config = await repo.getConfig(DEFAULT_TENANT);
   if (!config) {
@@ -36,6 +45,8 @@ export async function ensureTenant(repo: Repository): Promise<void> {
       llmApiKey: "",
       llmBaseUrl: "",
       digestCadence: "daily",
+      discoveryPreset: "india",
+      presetFeedsDisabled: [],
     };
     await repo.saveConfig(fresh);
   }

@@ -41,6 +41,9 @@ export type AtsType = z.infer<typeof AtsType>;
 
 /** Every adapter is tagged with the source it speaks for. */
 export const SourceKind = z.enum([
+  // generic user-configured feeds (tier 1, SSRF-guarded)
+  "rss",
+  "json_feed",
   // tier 1
   "greenhouse",
   "lever",
@@ -174,6 +177,7 @@ export type ApplicationStatus = z.infer<typeof ApplicationStatus>;
 /** Command-plane job types. `runtime` decides which plane drains it (§ control plane). */
 export const JobType = z.enum([
   "discover", // resolve seed/new companies → ATS boards
+  "search", // run a saved search against search-capable Tier 1-2 sources — cloud
   "poll", // poll registered ATS boards due for poll
   "rank", // recompute matches for the tenant
   "enrich_t1", // Tier-1 enrichment (Adzuna / levels.fyi) — cloud
@@ -197,6 +201,7 @@ export type JobStatus = z.infer<typeof JobStatus>;
 /** which plane a job type runs on — the tier boundary, encoded (invariant #1). */
 export const JOB_RUNTIME: Record<z.infer<typeof JobType>, z.infer<typeof JobRuntime>> = {
   discover: "cloud",
+  search: "cloud",
   poll: "cloud",
   rank: "cloud",
   enrich_t1: "cloud",
@@ -222,3 +227,7 @@ export const RoleArchetype = z.enum([
   "other",
 ]);
 export type RoleArchetype = z.infer<typeof RoleArchetype>;
+
+/** Where an Evidence Bank entry came from — `sample` marks the fictional demo persona. */
+export const EvidenceOrigin = z.enum(["manual", "resume", "linkedin", "json_resume", "sample"]);
+export type EvidenceOrigin = z.infer<typeof EvidenceOrigin>;

@@ -1,4 +1,5 @@
 import pg from "pg";
+import { ProfilePrefs as ProfilePrefsSchema } from "@jobflow/core";
 import type {
   AgentHeartbeat,
   Application,
@@ -16,7 +17,6 @@ import type {
   ParsedLocation,
   Posting,
   Profile,
-  ProfilePrefs,
   SalaryBand,
   SalaryEstimate,
   ScoreBreakdown,
@@ -422,6 +422,8 @@ export class PgRepository implements Repository {
       llmApiKey: r.llm_api_key ?? "",
       llmBaseUrl: r.llm_base_url ?? "",
       digestCadence: r.digest_cadence ?? "daily",
+      discoveryPreset: r.discovery_preset ?? "india",
+      presetFeedsDisabled: r.preset_feeds_disabled ?? [],
     };
   }
   async saveConfig(c: TenantConfig): Promise<TenantConfig> {
@@ -695,6 +697,42 @@ export class PgRepository implements Repository {
     const r = rows[0];
     return { tenantId, lastSeen: r.last_seen, version: r.version, flags: r.flags ?? {}, enabledSources: r.enabled_sources ?? [] };
   }
+  // ── PHASE-0 STUBS: implemented with migrations 0014-0017 ──
+  async requeueStuckJobs(..._a: any[]): Promise<any> { throw new Error("PgRepository.requeueStuckJobs: not implemented yet"); }
+  async createTenant(..._a: any[]): Promise<any> { throw new Error("PgRepository.createTenant: not implemented yet"); }
+  async getTenant(..._a: any[]): Promise<any> { throw new Error("PgRepository.getTenant: not implemented yet"); }
+  async listTenants(..._a: any[]): Promise<any> { throw new Error("PgRepository.listTenants: not implemented yet"); }
+  async touchTenantActive(..._a: any[]): Promise<any> { throw new Error("PgRepository.touchTenantActive: not implemented yet"); }
+  async createUser(..._a: any[]): Promise<any> { throw new Error("PgRepository.createUser: not implemented yet"); }
+  async countUsers(..._a: any[]): Promise<any> { throw new Error("PgRepository.countUsers: not implemented yet"); }
+  async findUserByEmail(..._a: any[]): Promise<any> { throw new Error("PgRepository.findUserByEmail: not implemented yet"); }
+  async getUser(..._a: any[]): Promise<any> { throw new Error("PgRepository.getUser: not implemented yet"); }
+  async setUserPassword(..._a: any[]): Promise<any> { throw new Error("PgRepository.setUserPassword: not implemented yet"); }
+  async createSession(..._a: any[]): Promise<any> { throw new Error("PgRepository.createSession: not implemented yet"); }
+  async getSession(..._a: any[]): Promise<any> { throw new Error("PgRepository.getSession: not implemented yet"); }
+  async touchSession(..._a: any[]): Promise<any> { throw new Error("PgRepository.touchSession: not implemented yet"); }
+  async deleteSession(..._a: any[]): Promise<any> { throw new Error("PgRepository.deleteSession: not implemented yet"); }
+  async deleteUserSessions(..._a: any[]): Promise<any> { throw new Error("PgRepository.deleteUserSessions: not implemented yet"); }
+  async createApiToken(..._a: any[]): Promise<any> { throw new Error("PgRepository.createApiToken: not implemented yet"); }
+  async getApiToken(..._a: any[]): Promise<any> { throw new Error("PgRepository.getApiToken: not implemented yet"); }
+  async listApiTokens(..._a: any[]): Promise<any> { throw new Error("PgRepository.listApiTokens: not implemented yet"); }
+  async revokeApiToken(..._a: any[]): Promise<any> { throw new Error("PgRepository.revokeApiToken: not implemented yet"); }
+  async touchApiToken(..._a: any[]): Promise<any> { throw new Error("PgRepository.touchApiToken: not implemented yet"); }
+  async listSavedSearches(..._a: any[]): Promise<any> { throw new Error("PgRepository.listSavedSearches: not implemented yet"); }
+  async getSavedSearch(..._a: any[]): Promise<any> { throw new Error("PgRepository.getSavedSearch: not implemented yet"); }
+  async saveSavedSearch(..._a: any[]): Promise<any> { throw new Error("PgRepository.saveSavedSearch: not implemented yet"); }
+  async deleteSavedSearch(..._a: any[]): Promise<any> { throw new Error("PgRepository.deleteSavedSearch: not implemented yet"); }
+  async recordSavedSearchRun(..._a: any[]): Promise<any> { throw new Error("PgRepository.recordSavedSearchRun: not implemented yet"); }
+  async listAllSourceSearches(..._a: any[]): Promise<any> { throw new Error("PgRepository.listAllSourceSearches: not implemented yet"); }
+  async listDiscoverySources(..._a: any[]): Promise<any> { throw new Error("PgRepository.listDiscoverySources: not implemented yet"); }
+  async saveDiscoverySource(..._a: any[]): Promise<any> { throw new Error("PgRepository.saveDiscoverySource: not implemented yet"); }
+  async deleteDiscoverySource(..._a: any[]): Promise<any> { throw new Error("PgRepository.deleteDiscoverySource: not implemented yet"); }
+  async recordDiscoverySourceRun(..._a: any[]): Promise<any> { throw new Error("PgRepository.recordDiscoverySourceRun: not implemented yet"); }
+  async listAllEnabledDiscoverySources(..._a: any[]): Promise<any> { throw new Error("PgRepository.listAllEnabledDiscoverySources: not implemented yet"); }
+  async followCompany(..._a: any[]): Promise<any> { throw new Error("PgRepository.followCompany: not implemented yet"); }
+  async unfollowCompany(..._a: any[]): Promise<any> { throw new Error("PgRepository.unfollowCompany: not implemented yet"); }
+  async listFollowedCompanyIds(..._a: any[]): Promise<any> { throw new Error("PgRepository.listFollowedCompanyIds: not implemented yet"); }
+
 }
 
 // ── row mappers ──
@@ -743,7 +781,11 @@ function rowToProfile(r: pg.QueryResultRow): Profile {
     id: r.id, tenantId: r.tenant_id, masterResume: r.master_resume, resumeLatex: r.resume_latex ?? "",
     aboutText: r.about_text ?? "",
     profileEmbedding: parseJson(r.profile_embedding, null),
-    yoe: Number(r.yoe), levelBand: r.level_band, prefs: parseJson<ProfilePrefs>(r.prefs, {} as ProfilePrefs),
+    yoe: Number(r.yoe), levelBand: r.level_band,
+    // parse through Zod so rows saved before a prefs field existed get its default
+    prefs: ProfilePrefsSchema.parse(parseJson<Record<string, unknown>>(r.prefs, {})),
+    onboardedAt: r.onboarded_at ?? null,
+    resumeFile: parseJson(r.resume_file, null),
   };
 }
 function rowToContext(r: pg.QueryResultRow): ConnectedContext {
@@ -760,7 +802,7 @@ function rowToGeneration(r: pg.QueryResultRow): Generation {
   };
 }
 function rowToEvidence(r: pg.QueryResultRow): Evidence {
-  return { id: r.id, tenantId: r.tenant_id, project: r.project, headline: r.headline, detail: r.detail, metric: r.metric, tags: r.tags ?? [], embedding: parseJson(r.embedding, null) };
+  return { id: r.id, tenantId: r.tenant_id, project: r.project, headline: r.headline, detail: r.detail, metric: r.metric, tags: r.tags ?? [], embedding: parseJson(r.embedding, null), origin: r.origin ?? "manual" };
 }
 function rowToMatch(r: pg.QueryResultRow): Match {
   return {

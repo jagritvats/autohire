@@ -39,6 +39,7 @@ export async function POST(req: Request) {
     metric: b.metric ?? null,
     tags: b.tags,
     embedding: null, // manual entries select by tag overlap; embeddings are optional
+    origin: "manual", // written/edited by the user in the editor
   };
   const saved = await repo.saveEvidence(entry);
   return NextResponse.json(saved);
