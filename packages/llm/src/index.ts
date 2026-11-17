@@ -6,6 +6,7 @@ export * from "./rerank.js";
 export * from "./generate.js";
 export * from "./latex.js";
 export * from "./markdown.js";
+export { redactSecrets } from "./redact.js";
 
 import { localEmbed } from "@jobflow/core";
 import type { LlmProvider } from "./provider.js";
