@@ -9,7 +9,7 @@ import { join, relative } from "node:path";
 const ROOT = new URL("..", import.meta.url).pathname;
 const WEB = join(ROOT, "apps/web");
 const PUBLIC_ROUTES = new Set(["app/api/auth/signup/route.ts", "app/api/auth/login/route.ts", "app/api/auth/logout/route.ts"]);
-const TENANT_CONSTANT_OK = new Set(["lib/auth/resolve.ts", "app/api/auth/signup/route.ts"]);
+const TENANT_CONSTANT_OK = new Set(["lib/auth/resolve.ts", "app/api/auth/signup/route.ts", "lib/tenant-constant.ts"]);
 
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
