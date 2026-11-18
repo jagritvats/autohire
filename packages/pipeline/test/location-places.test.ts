@@ -87,7 +87,7 @@ describe("renormalizePostings (stored rows, no re-poll)", () => {
     const s1 = await renormalizePostings(store);
     expect(s1).toMatchObject({ scanned: 5, changed: 4, locations: 2, multiCountry: 1, placed: 1, agencyFlagged: 2, agencyCleared: 0, noRaw: 1 });
     const byId = (id: string) => store.rows.find((r) => r.id === id)!;
-    expect(byId("a").location).toMatchObject({ country: "Europe", countries: ["DE"], city: "München" });
+    expect(byId("a").location).toMatchObject({ country: "Germany", countries: ["DE"], city: "München" });
     expect(byId("b").location.countries).toEqual(["US", "GB"]);
     expect(byId("c").postedByAgency).toBe(true);
     expect(byId("d").location.city).toBe("M");
