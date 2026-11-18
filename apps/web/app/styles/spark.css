@@ -1407,6 +1407,7 @@
   border-radius: 0 var(--r-md) var(--r-md) 0;
   padding-right: var(--s-3);
 }
+:where([data-style="spark"]) .sync-table th.num:last-child,
 :where([data-style="spark"]) .sync-table td.num:last-child {
   padding-right: var(--s-3);
 }
