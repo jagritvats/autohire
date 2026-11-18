@@ -290,9 +290,9 @@ fetch time modelled per ATS: Workday 12 s, Greenhouse 1.5 s, Lever 1 s, Ashby 2 
 | old: 25 boards, oldest first, 2 syncs/day | india (239, 41 daily) | 25 boards | 108 h | **120 h** / 6.5 d | 48 s |
 | old: 25 boards, oldest first, 4 syncs/day | india | 25 boards | 54 h | **60 h** / 6.25 d | 48 s |
 | web app, every 6 h + catch-up | india | 25 boards, 24 s | 0.3 h | 24 h / 6.25 d | 194 s |
-| web app, every 6 h + catch-up | every preset (421) | 25 boards, 22 s | 0.3 h | 24 h / 6.25 d | 247 s |
-| worker, every 6 h | every preset | 25 boards | 6.1 h | 24 h / 6.25 d | 247 s |
-| `jobflow sync` once a day | india | 25 boards | 24 h | 24 h / 7 d | 211 s |
+| web app, every 6 h + catch-up | every preset (454, 45 daily) | 25 boards, 22 s | 0.3 h | 24 h / 6.25 d | 262 s |
+| worker, every 6 h | every preset | 25 boards | 6.1 h | 24 h / 6.25 d | 262 s |
+| `jobflow sync` once a day | india | 25 boards | 24 h | 24 h / 7 d | 210 s |
 
 Live, on a fresh scratch store with the sample persona (india preset, `LLM_PROVIDER=echo`):
 the first `jobflow sync` polled 25 of 232 due boards (181 s, most of it registering the 239
