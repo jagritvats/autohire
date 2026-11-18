@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { DEFAULT_STYLE, STYLES, applyStyle, readStyle, type StyleId } from "@/lib/style";
 import { Segmented } from "./ui";
-import { THEME_EVENT, applyTheme, readTheme, type Theme } from "./ui/ThemeToggle";
+import { THEME_EVENT, type Theme } from "@/lib/theme";
+import { applyTheme, readTheme } from "./ui/ThemeToggle";
 
 const THEMES: Array<{ id: Theme; label: string }> = [
   { id: "system", label: "System" },
@@ -90,7 +91,9 @@ function StylePreview({ style }: { style: StyleId }) {
     <span className="style-preview" data-style-preview={style} aria-hidden="true">
       <span className="style-preview__bar">
         <span className="style-preview__brand">
-          Job<em>Flow</em>
+          <span>
+            Job<em>Flow</em>
+          </span>
         </span>
         <span className="style-preview__nav" />
       </span>
