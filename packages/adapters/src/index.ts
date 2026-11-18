@@ -24,7 +24,7 @@ export {
   type TextFetcher,
 } from "./feeds/rss.js";
 export { JsonFeedAdapter, parseJsonFeed, getPath } from "./feeds/jsonfeed.js";
-export { GreenhouseAdapter } from "./ats/greenhouse.js";
+export { GreenhouseAdapter, greenhouseLocation } from "./ats/greenhouse.js";
 export { LeverAdapter } from "./ats/lever.js";
 export { AshbyAdapter } from "./ats/ashby.js";
 export { WorkableAdapter, parseWorkableJobs, workablePosted } from "./ats/workable.js";

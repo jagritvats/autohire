@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { isPartialFetch } from "../src/types.js";
 import { WorkdayAdapter, splitRedacted } from "../src/ats/workday.js";
+import { GreenhouseAdapter, greenhouseLocation } from "../src/ats/greenhouse.js";
 
 /** Regression tests for the follow-ups to the 2026-11 source and preset audits. */
 
@@ -62,5 +63,42 @@ describe("Workday: redacted rows (no title / externalPath) are skipped, not fata
     const raws = await new WorkdayAdapter().fetch({ slug: SLUG, location: "IN", limit: 0 });
     expect(raws).toHaveLength(20);
     expect(isPartialFetch(raws)).toBe(true);
+  });
+});
+
+describe("Greenhouse: a work mode in location.name is resolved through offices[]", () => {
+  const office = (name: string, location: string | null) => ({ id: 1, name, location });
+
+  it("reads the offices and keeps the mode as a prefix", () => {
+    expect(greenhouseLocation("Hybrid", [office("Austin, TX", "Austin, TX, United States"), office("London, United Kingdom", "London, United Kingdom")])).toBe(
+      "Hybrid - Austin, TX; London, United Kingdom",
+    );
+    expect(greenhouseLocation("In-Office", [office("Lisbon, Portugal", "Lisboa, Lisboa, Portugal")])).toBe("Lisbon, Portugal");
+    expect(greenhouseLocation("Distributed", [office("Toronto, ON", "Toronto, Ontario, Canada")])).toBe("Remote - Toronto, ON");
+    // a mixed mode reads as hybrid, never as fully remote
+    expect(greenhouseLocation("Distributed; Hybrid", [office("Remote US", null), office("Denver, CO", "Denver, Colorado, United States")])).toBe("Hybrid - Remote US; Denver, CO");
+    // the full location fills in an office name that names no country
+    expect(greenhouseLocation("Hybrid", [office("AMER", "United States")])).toBe("Hybrid - United States");
+  });
+
+  it("leaves real places, a bare Remote, and office-less rows alone", () => {
+    expect(greenhouseLocation("Dublin, Ireland", [office("Dublin", "Dublin, Ireland")])).toBe("Dublin, Ireland");
+    expect(greenhouseLocation("Remote", [office("San Francisco, CA", "San Francisco, CA, United States")])).toBe("Remote");
+    expect(greenhouseLocation("Hybrid", [])).toBe("Hybrid");
+    expect(greenhouseLocation(undefined, undefined)).toBeNull();
+    expect(greenhouseLocation("", [office("Pune, India", null)])).toBe("Pune, India");
+  });
+
+  it("the adapter uses it on the board API's rows", async () => {
+    stub(() =>
+      json({
+        jobs: [
+          { id: 11, title: "Systems Engineer", location: { name: "Hybrid" }, offices: [office("New York, NY", "New York, New York, United States")], first_published: "2026-11-01T00:00:00Z", content: "<p>x</p>" },
+          { id: 12, title: "Data Engineer", location: { name: "Berlin, Germany" }, offices: [], content: "<p>y</p>" },
+        ],
+      }),
+    );
+    const raws = await new GreenhouseAdapter().fetch({ slug: "example" });
+    expect(raws.map((r) => r.locationRaw)).toEqual(["Hybrid - New York, NY", "Berlin, Germany"]);
   });
 });
