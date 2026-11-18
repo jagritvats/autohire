@@ -258,9 +258,21 @@ export const DIVERSIFY_WINDOW = 20;
 /** …at most this many come from one company. */
 export const DIVERSIFY_PER_COMPANY = 3;
 
-export interface DiversifyOptions {
+/**
+ * A card the spread defers never lands below cards scoring more than this many points less
+ * (with `scoreOf`): in a short feed a company's 4th role at 87 must not sink under a 42.
+ */
+export const DIVERSIFY_MAX_SCORE_GAP = 12;
+
+export interface DiversifyOptions<T = unknown> {
   window?: number;
   perCompany?: number;
+  /**
+   * the item's score (0–100). Given, a deferred item is placed as soon as the best open
+   * item would score more than `maxScoreGap` below it — the spread only swaps near-equals.
+   */
+  scoreOf?: (item: T) => number;
+  maxScoreGap?: number;
 }
 
 /**
@@ -270,11 +282,15 @@ export interface DiversifyOptions {
  * last `window - 1` positions; when only capped companies remain it takes the best one
  * anyway. So nothing is dropped, scores are untouched, every company's own items keep their
  * order, and the cards it moves down follow a little later (invariant #4: a view, not a
- * score and not a filter — callers keep a "score order only" switch).
+ * score and not a filter — callers keep a "score order only" switch). With `scoreOf`, a
+ * deferred card is released as soon as the next open card would score more than
+ * `maxScoreGap` below it, so the spread trades places only between near-equal cards.
  */
-export function diversifyByCompany<T>(items: readonly T[], companyOf: (item: T) => string, opts: DiversifyOptions = {}): T[] {
+export function diversifyByCompany<T>(items: readonly T[], companyOf: (item: T) => string, opts: DiversifyOptions<T> = {}): T[] {
   const window = Math.max(1, opts.window ?? DIVERSIFY_WINDOW);
   const cap = Math.max(1, opts.perCompany ?? DIVERSIFY_PER_COMPANY);
+  const scoreOf = opts.scoreOf;
+  const gap = opts.maxScoreGap ?? DIVERSIFY_MAX_SCORE_GAP;
   const pending = items.map((item, i) => ({ item, key: companyOf(item) || `#${i}` }));
   const out: T[] = [];
   const placed: string[] = [];
@@ -282,6 +298,10 @@ export function diversifyByCompany<T>(items: readonly T[], companyOf: (item: T) 
   while (pending.length) {
     let pick = pending.findIndex((p) => (inWindow.get(p.key) ?? 0) < cap);
     if (pick === -1) pick = 0;
+    else if (scoreOf && pick > 0 && scoreOf(pending[0]!.item) - scoreOf(pending[pick]!.item) > gap) {
+      // pending keeps rank order, so [0] is the best deferred card: too good to sink further
+      pick = 0;
+    }
     const [next] = pending.splice(pick, 1);
     out.push(next!.item);
     placed.push(next!.key);
@@ -292,6 +312,25 @@ export function diversifyByCompany<T>(items: readonly T[], companyOf: (item: T) 
       inWindow.set(old, (inWindow.get(old) ?? 1) - 1);
     }
   }
+  return out;
+}
+
+/**
+ * "+N more at Acme Pay": for each company, how many of its cards sit BELOW the first `page`
+ * cards of an ordered list, keyed by the index of its last card inside the page (where a
+ * card says so). Companies with nothing below the page are absent.
+ */
+export function moreBelow<T>(ordered: readonly T[], companyOf: (item: T) => string, page: number): Map<number, number> {
+  const lastInPage = new Map<string, number>();
+  const below = new Map<string, number>();
+  ordered.forEach((item, i) => {
+    const k = companyOf(item);
+    if (!k) return;
+    if (i < page) lastInPage.set(k, i);
+    else if (lastInPage.has(k)) below.set(k, (below.get(k) ?? 0) + 1);
+  });
+  const out = new Map<number, number>();
+  for (const [k, n] of below) out.set(lastInPage.get(k)!, n);
   return out;
 }
 

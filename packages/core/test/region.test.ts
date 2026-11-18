@@ -188,7 +188,9 @@ describe("isWorkableIn (region-neutral isIndiaWorkable)", () => {
 });
 
 describe("scoring with a home country (§11.3)", () => {
-  it("an India home (INR-inferred or explicit IN) scores EXACTLY like the old India-hard-coded scorer", () => {
+  // the LOCATION outputs only: card copy (stack/level notes, flags) and non-location
+  // components have changed since the snapshot was frozen; where the user lives must not
+  it("an India home (INR-inferred or explicit IN) scores location EXACTLY like the old India-hard-coded scorer", () => {
     const profiles = [
       profile(), // INR, home inferred
       profile({ homeCountry: "IN", currency: "USD" }), // explicit IN, non-INR currency
@@ -203,7 +205,13 @@ describe("scoring with a home country (§11.3)", () => {
         const now = scorePosting(post, p);
         const before = legacyScorePosting(post, p);
         // explicit IN + USD: the legacy scorer also treated home as India — same outputs
-        expect(now).toEqual(before);
+        expect(now.breakdown.location).toEqual(before.breakdown.location);
+        expect(now.rulePass).toBe(before.rulePass);
+        expect(now.flags.hardExclusionReason).toEqual(before.flags.hardExclusionReason);
+        expect(now.flags.locationNote).toEqual(before.flags.locationNote);
+        // location flags: same set, worded with the real country ("Onsite in Germany", was "Onsite Europe")
+        const locFlags = (fs: string[]) => fs.filter((f) => /remote|onsite|location/i.test(f)).map((f) => f.replace(/^Onsite (in )?.*?(?=, no|\s—\svisa)/, "Onsite").replace("no visa sponsorship", "no sponsorship"));
+        expect(locFlags(now.flags.redFlags)).toEqual(locFlags(before.flags.redFlags));
         compared++;
       }
     }

@@ -21,8 +21,11 @@ export function MatchCard({
   onSave,
   onHide,
   onInvalidate,
+  moreAtCompany = 0,
 }: {
   card: FeedCard & { inFeed?: boolean };
+  /** this company's cards further down the list (the spread or the page put them there) */
+  moreAtCompany?: number;
   index: number;
   /** false before onboarding: no score, no fit judgement */
   scored?: boolean;
@@ -126,6 +129,11 @@ export function MatchCard({
             <Badge title="Found on a job aggregator — check the original listing">via {card.source.replace(/_/g, " ")}</Badge>
           )}
           {TIER3.has(card.source) && <Badge tone="warn">found by your local agent</Badge>}
+          {card.agency && (
+            <Badge tone="warn" title="A recruiter posted this for a client, not the employer itself — the client may be unnamed and replies are usually slower">
+              staffing agency
+            </Badge>
+          )}
           {card.services && <Badge title="IT-services / outsourcing employer">IT services</Badge>}
           {card.trust < 0.4 && (
             <Badge tone="warn" title="This listing has signs of being stale, re-posted, or from an agency">
@@ -184,6 +192,14 @@ export function MatchCard({
               </li>
             )}
           </ul>
+        )}
+
+        {moreAtCompany > 0 && (
+          <p className="match__more">
+            <a href={`/company/${card.companyId}`}>
+              +{moreAtCompany} more at {card.company} further down
+            </a>
+          </p>
         )}
 
         {card.skills.length > 0 && (

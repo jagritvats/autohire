@@ -7,7 +7,7 @@ import { ago } from "../output.js";
 import { compLabel, locationLabel, printCards, renderCard } from "../render/card.js";
 import { resolvePosting } from "../refs.js";
 import { presetIds } from "./shared.js";
-import { diversifyByCompany, diversifyKey, type SearchQueryInput } from "@jobflow/core";
+import { diversifyByCompany, diversifyKey, moreBelow, type SearchQueryInput } from "@jobflow/core";
 
 export function register(program: Command, ctx: Ctx): void {
   program
@@ -37,7 +37,10 @@ export function register(program: Command, ctx: Ctx): void {
       const data = await getFeed(repo, ctx.tenantId, { limit: Math.max(limit * 4, 100), view, bootstrap: false, diversify: false });
       const scored = data.stats.mode === "ranked";
       const visible = data.cards.filter((c) => !c.archived && (min == null || c.score >= min));
-      const cards = (o.diversify ? diversifyByCompany(visible, (c) => diversifyKey(c.company)) : visible).slice(0, limit);
+      const ordered = o.diversify ? diversifyByCompany(visible, (c) => diversifyKey(c.company), { scoreOf: (c) => c.score }) : visible;
+      const cards = ordered.slice(0, limit);
+      // "+N more at Acme further down": a company's cards the spread (or the page) put below this page
+      const below = moreBelow(ordered, (c) => diversifyKey(c.company), limit);
       const spreadMoved = o.diversify && cards.some((c, i) => visible[i]?.id !== c.id);
       ctx.rememberListing("feed", cards.map((c) => c.id));
       ctx.out.emit({ cards, stats: data.stats }, () => {
@@ -56,7 +59,7 @@ export function register(program: Command, ctx: Ctx): void {
         const polled = data.stats.lastPolledAt ? ` · last sync ${ago(Math.floor((Date.now() - Date.parse(data.stats.lastPolledAt)) / 86_400_000))}` : "";
         out.line(out.dim(`top ${cards.length}${scored ? " for you" : " (freshest)"} · ${data.stats.postings} postings in your corpus${polled}`));
         out.line();
-        printCards(out, cards, { scored, format: o.format });
+        printCards(out, cards, { scored, format: o.format, moreBelow: below });
         if (data.stats.hiddenTotal) {
           const h = Object.entries(data.stats.hidden ?? {}).filter(([, n]) => n > 0);
           const what = [o.search ? `"${o.search}"` : null, presets.length ? presets.map((p) => `#${p}`).join(" ") : null].filter(Boolean).join(" + ");
@@ -100,6 +103,7 @@ export function register(program: Command, ctx: Ctx): void {
           const kv = (k: string, v: string | null | undefined) => v && out.line(`  ${out.dim(k.padEnd(11))} ${v}`);
           kv("id", posting.id);
           kv("location", `${locationLabel(card!)}${posting.location.confidence < 0.6 ? out.dim(" (uncertain)") : ""}`);
+          if (card!.location.places.length > 1) kv("places", card!.location.places.join(" · "));
           kv("pay", compLabel(card!) ?? "not stated");
           if (card!.comp?.estimate && card!.comp.basis) kv("", out.dim(card!.comp.basis));
           kv("skills", posting.jdSkills.join(", "));

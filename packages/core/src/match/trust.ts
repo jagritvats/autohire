@@ -102,7 +102,7 @@ const CONSULTANCY_RE = /\b(on behalf of (our|a|one of our) (esteemed |reputed )?
  * name that only contains "staff" or "recruit" as part of a product (Staffbase, Recruit
  * Holdings) — those are employers hiring for themselves.
  */
-const CONSULTANCY_NAME_RE = /\b(staffing|manpower|placements?|placement consultants?|hr (solutions|services|consultancy|consultants)|recruitment|recruiters?|recruiting (solutions|partners?|services)|outsourcing|talent (solutions|acquisition|hunt\w*|scouts?)|headhunt\w*|hire ?tech|consultancy)\b|hiring|staffision|\bstaff(ing|ify)\w*/i;
+const CONSULTANCY_NAME_RE = /\b(staffing|manpower|placements?|placement consultants?|hr (solutions|services|consultancy|consultants)|recruitment|recruiters?|recruiting (solutions|partners?|services)|outsourcing|talent (solutions|acquisition|hunt\w*|scouts?|finders?)|headhunt\w*|hire ?tech|consultancy)\b|hiring|staffision|\bstaff(ing|ify)\w*/i;
 const NOT_AN_INTERMEDIARY_RE = /\btata consultancy\b/i;
 
 /**
@@ -127,8 +127,22 @@ const AI_GIG_WORK_RE = /\b(evaluat\w*|review\w*|rat(e|ing)|rank\w*|grad(e|ing)|c
 /** paid like a gig — engineers at AI companies also "evaluate model outputs", on a salary */
 const AI_GIG_TERMS_RE = /(\bper hour\b|\/\s?(hr|hour)\b|\bhourly (rate|pay)\b|\btype: contract\b|\bfreelance\b|\bproject[- ]based\b|\bflexible hours\b)/i;
 
+/** a title that says the role is unpaid */
+const UNPAID_TITLE_RE = /\b(volunteer(ing)?|unpaid|pro[- ]bono)\b/i;
+
 /** "no immediate opening — send your CV for future consideration": a talent pool, not a seat */
 export const TALENT_POOL_JD_RE = /\b(may not be an immediate opening|no immediate (opening|vacanc)\w*|not (currently )?hiring for (a|any) specific (role|position)|submit your (resume|cv) for future (consideration|opportunities))\b/i;
+
+/** the card flag for a recruiter's post — plain words: who posted it and what that means */
+export const AGENCY_FLAG = "Posted by a staffing agency, not the employer — the client may be unnamed and replies are usually slower";
+
+/**
+ * Freelance / contractor marketplaces that list "Senior Fullstack Engineer" as if hiring for
+ * themselves (2026-11 feed review: Toptal ranked #2 for a frontend developer in Germany): the
+ * work is a contract placed through them with a client — an intermediary, like an agency.
+ */
+const FREELANCE_MARKETPLACE_RE = /^(toptal|lemon\.io|turing(\.com)?|andela|arc\.dev|x-team|gun\.io|braintrust|upwork|crossover|proxify|codeable)\b/i;
+const MARKETPLACE_FLAG = "Posted by a freelance marketplace, not the employer — usually a contract placed with one of its clients";
 
 export interface TrustResult {
   score: number;
@@ -138,6 +152,10 @@ export interface TrustResult {
    * archetype (feasibility dampener) — trust alone is too small a weight to move it.
    */
   aiTrainingGig: boolean;
+  /** posted by a third-party recruiter / staffing agency, not the employer */
+  agency: boolean;
+  /** an unpaid / volunteer role (title says so) — not a job in the sense the user is looking for */
+  unpaid: boolean;
 }
 
 export function isAiTrainingGig(posting: Pick<Posting, "companyName" | "jdText">): boolean {
@@ -154,9 +172,11 @@ export function scoreSourceTrust(posting: Posting): TrustResult {
   if (posting.atsType === "unknown" && posting.applyUrl && classifyLink(posting.applyUrl).kind === "ats") score += 0.1;
   // a stated salary is a real-req signal (evergreen / fishing posts rarely commit to one)
   if (posting.salary.source === "jd_direct") score += 0.05;
-  if (posting.postedByAgency || looksLikeAgency(posting)) {
+  const marketplace = FREELANCE_MARKETPLACE_RE.test(posting.companyName.trim());
+  const agency = !!posting.postedByAgency || marketplace || looksLikeAgency(posting);
+  if (agency) {
     score -= 0.2;
-    flags.push("Posted by a staffing agency / consultancy — expect slower replies");
+    flags.push(marketplace ? MARKETPLACE_FLAG : AGENCY_FLAG);
   }
   if (HIDDEN_EMPLOYER_RE.test(posting.companyName.trim())) {
     score -= 0.15;
@@ -167,10 +187,16 @@ export function scoreSourceTrust(posting: Posting): TrustResult {
     flags.push(`Reposted ${posting.repostCount}× — possibly hard to fill or evergreen`);
   }
   if (posting.jdText.trim().length < 300) score -= 0.1; // thin JD: little to go on, often a re-host
+  // "Data Analyst, Volunteer, Remote" ranked 80 for a new grad (2026-11 feed review)
+  const unpaid = UNPAID_TITLE_RE.test(posting.title);
+  if (unpaid) {
+    score -= 0.3;
+    flags.unshift("Unpaid / volunteer role");
+  }
   const aiTrainingGig = isAiTrainingGig(posting);
   if (aiTrainingGig) {
     score -= 0.4;
     flags.unshift("AI-training gig (hourly contract rating/writing data for AI labs) — not an engineering seat");
   }
-  return { score: clamp(score), flags, aiTrainingGig };
+  return { score: clamp(score), flags, aiTrainingGig, agency, unpaid };
 }

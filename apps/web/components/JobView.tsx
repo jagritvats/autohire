@@ -154,6 +154,14 @@ export function JobView({ initial }: { initial: JobDetail }) {
                 check location
               </Badge>
             )}
+            {c.location.places.length > 1 && (
+              <Badge title="Every place the posting names">{c.location.places.join(" · ")}</Badge>
+            )}
+            {c.agency && (
+              <Badge tone="warn" title="A recruiter posted this for a client, not the employer itself — the client may be unnamed and replies are usually slower">
+                staffing agency
+              </Badge>
+            )}
             {pay && c.comp && (
               <Badge estimate={pay.estimate} className="tag comp" data-estimate={pay.estimate || undefined} title={pay.title}>
                 {pay.estimate ? "~" : ""}

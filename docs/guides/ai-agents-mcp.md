@@ -155,8 +155,8 @@ Errors come back as tool errors with a hint, never as a crash.
 **"Find remote backend roles I'd actually get, and explain the gaps."**
 The agent calls `search_jobs` with `{"query": "backend engineer --remote --posted 14d"}` and
 gets scored results with flags. Some are not in your feed yet. It reads the top few with
-`get_job` and explains each one from the card. For example: "Java is a direct match. It asks
-for 5+ years and you have 3, so that's a stretch. Pay is JobFlow's estimate, not stated." It
+`get_job` and explains each one from the card. For example: "The main language is Java,
+which you have. It asks for 5+ years and you have 3, so that's a stretch. Pay is JobFlow's estimate, not stated." It
 also tells you what the query hid.
 
 **"Tailor my résumé for the Acme Pay role."**
