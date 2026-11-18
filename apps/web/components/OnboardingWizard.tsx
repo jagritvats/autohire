@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { LevelBand, RemoteGeo, ResumeDraft, RoleArchetype, StoredFile } from "@jobflow/core";
+import type { PresetOption, PresetSuggestions } from "@/lib/presets";
 
 /**
  * Onboarding: your résumé → a DRAFT you review → preferences → discovery preset. Nothing
@@ -9,12 +10,6 @@ import type { LevelBand, RemoteGeo, ResumeDraft, RoleArchetype, StoredFile } fro
  * Evidence Bank holds only claims from your own material).
  */
 
-const PRESETS = [
-  { id: "india", label: "India", detail: "Indian product companies, India offices of global firms, India job boards" },
-  { id: "global-remote", label: "Global remote", detail: "Remote-first companies and remote boards, any country" },
-  { id: "us", label: "United States", detail: "US companies on Greenhouse / Lever / Ashby + US aggregators" },
-  { id: "eu-uk", label: "Europe & UK", detail: "EU/UK companies and boards (Arbeitnow, Adzuna GB/DE…)" },
-];
 const ARCHETYPES: RoleArchetype[] = ["backend", "platform", "fullstack", "infra_devops", "data_ml", "frontend", "mobile", "sre"];
 const LEVELS: LevelBand[] = ["intern", "junior", "mid", "senior", "staff", "lead", "principal", "manager", "director"];
 const GEOS: { id: RemoteGeo; label: string }[] = [
@@ -39,23 +34,22 @@ const CURRENCIES = ["USD", "EUR", "GBP", "INR", "CAD", "AUD", "SGD"];
 type Step = "resume" | "review" | "prefs" | "discovery";
 const STEP_LABEL: Record<Step, string> = { resume: "Your résumé", review: "Check what we found", prefs: "What you want", discovery: "Where to look" };
 
-const EU = new Set(["GB", "DE", "FR", "NL", "IE", "ES", "IT", "PT", "SE", "DK", "FI", "NO", "PL", "AT", "BE", "CH", "CZ", "RO", "GR", "HU", "EE", "LT", "LV"]);
-/** presets that fit a home country (always plus global remote) — a suggestion the user can change */
-function presetsFor(country: string): string[] {
-  const c = country.trim().toUpperCase();
-  const local = c === "IN" ? "india" : c === "US" || c === "CA" ? "us" : EU.has(c) ? "eu-uk" : null;
-  return local ? [local, "global-remote"] : ["global-remote"];
+/**
+ * Presets that fit a home country — the server's `suggestPreset` answer (CA → canada, DE →
+ * eu-uk…), always plus the market-neutral preset. A suggestion the user can change.
+ */
+function presetsFor(country: string, suggest: PresetSuggestions): string[] {
+  const local = suggest.byCountry[country.trim().toUpperCase()];
+  return local && local !== suggest.fallback ? [local, suggest.fallback] : [suggest.fallback];
 }
-/** remote regions someone in this country can usually take */
-function geosFor(country: string): RemoteGeo[] {
-  const c = country.trim().toUpperCase();
-  if (c === "US") return ["worldwide", "us_only", "us_eu"];
-  if (EU.has(c)) return ["worldwide", "eu_only", "us_eu"];
-  if (c === "IN") return ["worldwide", "india_ok", "apac_ok"];
-  return ["worldwide"];
+/** remote regions someone in this country can usually take: the suggested preset's defaults */
+function geosFor(country: string, suggest: PresetSuggestions, presets: PresetOption[]): RemoteGeo[] {
+  const local = suggest.byCountry[country.trim().toUpperCase()];
+  const geos = local && local !== suggest.fallback ? presets.find((p) => p.id === local)?.remoteGeoOk : null;
+  return geos?.length ? geos : ["worldwide"];
 }
 
-export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
+export function OnboardingWizard({ llmReady, presetOptions, suggest }: { llmReady: boolean; presetOptions: PresetOption[]; suggest: PresetSuggestions }) {
   const [step, setStep] = useState<Step>("resume");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -81,7 +75,7 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
   const [currency, setCurrency] = useState("USD");
   const [archetypes, setArchetypes] = useState<RoleArchetype[]>([]);
   const [locations, setLocations] = useState("remote");
-  const [presets, setPresets] = useState<string[]>(["global-remote"]);
+  const [presets, setPresets] = useState<string[]>([suggest.fallback]);
   const [presetsTouched, setPresetsTouched] = useState(false);
   const [geosTouched, setGeosTouched] = useState(false);
 
@@ -91,8 +85,8 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
     setHomeCountry(c);
     if (/^[A-Z]{2}$/.test(c)) {
       if (!markets.trim()) setMarkets(c);
-      if (!geosTouched) setGeos(geosFor(c));
-      if (!presetsTouched) setPresets(presetsFor(c));
+      if (!geosTouched) setGeos(geosFor(c, suggest, presetOptions));
+      if (!presetsTouched) setPresets(presetsFor(c, suggest));
     }
   }
 
@@ -458,7 +452,7 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
             <h2>Where to look <span className="hint">— pick one or more starting sets of companies and boards; add your own anytime under Sources</span></h2>
             {homeCountry && !presetsTouched && <p className="hint">Suggested from your home country ({homeCountry}). Pick as many as you like.</p>}
             <div className="onb-presets">
-              {PRESETS.map((p) => (
+              {presetOptions.map((p) => (
                 <button
                   key={p.id}
                   type="button"
@@ -471,7 +465,7 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
                   }}
                 >
                   <b>{p.label}</b>
-                  <span className="hint">{p.detail}</span>
+                  <span className="hint">{p.description}</span>
                 </button>
               ))}
             </div>
