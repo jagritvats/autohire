@@ -2,7 +2,7 @@ import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mc
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z, ZodError } from "zod";
 import type { SourceAdapter } from "@jobflow/adapters";
-import { ApplicationStatus, COVER_LETTER_ANSWER_KEY, scorePosting, type Posting } from "@jobflow/core";
+import { ApplicationStatus, COVER_LETTER_ANSWER_KEY, diversifyByCompany, diversifyKey, scorePosting, type Posting } from "@jobflow/core";
 import type { FileStore, Repository } from "@jobflow/db";
 import { ProviderError, isOfflineProvider, redactSecrets } from "@jobflow/llm";
 import { isOnboarded, loadProfile, pollAll, type PollStats } from "@jobflow/pipeline";
@@ -494,6 +494,10 @@ export function createJobflowMcpServer(ctx: JobflowMcpContext, opts: JobflowMcpO
         presets: z.array(z.string()).optional().describe("only roles tagged with these presets: india, us, eu-uk, global-remote"),
         savedSearch: z.string().optional().describe("a saved search's name (or id) to view the feed through"),
         includeApplied: z.boolean().default(false),
+        diversify: z
+          .boolean()
+          .default(true)
+          .describe("spread the list across companies (at most 3 per 20 jobs, the rest follow; scores unchanged). false = pure score order"),
       },
       outputSchema: {
         mode: z.enum(["ranked", "browse"]).describe("browse = unscored (no profile yet)"),
@@ -517,11 +521,13 @@ export function createJobflowMcpServer(ctx: JobflowMcpContext, opts: JobflowMcpO
             if (!s) throw new ToolError(`No saved search "${args.savedSearch}".`, "See them with list_saved_searches.");
             view = presets.length ? { ...s.query, presets } : s.id;
           } else if (presets.length) view = { presets };
-          const data = await getFeed(repo, tenantId, { limit: Math.max(args.limit * 4, 100), view: view as never, bootstrap: false });
+          const data = await getFeed(repo, tenantId, { limit: Math.max(args.limit * 4, 100), view: view as never, bootstrap: false, diversify: false });
           const scored = data.stats.mode === "ranked";
           const visible = data.cards.filter((c) => !c.archived && (args.minScore == null || c.score >= args.minScore));
           const appliedHidden = args.includeApplied ? 0 : visible.filter((c) => c.applied).length;
-          const cards = visible.filter((c) => args.includeApplied || !c.applied).slice(0, args.limit);
+          // the company spread runs on what is returned, so "≤3 per company in any 20" holds for it
+          const shown = visible.filter((c) => args.includeApplied || !c.applied);
+          const cards = (args.diversify === false ? shown : diversifyByCompany(shown, (c) => diversifyKey(c.company))).slice(0, args.limit);
           const jobs = cards.map((c) => summarize(c, scored));
           const lines: string[] = [];
           if (!data.stats.postings) lines.push("The corpus is empty. Fill it with sync_sources (a minute or two), or search live with search_jobs.");

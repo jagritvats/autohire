@@ -7,6 +7,7 @@ import { MatchCard } from "./MatchCard";
 import { Badge, Banner, Button, ButtonLink, Chip, EmptyState, Panel, Segmented, Skeleton, Stat } from "./ui";
 import { FilterDrawer } from "./ui/FilterDrawer";
 import { roleText } from "@/lib/cardText";
+import { diversifyByCompany, diversifyKey } from "@jobflow/core";
 
 const ARCHETYPES = ["backend", "platform", "infra_devops", "fullstack", "data_ml", "sre", "frontend", "mobile"];
 const MODES = ["remote", "hybrid", "onsite"];
@@ -79,6 +80,24 @@ export function FeedView({
   );
   const [loadingTab, setLoadingTab] = useState(false);
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
+  // ordering, not filtering: spread the list across companies (≤3 per 20), or score order only
+  const [scoreOrder, setScoreOrder] = useState(false);
+  useEffect(() => {
+    try {
+      setScoreOrder(localStorage.getItem("jobflow.feed.scoreOrder") === "1");
+    } catch {
+      /* storage unavailable: keep the default */
+    }
+  }, []);
+  const toggleScoreOrder = () =>
+    setScoreOrder((on) => {
+      try {
+        localStorage.setItem("jobflow.feed.scoreOrder", on ? "0" : "1");
+      } catch {
+        /* storage unavailable: the choice lasts this visit */
+      }
+      return !on;
+    });
   const [notice, setNotice] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(initial.stats.syncing);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -122,6 +141,9 @@ export function FeedView({
   const baseCards = tab.kind === "all" ? data.cards : tabCards[tabKey(tab)] ?? [];
 
   // ── filters as a view: count what they hide, per reason ──
+  // then the ORDER: by default no company fills the page (at most 3 in any 20 cards, the
+  // rest follow later); scores are untouched and nothing is hidden by it (invariant #4).
+  // It runs on what the filters SHOW, so the spread holds for the list on screen.
   const { cards, hidden } = useMemo(() => {
     const shown: FeedCard[] = [];
     const by: Record<string, number> = {};
@@ -130,8 +152,9 @@ export function FeedView({
       if (why) by[why] = (by[why] ?? 0) + 1;
       else shown.push(c);
     }
-    return { cards: shown, hidden: by };
-  }, [baseCards, filters]);
+    const ordered = scored && scoreOrder ? [...shown].sort((a, b) => b.score - a.score) : diversifyByCompany(shown, (c) => diversifyKey(c.company));
+    return { cards: ordered, hidden: by };
+  }, [baseCards, filters, scored, scoreOrder]);
   const hiddenTotal = Object.values(hidden).reduce((a, b) => a + b, 0);
   const filtersOn = hiddenTotal > 0 || JSON.stringify(filters, (_k, v) => (v instanceof Set ? [...v] : v)) !== JSON.stringify(NO_FILTERS, (_k, v) => (v instanceof Set ? [...v] : v));
   const feedPresets = useMemo(() => [...new Set(baseCards.flatMap((c) => c.presets ?? []))].sort(), [baseCards]);
@@ -418,6 +441,21 @@ export function FeedView({
             title="How likely a listing is real, still open and answered: employer boards ~85%, re-dating aggregators ~35%, agencies lower"
           />
         </div>
+
+        {scored && (
+          <fieldset className="rail-group">
+            <legend>order</legend>
+            <div className="chip-row">
+              <Chip
+                on={scoreOrder}
+                onClick={toggleScoreOrder}
+                title="Off: no company fills the page — at most 3 of its jobs in any 20, the rest follow further down. On: strictly by match score. Scores are the same either way."
+              >
+                score order only
+              </Chip>
+            </div>
+          </fieldset>
+        )}
       </FilterDrawer>
 
       <div className="feed-main">

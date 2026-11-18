@@ -7,7 +7,7 @@ import { ago } from "../output.js";
 import { compLabel, locationLabel, printCards, renderCard } from "../render/card.js";
 import { resolvePosting } from "../refs.js";
 import { presetIds } from "./shared.js";
-import type { SearchQueryInput } from "@jobflow/core";
+import { diversifyByCompany, diversifyKey, type SearchQueryInput } from "@jobflow/core";
 
 export function register(program: Command, ctx: Ctx): void {
   program
@@ -19,7 +19,8 @@ export function register(program: Command, ctx: Ctx): void {
     .option("--preset <presets>", "only roles tagged with these discovery presets, e.g. india or us,eu-uk")
     .option("--tag <presets>", "same as --preset")
     .option("--format <fmt>", "cards (default) | table")
-    .action(async (o: { limit: string; minScore?: string; search?: string; preset?: string; tag?: string; format?: string }) => {
+    .option("--no-diversify", "pure score order (by default no company fills the page: at most 3 per 20 cards, the rest follow)")
+    .action(async (o: { limit: string; minScore?: string; search?: string; preset?: string; tag?: string; format?: string; diversify: boolean }) => {
       const repo = await ctx.repo();
       const limit = Math.max(1, Math.min(500, Number(o.limit) || 20));
       const min = o.minScore != null ? Number(o.minScore) : null;
@@ -31,9 +32,13 @@ export function register(program: Command, ctx: Ctx): void {
         if (!s) throw notFound(`No saved search "${o.search}".`, "See them with `jobflow searches`.");
         view = presets.length ? { ...s.query, presets } : s.id;
       } else if (presets.length) view = { presets };
-      const data = await getFeed(repo, ctx.tenantId, { limit: Math.max(limit * 4, 100), view, bootstrap: false });
+      // score order from the service; the company spread runs on what this page SHOWS (after
+      // --min-score), so its "≤3 per company in any 20" holds for the cards printed
+      const data = await getFeed(repo, ctx.tenantId, { limit: Math.max(limit * 4, 100), view, bootstrap: false, diversify: false });
       const scored = data.stats.mode === "ranked";
-      const cards = data.cards.filter((c) => !c.archived && (min == null || c.score >= min)).slice(0, limit);
+      const visible = data.cards.filter((c) => !c.archived && (min == null || c.score >= min));
+      const cards = (o.diversify ? diversifyByCompany(visible, (c) => diversifyKey(c.company)) : visible).slice(0, limit);
+      const spreadMoved = o.diversify && cards.some((c, i) => visible[i]?.id !== c.id);
       ctx.rememberListing("feed", cards.map((c) => c.id));
       ctx.out.emit({ cards, stats: data.stats }, () => {
         const out = ctx.out;
@@ -57,6 +62,7 @@ export function register(program: Command, ctx: Ctx): void {
           const what = [o.search ? `"${o.search}"` : null, presets.length ? presets.map((p) => `#${p}`).join(" ") : null].filter(Boolean).join(" + ");
           out.hint(`${what} hid ${data.stats.hiddenTotal}: ${h.map(([k, n]) => `${k} ${n}`).join(", ")}`);
         }
+        if (spreadMoved) out.hint("spread across companies (at most 3 per 20, scores unchanged) — --no-diversify for pure score order");
         out.hint("next: jobflow show 1 · jobflow tailor 1 · jobflow apply 1");
       });
     });

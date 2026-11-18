@@ -13,7 +13,7 @@ import {
   type RecheckStats,
 } from "@jobflow/pipeline";
 import type { Match, Posting, SearchQueryInput, ViewHiddenReason } from "@jobflow/core";
-import { applyView, formatSalary, isIndiaWorkable, postingAgeDays, scoreSourceTrust } from "@jobflow/core";
+import { applyView, diversifyByCompany, diversifyKey, formatSalary, isIndiaWorkable, postingAgeDays, scoreSourceTrust } from "@jobflow/core";
 import { ensureTenant } from "./tenant.js";
 import { corpusEmbedder } from "./embedder.js";
 
@@ -109,6 +109,12 @@ export interface FeedOptions {
    */
   view?: string | SearchQueryInput | null;
   limit?: number;
+  /**
+   * spread the page across employers (default true): at most 3 cards per company in any 20,
+   * the rest following later (`diversifyByCompany`). Order only — no score changes, nothing
+   * hidden (invariant #4). false = pure score order (`--no-diversify`, "score order only").
+   */
+  diversify?: boolean;
   /**
    * when the shared corpus is empty, start ONE background sync (deduped across requests)
    * and return immediately instead of polling inside the request. Default true; multi-user
@@ -232,10 +238,11 @@ export async function getFeed(repo: Repository, tenantId: string, opts: FeedOpti
   const limit = opts.limit ?? 80;
   const profile = await repo.getProfile(tenantId);
   const onboarded = isOnboarded(profile);
+  const spread = opts.diversify !== false;
   if (!onboarded) {
     const browse = await browsePostings(repo, limit);
     if (browse.length === 0 && opts.bootstrap !== false) void startCorpusSync(repo);
-    return shapeBrowse(repo, tenantId, browse);
+    return shapeBrowse(repo, tenantId, spread ? diversifyByCompany(browse, (p) => diversifyKey(p.companyName)) : browse);
   }
   let matches = await repo.listMatches(tenantId, limit);
   if (matches.length === 0 && opts.bootstrap !== false) {
@@ -247,15 +254,17 @@ export async function getFeed(repo: Repository, tenantId: string, opts: FeedOpti
     }
   }
   if (opts.indiaOnly) matches = matches.filter((m) => isIndiaWorkable(m.posting.location));
+  // the spread runs on what is SHOWN (after the view), so its windows are the page's
+  const order = (ms: typeof matches) => (spread ? diversifyByCompany(ms, (m) => diversifyKey(m.posting.companyName)) : ms);
   if (opts.view) {
     const query = typeof opts.view === "string" ? (await repo.getSavedSearch(tenantId, opts.view))?.query : opts.view;
     if (query) {
       const v = applyView(matches, query, { presetsOf: presetsForPosting });
-      const data = await shape(repo, tenantId, v.shown);
+      const data = await shape(repo, tenantId, order(v.shown));
       return { ...data, stats: { ...data.stats, hidden: v.hidden, hiddenTotal: v.hiddenTotal } };
     }
   }
-  return shape(repo, tenantId, matches);
+  return shape(repo, tenantId, order(matches));
 }
 
 /** Cards for arbitrary postings (+ optional scores) — e.g. ad-hoc search results. */
