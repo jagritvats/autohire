@@ -338,18 +338,17 @@ export function SettingsForm({
   return (
     <div className="settings">
       {/* ── base resume ── */}
-      <section className="card-block">
-        <h3>
+      <section id="resume" className="card-block">
+        <h2>
           Base resume{" "}
           <span className="hint">— the spine generation grounds on; upload a PDF/.tex/.txt or paste it</span>
-        </h3>
+        </h2>
         <div className="resume-upload">
           <label className="upload-btn">
             {uploading ? "extracting…" : "↑ upload PDF / .tex / .txt"}
             <input
               type="file"
               accept=".pdf,.tex,.txt,.md,application/pdf,text/plain,text/x-tex"
-              hidden
               disabled={uploading}
               onChange={(e) => {
                 const f = e.target.files?.[0];
@@ -364,6 +363,7 @@ export function SettingsForm({
         </div>
         <textarea
           className="big-text"
+          aria-label="Base résumé text"
           value={masterResume}
           rows={8}
           placeholder="Paste your resume text here, or upload above…"
@@ -375,7 +375,8 @@ export function SettingsForm({
           </summary>
           <textarea
             className="big-text"
-            style={{ marginTop: 8, fontSize: 11.5 }}
+            style={{ marginTop: 8 }}
+            aria-label="LaTeX template"
             value={resumeLatex}
             rows={10}
             placeholder="Paste your résumé's .tex here (or upload a .tex above). Leave empty to use the built-in template."
@@ -385,10 +386,11 @@ export function SettingsForm({
       </section>
 
       {/* ── about you ── */}
-      <section className="card-block">
-        <h3>About you <span className="hint">— a short narrative; extra background for honest, in-voice drafts</span></h3>
+      <section id="about" className="card-block">
+        <h2 id="about-title">About you <span className="hint">— a short narrative; extra background for honest, in-voice drafts</span></h2>
         <textarea
           className="big-text"
+          aria-labelledby="about-title"
           value={aboutText}
           rows={4}
           placeholder="What you care about, the kind of systems you like building, what you're looking for…"
@@ -397,11 +399,11 @@ export function SettingsForm({
       </section>
 
       {/* ── connected context ── */}
-      <section className="card-block">
-        <h3>
+      <section id="context" className="card-block">
+        <h2>
           Connected context{" "}
           <span className="hint">— imported, read-only background for generation; never merged into your evidence/stack</span>
-        </h3>
+        </h2>
 
         {/* GitHub */}
         <div className="src-block">
@@ -414,7 +416,7 @@ export function SettingsForm({
             )}
           </div>
           <div className="add-row">
-            <input value={ghHandle} placeholder="github username" onChange={(e) => setGhHandle(e.target.value)} />
+            <input value={ghHandle} aria-label="GitHub username" placeholder="github username" onChange={(e) => setGhHandle(e.target.value)} />
             <button className="cmd add" disabled={srcBusy === "github"} onClick={importGithub}>
               {srcBusy === "github" ? "importing…" : sources.github ? "re-import" : "import"}
             </button>
@@ -439,7 +441,6 @@ export function SettingsForm({
                 type="file"
                 accept=".csv"
                 multiple
-                hidden
                 disabled={srcBusy === "linkedin"}
                 onChange={(e) => {
                   if (e.target.files?.length) uploadLinkedin(e.target.files);
@@ -464,6 +465,7 @@ export function SettingsForm({
           </div>
           <textarea
             className="big-text"
+            aria-label="YC / Work at a Startup profile text"
             value={ycText}
             rows={3}
             placeholder="Paste your WaaS / YC profile text (auth-gated, so the server never fetches it)…"
@@ -473,7 +475,7 @@ export function SettingsForm({
             <button className="cmd add" disabled={srcBusy === "yc"} onClick={saveYc}>
               {srcBusy === "yc" ? "saving…" : "save paste"}
             </button>
-            <input value={ycUrl} placeholder="…or WaaS profile URL → import via local agent" onChange={(e) => setYcUrl(e.target.value)} />
+            <input value={ycUrl} aria-label="WaaS profile URL" placeholder="…or WaaS profile URL → import via local agent" onChange={(e) => setYcUrl(e.target.value)} />
             <button className="cmd" disabled={srcBusy === "yc" || !ycUrl.trim()} onClick={agentYc}>
               import via agent →
             </button>
@@ -483,11 +485,11 @@ export function SettingsForm({
       </section>
 
       {/* ── evidence bank ── */}
-      <section className="card-block">
-        <h3>
+      <section id="evidence" className="card-block">
+        <h2>
           Evidence Bank{" "}
           <span className="hint">— the cited spine; every tailored bullet/answer maps to an entry here (§4)</span>
-        </h3>
+        </h2>
         <EvidenceEditor
           promote={[
             ...((sources.github?.items ?? []).map((item) => ({ source: "github", item })) as PromoteItem[]),
@@ -497,8 +499,8 @@ export function SettingsForm({
       </section>
 
       {/* ── stack ── */}
-      <section className="card-block">
-        <h3>Tech stack <span className="hint">— what you bring; drives stack-adjacency scoring</span></h3>
+      <section id="stack" className="card-block">
+        <h2>Tech stack <span className="hint">— what you bring; drives stack-adjacency scoring</span></h2>
         <div className="chip-row">
           {SKILL_OPTIONS.map((s) => (
             <button
@@ -514,8 +516,8 @@ export function SettingsForm({
       </section>
 
       {/* ── comp ── */}
-      <section className="card-block">
-        <h3>Expected comp <span className="hint">— floor is a soft signal; only a high-confidence number below it hard-excludes</span></h3>
+      <section id="comp" className="card-block">
+        <h2>Expected comp <span className="hint">— floor is a soft signal; only a high-confidence number below it hard-excludes</span></h2>
         <div className="field-row">
           <label>
             floor
@@ -550,8 +552,8 @@ export function SettingsForm({
       </section>
 
       {/* ── targets ── */}
-      <section className="card-block">
-        <h3>Target archetypes</h3>
+      <section id="archetypes" className="card-block">
+        <h2>Target archetypes</h2>
         <div className="chip-row">
           {ARCHETYPES.map((a) => (
             <button
@@ -567,8 +569,8 @@ export function SettingsForm({
       </section>
 
       {/* ── geo ── */}
-      <section className="card-block">
-        <h3>Remote-geo you'll accept <span className="hint">— a us-only "remote" is down-weighted + flagged, never hidden</span></h3>
+      <section id="remote" className="card-block">
+        <h2>Remote-geo you'll accept <span className="hint">— a us-only "remote" is down-weighted + flagged, never hidden</span></h2>
         <div className="chip-row">
           {GEOS.map((g) => (
             <button
@@ -587,14 +589,15 @@ export function SettingsForm({
       </section>
 
       {/* ── location weights ── */}
-      <section className="card-block">
-        <h3>Location weights <span className="hint">— ranked preference, not a binary filter (§11.3)</span></h3>
+      <section id="locations" className="card-block">
+        <h2>Location weights <span className="hint">— ranked preference, not a binary filter (§11.3)</span></h2>
         <div className="weights">
           {prefs.locationWeights.map((w, i) => (
             <div className="weight-row" key={i}>
-              <span className="wlabel">{w.label}</span>
+              <span className="wlabel" id={`lw-${i}`}>{w.label}</span>
               <input
                 type="range"
+                aria-labelledby={`lw-${i}`}
                 min={0}
                 max={1}
                 step={0.05}
@@ -612,8 +615,8 @@ export function SettingsForm({
       </section>
 
       {/* ── contact / autofill identity ── */}
-      <section className="card-block">
-        <h3>Contact <span className="hint">— what the local form-filler types; only these stored values are ever entered, always stopping at review (§7.1)</span></h3>
+      <section id="contact" className="card-block">
+        <h2>Contact <span className="hint">— what the local form-filler types; only these stored values are ever entered, always stopping at review (§7.1)</span></h2>
         <div className="field-row">
           <label>first name<input value={contact.firstName} onChange={(e) => setContact({ firstName: e.target.value })} /></label>
           <label>last name<input value={contact.lastName} onChange={(e) => setContact({ lastName: e.target.value })} /></label>
@@ -628,15 +631,17 @@ export function SettingsForm({
         </div>
       </section>
 
-      <button className="save" onClick={saveProfile} disabled={pending}>
-        {pending ? "saving…" : "Save profile + re-rank"}
-      </button>
+      <div className="save-bar">
+        <button className="save" onClick={saveProfile} disabled={pending}>
+          {pending ? "saving…" : "Save profile + re-rank"}
+        </button>
+      </div>
 
       {/* ── generic drafts ── */}
-      <section className="card-block">
-        <h3>
+      <section id="drafts" className="card-block">
+        <h2>
           Drafts <span className="hint">— reusable, company-agnostic; per-job tailoring lives on each match card (✎ tailor)</span>
-        </h3>
+        </h2>
         {[
           { kind: "about_blurb", label: "About-me blurb" },
           { kind: "interesting_problem", label: "Interesting problem you've solved" },
@@ -664,8 +669,8 @@ export function SettingsForm({
       </section>
 
       {/* ── cache & refresh ── */}
-      <section className="card-block">
-        <h3>Cache &amp; refresh <span className="hint">— drafts are cached durably + locally; bust them or re-poll the feed</span></h3>
+      <section id="cache" className="card-block">
+        <h2>Cache &amp; refresh <span className="hint">— drafts are cached durably + locally; bust them or re-poll the feed</span></h2>
         <div className="field-row">
           <button className="cmd" onClick={clearDrafts}>
             ✕ clear tailored drafts
@@ -681,10 +686,10 @@ export function SettingsForm({
       </section>
 
       {/* ── LLM / generation provider ── */}
-      <section className="card-block">
-        <h3>
+      <section id="model" className="card-block">
+        <h2>
           Generation model <span className="hint">— which API tailors your resume + answers; key blank = read from .env</span>
-        </h3>
+        </h2>
         <div className="field-row">
           <label>
             provider
@@ -748,13 +753,13 @@ export function SettingsForm({
       </section>
 
       {/* ── automation / sources ── */}
-      <section className="card-block">
-        <h3>API tokens <span className="hint">— for the CLI, the browser extension and your local agent</span></h3>
+      <section id="tokens" className="card-block">
+        <h2>API tokens <span className="hint">— for the CLI, the browser extension and your local agent</span></h2>
         <TokensPanel />
       </section>
 
-      <section className="card-block danger">
-        <h3>Automation <span className="hint">— local agent only (§7.1). Off by default. Autosubmit is locked false.</span></h3>
+      <section id="automation" className="card-block danger">
+        <h2>Automation <span className="hint">— local agent only (§7.1). Off by default. Autosubmit is locked false.</span></h2>
         <div className="field-row">
           <label className="toggle">
             <input
@@ -813,7 +818,7 @@ export function SettingsForm({
         </button>
       </section>
 
-      {saved && <div className="saved-toast">{saved}</div>}
+      <div aria-live="polite">{saved && <div className="saved-toast">{saved}</div>}</div>
     </div>
   );
 }
