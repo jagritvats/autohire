@@ -256,4 +256,25 @@ Sources: [clig.dev](https://clig.dev/),
 [Fortune on Otta](https://fortune.com/2022/02/07/this-job-search-site-is-trying-to-be-the-solution-to-the-great-resignation-by-prioritizing-picky-candidates/).
 
 ## 6. What changed (after)
-See the "Changes" section appended at the end of this document.
+
+Every item below was walked in the built app (demo corpus, and a blank install against the
+live boards) or run in the CLI against a fresh data directory.
+
+| Journey | Change |
+|---|---|
+| IA | One nav on every page (`lib/nav.ts` → `AppFrame`): Jobs · Search · Applications · Profile · Sources · Settings. `/searches` → `/search`, `/discovery` → `/sources`. |
+| J1 web first run | The **Get started** checklist comes from `setupProgress()`. The first sync runs in the background and the page polls and swaps the jobs in. "No jobs came back" offers retry, Sources and Search. Onboarding gains "type my skills instead" and suggests markets, remote regions and presets from the home country. Unreadable files say what to try. An empty onboarding is refused. **Bug fixed:** finishing onboarding *during* the first browse sync joined it without the rank step, giving 1,286 jobs and 0 ranked. Joined syncs now run every caller's follow-up. |
+| J2 CLI first run | Bare `jobflow` and `jobflow status` show status, the checklist and one next command. `init --yes` without `--resume`, `--skills` or `--sample` exits 2. Unscored search makes no "your stack / you're mid" claims and hard-excludes nothing. `apply` sets **ready** only when nothing is missing; otherwise it sets **drafting** with the fix as the next step. `show` prints `ready?`, the fit narrative and the next commands. If `sync` reaches no source, it exits 1 with a plain message. |
+| J3 daily loop | **Job page** `/jobs/[id]`: fit, the description, drafts, the Apply checklist (open / pre-fill / mark applied), then follow-ups. Jobs tabs: All, one per saved search with its hidden counts, Saved and Hidden. Rail filters report "N hidden by your filters (reason n…) · clear". Keys: `j`/`k`/`o`/`t`/`a`/`s`/`x`/`/`/`?`. "Save" also tracks the job as Saved. Operator tools moved off the page. |
+| J4 search | Example chips, a full syntax table, a summary of what each source returned, what was hidden and what was excluded, "loosen it" hints, and saving under a name that already exists. "Open it in Jobs" after saving. Picking a result keeps it from a server-side cache, scored for you alone. |
+| J5 sources | Plain add-source form with examples. Each source shows its last run (when, count or error). Pause, resume and remove (with confirm). Sync now with progress; maintenance and the job queue tucked under a disclosure. |
+| J6 profile/settings | The 800-line form is split. **Profile**: résumé, contact, free-entry skills, "what you want" (home country and markets now editable), about, evidence, context, reusable answers, plus a sticky unsaved-changes bar. **Settings**: the writing model (what's in use, what offline means, a test), applying and the local agent, data, tokens. India is no longer hard-coded. |
+| J7 tailor → apply | Drafts are labelled "from your résumé (template)" or "written by <model>". The blind "Fill via local agent" button became "Next: apply →". Fix links point at sections that exist. |
+| J8 states | Every list has loading, empty (what this is for, plus the action), error and success copy. |
+
+**Still open:**
+- **CompaniesView, EvidenceEditor and TokensPanel copy.** These kept their old wording.
+- **Pre-filling from the web while `jobflow serve` holds the PGlite lock.** The Job page
+  explains it: stop serve, or run the agent. A real fix would be a serve-side fill endpoint
+  that is local-only (loopback). That needs a decision on invariant #1's wording.
+- **Mobile layout of the rail.** This belongs to the UI agent.
