@@ -9,7 +9,7 @@
 //
 // Writes $VIDEO_OUT/cli/<name>.json: { cmd, cols, rows, events: [[seconds, text], …] }.
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, readlinkSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import { OUT, ROOT, ensureDir, launchBrowser } from "./lib/util.mjs";
@@ -108,6 +108,9 @@ function capture(name, cmd, { env = {}, killAfter = null, cwd = REPO, cols = COL
     }, killAfter * 1000);
     p.on("close", () => {
       if (timer) clearTimeout(timer);
+      // the pty puts the command in its own session, so a server it started (next-server)
+      // outlives `script`: stop anything still running from the throwaway checkout
+      if (killAfter) reapStrays();
       try {
         resolve(parse(name, cmd, tlog, olog, cols));
       } catch (e) {
@@ -115,6 +118,16 @@ function capture(name, cmd, { env = {}, killAfter = null, cwd = REPO, cols = COL
       }
     });
   });
+}
+
+function reapStrays() {
+  for (const pid of readdirSync("/proc").filter((d) => /^\d+$/.test(d))) {
+    try {
+      if (readlinkSync(`/proc/${pid}/cwd`).startsWith(REPO)) process.kill(Number(pid), "SIGTERM");
+    } catch {
+      /* gone, or not ours to read */
+    }
+  }
 }
 
 function parse(name, cmd, tlog, olog, cols = COLS) {
