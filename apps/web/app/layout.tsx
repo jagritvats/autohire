@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Inter, JetBrains_Mono, Plus_Jakarta_Sans, Schibsted_Grotesk } from "next/font/google";
 import { AppShell } from "@/components/ui/AppShell";
-import { THEME_INIT_SCRIPT } from "@/components/ui/ThemeToggle";
+import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import { DEFAULT_STYLE, STYLE_INIT_SCRIPT } from "@/lib/style";
 import "./globals.css";
 import "./styles/editorial.css";

@@ -1,23 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { THEME_EVENT, THEME_KEY, type Theme } from "@/lib/theme";
 import { Icon } from "./Icon";
 
-export type Theme = "system" | "light" | "dark";
-const KEY = "jobflow-theme";
 const ORDER: Theme[] = ["system", "light", "dark"];
-/** fired on window when the theme changes, so the header toggle and Settings → Appearance agree */
-export const THEME_EVENT = "jobflow:theme";
-
-/**
- * Inline, render-blocking snippet for <head>: applies a saved explicit theme before first
- * paint so there's no flash. "system" = no attribute, the CSS media query decides.
- */
-export const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem("${KEY}");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}})();`;
 
 export function readTheme(): Theme {
   try {
-    const t = localStorage.getItem(KEY);
+    const t = localStorage.getItem(THEME_KEY);
     return t === "light" || t === "dark" ? t : "system";
   } catch {
     return "system";
@@ -30,8 +21,8 @@ export function applyTheme(t: Theme) {
   if (t === "system") root.removeAttribute("data-theme");
   else root.setAttribute("data-theme", t);
   try {
-    if (t === "system") localStorage.removeItem(KEY);
-    else localStorage.setItem(KEY, t);
+    if (t === "system") localStorage.removeItem(THEME_KEY);
+    else localStorage.setItem(THEME_KEY, t);
   } catch {
     /* private mode / blocked storage — the choice lasts for this page only */
   }
