@@ -145,6 +145,13 @@ INR band below ₹3 L/yr is now `medium_high`, which the floor never acts on. Sa
 exclusions on the IN profile: 24 → 19, all remaining are stated annual bands (LPA, ranges in
 lakhs) or intern stipends. `pnpm --filter @jobflow/worker salary` on the re-polled IN
 corpus: 0 bands changed (the re-poll had already re-parsed them), 5,347 estimates refreshed.
+`salary-backtest` (leak-free, calibrated), before → after: overall median error 18% → 18%,
+≥0.70 bucket 10% → 10%, <0.30 bucket 40% → 40%; but the two middle buckets now read 19% /
+21% (0.30–0.50 / 0.50–0.70; before 24% / 17%) — no longer strictly monotonic. The cause is
+the location fixes: remote roles once mislabelled "worldwide" moved from the REMOTE pay
+market (41 comparables → 1) into US, and ~3,000 formerly hidden postings joined the
+comparables. **Follow-up (pipeline/salary.ts):** re-fit the confidence calibration on the
+new market mix.
 
 ### 7. Freshness, staleness and scheduling (fixed)
 
