@@ -63,7 +63,7 @@ gh release create v0.1.0 --title "JobFlow v0.1.0" --notes-file docs/internal/REL
 Then on GitHub:
 
 - [ ] Repository description + topics (job-search, ats, cli, self-hosted, typescript)
-- [ ] Social preview image: `docs/screenshots/feed.png`
+- [ ] Social preview image: `docs/screenshots/jobs.png`
 - [ ] Enable Discussions (the issue template's "Questions" link points there) and private
       vulnerability reporting (Security → Advisories)
 - [ ] Branch protection on `main`: require the `ci` workflow (build-test + guards)

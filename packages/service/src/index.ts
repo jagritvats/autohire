@@ -10,3 +10,5 @@ export * from "./search.js";
 export * from "./discovery.js";
 export * from "./apply.js";
 export * from "./demo.js";
+export * from "./progress.js";
+export * from "./jobs.js";

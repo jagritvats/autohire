@@ -1,15 +1,6 @@
-import { pageAuth } from "@/lib/auth";
-import { PageHeader } from "@/components/ui";
-import { DiscoveryView } from "@/components/DiscoveryView";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export default async function DiscoveryPage() {
-  await pageAuth("/discovery");
-  return (
-    <div className="page">
-      <PageHeader title="Discovery" />
-      <DiscoveryView />
-    </div>
-  );
+/** Renamed: discovery settings live at /sources. */
+export default function DiscoveryPage() {
+  redirect("/sources");
 }

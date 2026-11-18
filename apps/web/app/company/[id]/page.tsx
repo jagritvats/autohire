@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Icon, PageHeader } from "@/components/ui";
+import { AppFrame } from "@/components/AppFrame";
+import { Icon } from "@/components/ui";
 import { notFound } from "next/navigation";
 import { LEVELS_ATTRIBUTION } from "@jobflow/adapters";
 import { formatSalary, type Posting } from "@jobflow/core";
@@ -16,15 +17,18 @@ export default async function CompanyPage({ params }: { params: { id: string } }
   const postings = await repo.listPostingsByCompany(params.id);
 
   return (
-    <div className="page page--wide">
-      <PageHeader
-        eyebrow={
-          <Link href="/companies">
-            <Icon name="arrowLeft" size={14} /> Registry
-          </Link>
-        }
-        title={company.name}
-      />
+    <AppFrame
+      wide
+      title={company.name}
+      eyebrow={
+        <>
+          <Link href="/">
+            <Icon name="arrowLeft" size={14} /> Jobs
+          </Link>{" "}
+          · <Link href="/companies">All companies</Link>
+        </>
+      }
+    >
 
       <div className="company-grid">
         <section className="card-block">
@@ -125,7 +129,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
           ))}
         </div>
       </section>
-    </div>
+    </AppFrame>
   );
 }
 

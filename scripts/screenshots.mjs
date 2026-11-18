@@ -3,7 +3,7 @@
 // fully fictional corpus and the fictional "Alex Example" candidate (JOBFLOW_DEMO_DATA=1) —
 // so screenshots never depend on live APIs and never show a real person or listing.
 //
-//   pnpm --filter @jobflow/web build && node scripts/screenshots.mjs [--only feed,settings]
+//   pnpm --filter @jobflow/web build && node scripts/screenshots.mjs [--only jobs,settings]
 //
 // Writes docs/screenshots/*.png: every page in the dark theme, the key pages again in the
 // light theme (*-light.png), and 375px-wide mobile views (*-mobile*.png).
@@ -95,44 +95,65 @@ try {
   // ── desktop, dark ──
   const dark = await (await context("dark", { width: 1440, height: 900 })).newPage();
   let shot = shooter(dark);
-  await shot("feed", "/", { wait: CARD });
+  await shot("jobs", "/", { wait: CARD });
   await shot("match-card", "/", { wait: CARD, element: CARD });
   // a card carrying caveats: red flags and/or a modeled (estimated) salary
   await shot("match-card-caveats", "/", { wait: CARD, element: `${CARD}:has(.match__flag), ${CARD}:has(.badge--estimate)` });
-  await shot("search", "/searches", { before: search });
-  await shot("discovery", "/discovery", { wait: ".onb-preset" });
-  await shot("onboarding", "/onboarding");
-  await shot("applications", "/applications", { wait: ".crm-row, .empty-note" });
+  await shot("search", "/search", { before: search });
+  await shot("sources", "/sources", { wait: ".onb-preset" });
   await shot("companies", "/companies", { wait: ".reg-row" });
+  await shot("onboarding", "/onboarding");
+  await shot("applications", "/applications", { wait: ".crm-row, .empty" });
+  await shot("profile", "/profile");
   await shot("settings", "/settings");
-  // tailor page for the top card
-  const href = await dark
-    .goto(`${BASE}/`)
-    .then(() => dark.locator('a[href^="/tailor/"]').first().getAttribute("href"))
+  // the Job page (fit, description, the apply checklist) for the top job not yet in
+  // Applications (so the checklist shows), and Tailor for the top card
+  await dark.goto(`${BASE}/`, { waitUntil: "networkidle" });
+  const job = await dark
+    .locator(CARD)
+    .filter({ hasNotText: "in Applications" })
+    .first()
+    .locator('a[href^="/jobs/"]')
+    .first()
+    .getAttribute("href")
     .catch(() => null);
+  const href = await dark
+    .locator(`${CARD} a[href^="/tailor/"]`)
+    .first()
+    .getAttribute("href")
+    .catch(() => null);
+  if (job) {
+    await shot("job", job);
+    await shot("job-apply", job, { scrollTo: "#apply" });
+  }
   if (href) await shot("tailor", href);
 
   // ── desktop, light ──
   const light = await (await context("light", { width: 1440, height: 900 })).newPage();
   shot = shooter(light);
-  await shot("feed-light", "/", { wait: CARD });
+  await shot("jobs-light", "/", { wait: CARD });
   await shot("match-card-light", "/", { wait: CARD, element: CARD });
+  if (job) await shot("job-light", job);
+  await shot("profile-light", "/profile");
   await shot("settings-light", "/settings");
-  await shot("discovery-light", "/discovery", { wait: ".onb-preset" });
+  await shot("sources-light", "/sources", { wait: ".onb-preset" });
+  await shot("search-light", "/search", { before: search });
   if (href) await shot("tailor-light", href);
 
   // ── mobile, 375px ──
   const mobileOpts = { isMobile: true, hasTouch: true };
   const m = await (await context("dark", { width: 375, height: 812 }, mobileOpts)).newPage();
   shot = shooter(m);
-  await shot("feed-mobile", "/", { wait: CARD });
-  await shot("feed-mobile-filters", "/", {
+  await shot("jobs-mobile", "/", { wait: CARD });
+  await shot("jobs-mobile-filters", "/", {
     wait: CARD,
     before: async (p) => {
       await p.click(".filter-bar button");
       await p.waitForSelector('.filter-rail[data-open="true"]');
     },
   });
+  if (job) await shot("job-mobile", job);
+  await shot("profile-mobile", "/profile");
   await shot("settings-mobile", "/settings");
   await shot("nav-mobile", "/settings", {
     before: async (p) => {
@@ -141,8 +162,9 @@ try {
   });
   const ml = await (await context("light", { width: 375, height: 812 }, mobileOpts)).newPage();
   shot = shooter(ml);
-  await shot("feed-mobile-light", "/", { wait: CARD });
-  await shot("applications-mobile-light", "/applications", { wait: ".crm-row, .empty-note" });
+  await shot("jobs-mobile-light", "/", { wait: CARD });
+  await shot("applications-mobile-light", "/applications", { wait: ".crm-row, .empty" });
+  await shot("sources-mobile-light", "/sources", { wait: ".onb-preset" });
 
   await browser.close();
 } finally {

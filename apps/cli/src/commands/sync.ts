@@ -2,7 +2,7 @@ import type { Command } from "commander";
 import { isOnboarded, loadProfile, pollAll } from "@jobflow/pipeline";
 import { corpusEmbedder, rankTenant } from "@jobflow/service";
 import type { Ctx } from "../context.js";
-import { needsSetup } from "../errors.js";
+import { EXIT, needsSetup } from "../errors.js";
 
 /**
  * `jobflow sync` — discover + poll what your discovery plan names (preset + your sources +
@@ -50,8 +50,10 @@ export function register(program: Command, ctx: Ctx): void {
         out.line(`Your corpus: ${active} active postings${ranked ? ` · ${matches} ranked for you` : ""}.`);
         if (!ranked) out.hint("Not ranked yet — set up your profile with `jobflow init` to get scores.");
         else out.hint("next: jobflow feed");
-        if (stats.fetched === 0) out.hint("Nothing was fetched — check your network with `jobflow doctor`.");
+        if (stats.fetched === 0) out.warn("Nothing was fetched. If you're online, a proxy or firewall may be blocking the job boards — `jobflow doctor` checks; `jobflow search …` asks other boards.");
       });
+      // a sync that reached no source at all failed (scripts branch on it); partial errors are normal
+      if (stats.fetched === 0 && stats.errors.length) ctx.exitCode = EXIT.error;
     });
 
   program

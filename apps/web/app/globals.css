@@ -3212,3 +3212,452 @@ input[type="range"] {
   border-color: var(--warn-border);
   box-shadow: inset 3px 0 0 var(--warn);
 }
+
+/* ── 12. journeys — the UX overhaul's surfaces, on the design tokens only ──
+   (was app/ux.css; every colour/size here is a token so both themes and AA contrast hold) */
+
+/* vertical rhythm inside a titled block: intro text never touches the controls under it */
+.card-block > * + * {
+  margin-top: var(--s-3);
+}
+.card-block > h2 + *,
+.card-block > h3 + * {
+  margin-top: 0;
+}
+
+/* Sources: presets, your own sources and Sync stack with the same gap as the cards above */
+.sources-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+/* match card: the title is the link to the Job page; keyboard selection on Jobs */
+.match__title-link {
+  color: inherit;
+}
+.match__title-link:hover {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.match[data-selected="true"] {
+  border-color: var(--accent-solid);
+  box-shadow: 0 0 0 1px var(--accent-solid), var(--shadow-md);
+}
+.match__score[data-band="none"] .score-num {
+  color: var(--text-3);
+}
+
+/* Jobs: toolbar heading, view tabs + "+ view", hidden-by-filters report, keyboard hint */
+.feed-toolbar__start {
+  display: flex;
+  align-items: center;
+  gap: var(--s-5);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.feed-toolbar__start .page-title {
+  margin: 0;
+}
+.feed-tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+  max-width: 100%;
+}
+.ux-hidden-report {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--s-2) var(--s-3);
+  margin: 0;
+  padding: var(--s-2) var(--s-3);
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--info);
+  border-radius: var(--r-md);
+}
+.ux-hidden-report b {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.ux-kbd {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+.ux-kbd kbd,
+.empty kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 0 5px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text);
+}
+
+/* Jobs: the get-started checklist */
+.ux-setup {
+  border-color: var(--accent-border);
+  background: linear-gradient(var(--accent-soft), var(--accent-soft)) top / 100% 3px no-repeat, var(--surface);
+}
+.ux-setup ol {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--s-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+.ux-setup li {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-2) 0;
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-sm);
+}
+.ux-setup li:first-child {
+  border-top: 0;
+}
+.ux-setup__mark {
+  color: var(--text-3);
+  font-weight: 700;
+  text-align: center;
+}
+.ux-setup li[data-done="true"] .ux-setup__mark {
+  color: var(--good);
+}
+.ux-setup li[data-done="true"] .ux-setup__text {
+  color: var(--text-3);
+  text-decoration: line-through;
+}
+.ux-setup li[data-next="true"] .ux-setup__mark {
+  color: var(--accent-text);
+}
+.ux-setup li[data-next="true"] b {
+  color: var(--accent-text);
+}
+.ux-setup__text {
+  min-width: 0;
+}
+.ux-setup__cli {
+  display: inline-block;
+  margin-left: var(--s-2);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* key/values, lists, checklists (Job page) */
+.ux-kv {
+  display: grid;
+  grid-template-columns: minmax(110px, max-content) minmax(0, 1fr);
+  gap: var(--s-2) var(--s-4);
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+.ux-kv dt {
+  color: var(--text-3);
+  font-weight: 500;
+}
+.ux-kv dd {
+  margin: 0;
+  color: var(--text);
+}
+.ux-list {
+  margin: var(--s-2) 0;
+  padding-left: var(--s-5);
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+}
+.ux-list li::marker {
+  color: var(--text-3);
+}
+.ux-checklist {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--s-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  font-size: var(--fs-sm);
+}
+.ux-checklist li {
+  position: relative;
+  padding-left: 26px;
+  line-height: 1.5;
+}
+.ux-checklist li::before {
+  content: "!";
+  position: absolute;
+  left: 0;
+  top: 1px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-full);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--warn);
+  background: var(--warn-soft);
+  border: 1px solid var(--warn-border);
+}
+.ux-checklist li[data-done="true"]::before {
+  content: "✓";
+  color: var(--good);
+  background: var(--good-soft);
+  border-color: var(--good-border);
+}
+.ux-checklist li[data-optional="true"]:not([data-done="true"])::before {
+  content: "·";
+  color: var(--text-3);
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+
+/* Job page: summary facts, actions, apply options, copy-command box, description */
+.ux-job {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+.ux-job .card-block + .card-block {
+  margin-top: 0;
+}
+.ux-job-facts {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-4);
+  margin-bottom: var(--s-4);
+}
+.ux-job-facts .match__tags {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+.ux-score--none {
+  flex: none;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--warn);
+}
+.ux-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  align-items: center;
+}
+.ux-status {
+  margin-left: auto;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+.ux-status label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+.ux-apply-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--s-3);
+  margin-top: var(--s-3);
+}
+.ux-option {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  align-items: flex-start;
+  padding: var(--s-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  min-width: 0;
+}
+.ux-option > b {
+  font-size: var(--fs-base);
+  color: var(--text);
+}
+.ux-option p {
+  margin: 0;
+}
+.ux-copy {
+  display: flex;
+  gap: var(--s-2);
+  align-items: center;
+  max-width: 100%;
+}
+.ux-copy code {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-xs);
+  padding: 6px 8px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  word-break: break-all;
+}
+.ux-jd {
+  white-space: pre-wrap;
+  font-size: var(--fs-base);
+  line-height: 1.65;
+  color: var(--text);
+  max-height: 60vh;
+  overflow: auto;
+  margin-top: var(--s-3);
+  padding-right: var(--s-2);
+  max-width: 80ch;
+}
+
+/* Profile: the sticky save bar carries its unsaved-changes message */
+.save-bar.ux-savebar {
+  justify-content: flex-start;
+  align-items: center;
+  gap: var(--s-3);
+  margin: var(--s-4) 0;
+  font-size: var(--fs-sm);
+}
+.save-bar.ux-savebar[data-dirty="true"] {
+  border-color: var(--accent-border);
+  box-shadow: inset 3px 0 0 var(--accent-solid), var(--shadow-md);
+}
+section[id] {
+  scroll-margin-top: calc(var(--header-h) + var(--s-4));
+}
+
+/* Search: examples, preset tags, the syntax table, busy state, saved-search actions */
+.ux-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  align-items: center;
+  margin-top: var(--s-3);
+}
+.ux-examples__end {
+  margin-left: auto;
+}
+.chip--code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+.ux-syntax {
+  margin-top: var(--s-3);
+  font-size: var(--fs-sm);
+}
+.ux-syntax summary {
+  cursor: pointer;
+  color: var(--accent-text);
+  font-weight: 500;
+}
+.ux-syntax__table {
+  border-collapse: collapse;
+  margin: var(--s-2) 0;
+  width: 100%;
+}
+.ux-syntax__table td {
+  padding: 6px var(--s-3) 6px 0;
+  vertical-align: top;
+  border-top: 1px solid var(--border);
+}
+.ux-syntax__table td:first-child {
+  white-space: nowrap;
+}
+.search-busy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+.tokens-list__actions {
+  display: inline-flex;
+  gap: var(--s-1);
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+.tokens-list .hint[data-error="true"] {
+  color: var(--bad);
+}
+
+/* Sources: the sync panel */
+.sync-panel .field-row {
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .ux-job-facts {
+    flex-direction: column;
+    gap: var(--s-3);
+  }
+  .ux-status {
+    margin-left: 0;
+    width: 100%;
+  }
+  .ux-setup li {
+    grid-template-columns: 20px minmax(0, 1fr);
+  }
+  .ux-setup li > .btn {
+    grid-column: 2;
+    justify-self: start;
+  }
+  .ux-setup__cli {
+    display: block;
+    margin: var(--s-1) 0 0;
+    word-break: break-all;
+  }
+  .ux-kv {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+  .ux-kv dd {
+    margin-bottom: var(--s-2);
+  }
+  .ux-examples__end {
+    margin-left: 0;
+  }
+  .ux-syntax__table td:first-child {
+    white-space: normal;
+    word-break: break-word;
+  }
+  .feed-tabs {
+    width: 100%;
+  }
+  .feed-tabs .segmented {
+    flex: 1;
+    min-width: 0;
+  }
+  .tokens-list__actions {
+    margin-left: 0;
+  }
+}
+
+/* the last active preset can't be switched off — it stays legible, it just doesn't toggle */
+.onb-preset[data-on="true"]:disabled {
+  opacity: 1;
+  cursor: default;
+}
+.ux-setup .panel__head {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+@media (max-width: 640px) {
+  /* the terminal equivalents are for desktop; on a phone they only wrap mid-flag */
+  .ux-setup__cli {
+    display: none;
+  }
+}
+.crm-group {
+  flex-wrap: wrap;
+  row-gap: var(--s-1);
+}
+.ux-job .card-block > p + .field-row {
+  margin-top: var(--s-4);
+}

@@ -10,7 +10,7 @@ submit.**
 ![Node 20+](https://img.shields.io/badge/node-%E2%89%A520-brightgreen)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)
 
-![The ranked feed](docs/screenshots/feed.png)
+![Jobs: your ranked list, with honest match cards](docs/screenshots/jobs.png)
 
 ```bash
 git clone https://github.com/jagritvats/autohire.git jobflow && cd jobflow
@@ -48,11 +48,16 @@ experience. JobFlow takes the opposite bet:
 
 | | |
 |---|---|
-| **Résumé import** — PDF, DOCX, LaTeX, Markdown, JSON Resume or a LinkedIn export, parsed into skills, experience and citeable evidence you review | ![Onboarding](docs/screenshots/onboarding.png) |
-| **Search** — ask the search-capable boards a question now; results are scored with your profile, filters report what they hid; save it to run on a schedule | ![Search](docs/screenshots/search.png) |
-| **Configurable discovery** — start from a preset (India, Global remote, US, Europe & UK) and add your own companies, CSV lists, RSS/JSON feeds, Telegram channels and HN threads | ![Discovery](docs/screenshots/discovery.png) |
+| **Résumé import** — PDF, DOCX, LaTeX, Markdown, JSON Resume or a LinkedIn export, parsed into skills, experience and citeable evidence you review, all kept under **Profile** | ![Set up your profile](docs/screenshots/onboarding.png) |
+| **Job page** — one place per role: how you fit, the full description, your drafts, and an apply checklist that fixes each gap before you open or pre-fill the form | ![The Job page](docs/screenshots/job.png) |
+| **Search** — ask the search-capable boards a question now; results are scored with your profile, filters report what they hid; save it and it becomes a tab on Jobs | ![Search](docs/screenshots/search.png) |
+| **Sources** — start from presets (India, Global remote, US, Europe & UK) and add your own companies, CSV lists, RSS/JSON feeds, Telegram channels and HN threads; sync and see which boards answered | ![Sources](docs/screenshots/sources.png) |
 | **Tailoring** — résumé variants, LaTeX/Markdown rewrites with PDF preview, cover letters, application answers | ![Tailor](docs/screenshots/tailor.png) |
-| **Pipeline** — track applications from saved to offer, with next actions and a don't-double-apply guard | ![Pipeline](docs/screenshots/applications.png) |
+| **Applications** — track each one from saved to offer, with next steps, due follow-ups and a don't-double-apply guard | ![Applications](docs/screenshots/applications.png) |
+
+Light and dark themes follow your system (or the toggle in the header), and every page works
+on a phone: [Jobs](docs/screenshots/jobs-light.png) in light,
+[Jobs on a phone](docs/screenshots/jobs-mobile.png), [filters on a phone](docs/screenshots/jobs-mobile-filters.png).
 
 **The review gate.** `jobflow apply --fill` opens the real application form in a local
 browser, types only what you stored, attaches your résumé — and stops. A browser test fills a

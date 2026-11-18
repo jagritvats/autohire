@@ -17,7 +17,7 @@ pnpm jobflow profile import ./cv.pdf            # replaces your base résumé, a
 pnpm jobflow profile import ./cv.docx --merge    # keeps what you have, fills gaps, unions skills
 ```
 
-In the web app: **/onboarding**, or Settings → Base résumé.
+In the web app: **/onboarding** (guided: upload or paste → check what was found → what you want → where to look; or "type my skills instead" if you have no résumé to hand), or **Profile → Résumé**.
 
 | Format | Notes |
 |---|---|
@@ -59,7 +59,7 @@ pnpm jobflow evidence add --project "Billing" --headline "Cut invoice latency 40
 
 Only the contact fields you store are ever typed into an application form, and the filler
 always stops before submitting. Set them in `jobflow init`, `jobflow profile set`, or
-Settings → Contact.
+Profile → Contact.
 
 ## Starting over / trying it out
 

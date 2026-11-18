@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { STATUS_LABEL } from "@/lib/cardText";
+import { Banner, Button, ButtonLink, EmptyState, Skeleton, btn } from "./ui";
 
 interface App {
   id: string;
@@ -17,118 +19,169 @@ interface App {
 }
 
 const STATUSES = ["saved", "drafting", "ready", "applied", "screening", "interviewing", "offer", "rejected", "withdrawn", "ghosted"];
-const ACTIVE = new Set(["saved", "drafting", "ready", "applied", "screening", "interviewing", "offer"]);
+const TO_APPLY = new Set(["saved", "drafting", "ready"]);
+const IN_PROGRESS = new Set(["applied", "screening", "interviewing", "offer"]);
 
+/**
+ * Applications — the tracker. Three groups follow the loop: to apply (saved → preparing →
+ * ready), in progress (applied → offer), closed. Every row links back to its Job page, and
+ * follow-ups that are due sit on top.
+ */
 export function ApplicationsView() {
-  const [apps, setApps] = useState<App[]>([]);
+  const [apps, setApps] = useState<App[] | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const load = useCallback(async () => {
     const res = await fetch("/api/applications", { cache: "no-store" });
-    if (res.ok) setApps((await res.json()).applications);
+    setApps(res.ok ? (await res.json()).applications : []);
   }, []);
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
-  const patch = async (body: Record<string, unknown>) => {
-    await fetch("/api/applications", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-    load();
+  const patch = async (body: Record<string, unknown>, msg: string) => {
+    const r = await fetch("/api/applications", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    setNotice(r.ok ? msg : "Couldn't save that change.");
+    setTimeout(() => setNotice(null), 4000);
+    void load();
   };
 
-  const due = apps.filter((a) => a.nextActionAt && new Date(a.nextActionAt) <= new Date() && ACTIVE.has(a.status));
-  const active = apps.filter((a) => ACTIVE.has(a.status));
-  const closed = apps.filter((a) => !ACTIVE.has(a.status));
+  if (apps === null)
+    return (
+      <div role="status">
+        <p className="hint">Loading your applications…</p>
+        <Skeleton lines={4} />
+      </div>
+    );
 
+  if (apps.length === 0)
+    return (
+      <EmptyState
+        icon="bookmark"
+        title="No applications yet"
+        action={
+          <>
+            <ButtonLink variant="primary" href="/">
+              Browse your jobs →
+            </ButtonLink>{" "}
+            <ButtonLink href="/search">Search →</ButtonLink>
+          </>
+        }
+      >
+        When a job looks good, press <b>save</b> on it — it lands here as <i>Saved</i>. From its job page you can tailor your résumé, open or
+        pre-fill the form, and mark it applied; this page then keeps track of replies and follow-ups.
+      </EmptyState>
+    );
+
+  const now = Date.now();
+  const due = apps.filter((a) => a.nextActionAt && new Date(a.nextActionAt).getTime() <= now && (TO_APPLY.has(a.status) || IN_PROGRESS.has(a.status)));
+  const toApply = apps.filter((a) => TO_APPLY.has(a.status));
+  const inProgress = apps.filter((a) => IN_PROGRESS.has(a.status));
+  const closed = apps.filter((a) => !TO_APPLY.has(a.status) && !IN_PROGRESS.has(a.status));
   const funnel = STATUSES.map((s) => ({ s, n: apps.filter((a) => a.status === s).length })).filter((x) => x.n > 0);
 
   return (
     <div className="crm">
-      {apps.length === 0 && (
-        <div className="empty-note" style={{ marginTop: 20 }}>
-          No applications yet. Hit <strong>+ track</strong> on a match in the feed to start your pipeline.
-        </div>
-      )}
+      <div className="funnel" aria-label="By status">
+        {funnel.map((f) => (
+          <span className="funnel-stage" key={f.s}>
+            <b>{f.n}</b> {STATUS_LABEL[f.s] ?? f.s}
+          </span>
+        ))}
+      </div>
 
-      {apps.length > 0 && (
-        <div className="funnel">
-          {funnel.map((f) => (
-            <span className="funnel-stage" key={f.s}>
-              <b>{f.n}</b> {f.s}
-            </span>
-          ))}
-        </div>
-      )}
+      <div aria-live="polite">
+        {notice && (
+          <Banner tone={notice.startsWith("Couldn't") ? "bad" : "good"} className="notice">
+            {notice}
+          </Banner>
+        )}
+      </div>
 
       {due.length > 0 && (
-        <section className="card-block danger" style={{ marginTop: 14 }}>
-          <h2>⏰ Follow-ups due <span className="hint">({due.length})</span></h2>
+        <section className="card-block danger" style={{ marginTop: 14 }} aria-labelledby="due-title">
+          <h2 id="due-title">Follow-ups due ({due.length})</h2>
           {due.map((a) => (
             <div className="crm-due" key={a.id}>
-              <span>{a.title} · {a.company}</span>
-              <span className="crm-due-act">{a.nextAction ?? "follow up"}</span>
+              <span>
+                <a href={`/jobs/${a.postingId}`}>{a.title}</a> · {a.company}
+              </span>
+              <span className="crm-due-act">
+                {a.nextAction ?? "follow up"} · due {new Date(a.nextActionAt!).toLocaleDateString()}{" "}
+                <Button size="sm" onClick={() => patch({ id: a.id, nextAction: null, nextActionAt: null }, `Done: ${a.nextAction ?? "follow-up"}.`)}>
+                  done
+                </Button>
+              </span>
             </div>
           ))}
         </section>
       )}
 
-      {active.length > 0 && <Group title="Active" apps={active} patch={patch} />}
-      {closed.length > 0 && <Group title="Closed" apps={closed} patch={patch} />}
+      {toApply.length > 0 && <Group title="To apply" hint="saved, being prepared, or ready to send" apps={toApply} patch={patch} />}
+      {inProgress.length > 0 && <Group title="In progress" hint="sent — waiting, screening, interviewing, offer" apps={inProgress} patch={patch} />}
+      {closed.length > 0 && <Group title="Closed" hint="rejected, withdrawn or no response" apps={closed} patch={patch} />}
     </div>
   );
 }
 
-async function fillLocal(postingId: string) {
-  await fetch("/api/jobs", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ type: "form_fill", payload: { postingId } }),
-  });
-}
-
-function Group({ title, apps, patch }: { title: string; apps: App[]; patch: (b: Record<string, unknown>) => void }) {
+function Group({ title, hint, apps, patch }: { title: string; hint: string; apps: App[]; patch: (b: Record<string, unknown>, msg: string) => void }) {
   return (
     <section style={{ marginTop: 16 }}>
-      <h2 className="crm-group">{title} <span className="hint">({apps.length})</span></h2>
+      <h2 className="crm-group">
+        {title} <span className="hint">({apps.length}) · {hint}</span>
+      </h2>
       <div className="reg-table">
-        <div className="crm-head">
-          <span>role</span>
+        <div className="crm-head" aria-hidden="true">
+          <span>job</span>
           <span>status</span>
-          <span>next action</span>
-          <span>due</span>
+          <span>next step</span>
+          <span>by</span>
           <span></span>
         </div>
         {apps.map((a) => (
           <div className="crm-row" key={a.id}>
             <span className="crm-role">
               {a.companyId ? <a href={`/company/${a.companyId}`}>{a.company}</a> : a.company}
-              <span className="crm-title">{a.title}</span>
+              <a className="crm-title" href={`/jobs/${a.postingId}`}>
+                {a.title}
+              </a>
             </span>
-            <select aria-label={`Status — ${a.title} at ${a.company}`} value={a.status} onChange={(e) => patch({ id: a.id, status: e.target.value })}>
+            <select aria-label={`Status of ${a.title}`} value={a.status} onChange={(e) => patch({ id: a.id, status: e.target.value }, `${a.title}: ${STATUS_LABEL[e.target.value] ?? e.target.value}.`)}>
               {STATUSES.map((s) => (
-                <option key={s}>{s}</option>
+                <option key={s} value={s}>
+                  {STATUS_LABEL[s]}
+                </option>
               ))}
             </select>
             <input
               className="crm-input"
-              aria-label={`Next action — ${a.title} at ${a.company}`}
+              aria-label={`Next step for ${a.title}`}
               defaultValue={a.nextAction ?? ""}
-              placeholder="e.g. send follow-up"
-              onBlur={(e) => e.target.value !== (a.nextAction ?? "") && patch({ id: a.id, nextAction: e.target.value })}
+              placeholder={TO_APPLY.has(a.status) ? "e.g. tailor the résumé" : "e.g. follow up with the recruiter"}
+              onBlur={(e) => e.target.value !== (a.nextAction ?? "") && patch({ id: a.id, nextAction: e.target.value || null }, "Next step saved.")}
             />
             <input
               className="crm-date"
               type="date"
-              aria-label={`Due date — ${a.title} at ${a.company}`}
+              aria-label={`Due date for ${a.title}`}
               defaultValue={a.nextActionAt ? a.nextActionAt.slice(0, 10) : ""}
-              onChange={(e) => patch({ id: a.id, nextActionAt: e.target.value ? new Date(e.target.value).toISOString() : null })}
+              onChange={(e) => patch({ id: a.id, nextActionAt: e.target.value ? new Date(e.target.value).toISOString() : null }, e.target.value ? `Due ${e.target.value}.` : "Due date cleared.")}
             />
             <span className="crm-row-actions">
-              <button className="fill-btn" title="pre-fill in your browser via the local agent (stops at review)" onClick={() => fillLocal(a.postingId)}>
-                fill
-              </button>
-              {a.applyUrl && (
-                <a className="cp-apply" href={a.applyUrl} target="_blank" rel="noreferrer">
-                  open →
-                </a>
+              {TO_APPLY.has(a.status) ? (
+                <>
+                  <a className={btn("ghost", "sm")} href={`/tailor/${a.postingId}`} title="Draft a résumé or cover letter for this job">
+                    tailor
+                  </a>
+                  <a className={btn("primary", "sm")} href={`/jobs/${a.postingId}#apply`} title="Checklist, open or pre-fill the form — you always submit">
+                    apply →
+                  </a>
+                </>
+              ) : (
+                a.applyUrl && (
+                  <a className={btn("secondary", "sm")} href={a.applyUrl} target="_blank" rel="noreferrer">
+                    listing ↗<span className="sr-only"> (opens in a new tab)</span>
+                  </a>
+                )
               )}
             </span>
           </div>

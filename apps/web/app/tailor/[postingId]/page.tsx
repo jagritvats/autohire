@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Icon, PageHeader } from "@/components/ui";
+import { AppFrame } from "@/components/AppFrame";
+import { Icon, btn } from "@/components/ui";
 import { notFound } from "next/navigation";
 import { blankProfile, isSampleEvidence } from "@jobflow/pipeline";
 import { pageAuth } from "@/lib/auth";
@@ -55,16 +56,22 @@ export default async function TailorPage({ params }: { params: { postingId: stri
   };
 
   return (
-    <div className="page page--wide">
-      <PageHeader
-        eyebrow={
-          <Link href="/">
-            <Icon name="arrowLeft" size={14} /> Feed
-          </Link>
-        }
-        title="Tailor"
-      />
+    <AppFrame
+      wide
+      title={`Tailor for ${posting.title}`}
+      eyebrow={
+        <Link href={`/jobs/${posting.id}`}>
+          <Icon name="arrowLeft" size={14} /> {posting.companyName} · {posting.title}
+        </Link>
+      }
+      intro="Drafts built only from your résumé, Evidence Bank and skills — rephrased for this job, never extended."
+      actions={
+        <a className={btn("primary")} href={`/jobs/${posting.id}#apply`}>
+          Next: apply →
+        </a>
+      }
+    >
       <TailorView posting={dto} inputs={inputs} initialDrafts={drafts as unknown as Draft[]} />
-    </div>
+    </AppFrame>
   );
 }

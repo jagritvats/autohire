@@ -130,7 +130,9 @@ The spacing scale is on a 4px grid: `--s-1` 4 · `--s-2` 8 · `--s-3` 12 · `--s
 | `.stat`, `.stats` | `Stat` | tabular numbers |
 | `.table` / `.table__head` / `.table__row` | — | grid rows; restack to cards ≤ 760px |
 | `.section-nav` | `SectionNav` | sticky in-page TOC; becomes a scroll strip ≤ 1100px |
-| `.app-header`, `.app-nav` | `AppShell` (in `app/layout.tsx`) | skip link, `aria-current="page"`, disclosure menu ≤ 900px |
+| `.app-header`, `.app-nav` | `AppShell` (in `app/layout.tsx`) | THE nav — items/order from `lib/nav.ts` (UX_AUDIT §1); skip link, `aria-current="page"` (secondary routes light their parent), disclosure menu ≤ 900px |
+| `.page`, `.page-header` | `AppFrame` (`components/AppFrame.tsx`) | thin wrapper over `PageHeader` for pages: `title`/`intro`/`eyebrow`/`actions`, `wide`; renders no nav |
+| `.ux-*` (setup checklist, hidden-by-filters report, Job page facts/apply options/copy box, syntax table, save bar) | — | journey surfaces, `globals.css` §12, tokens only |
 | `.filter-rail` | `FilterDrawer` | sticky rail; a modal sheet ≤ 960px (Esc, backdrop, focus return) |
 | `.match` | `MatchCard` | the product: see below |
 | `.toast` | — | inside an `aria-live` wrapper |

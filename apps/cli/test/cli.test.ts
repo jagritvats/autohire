@@ -248,12 +248,15 @@ describe("feed, posting refs, search, apply, tailor", () => {
 
     const j = (await cli(["--json", "apply", "1"])).json();
     expect(j.submitted).toBe(false);
-    expect(j.tracker).toBe("ready");
+    // the fictional sample has no résumé FILE to attach → not "ready" yet: "drafting", with the fix as next step
+    expect(j.missing).toContain("resume");
+    expect(j.tracker).toBe("drafting");
     expect(j.plan.fields.map((f: { field: string }) => f.field)).toContain("email");
 
     const track = (await cli(["--json", "track", "list"])).json();
     expect(track).toHaveLength(1);
-    expect(track[0].status).toBe("ready");
+    expect(track[0].status).toBe("drafting");
+    expect(track[0].nextAction).toMatch(/^fix: .*resume/);
     expect((await cli(["track", "status", "1", "applied"])).code).toBe(0);
     expect((await cli(["--json", "track"])).json()[0].status).toBe("applied");
   });

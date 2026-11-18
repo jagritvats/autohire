@@ -1,15 +1,14 @@
 import { pageAuth } from "@/lib/auth";
+import { AppFrame } from "@/components/AppFrame";
 import { ApplicationsView } from "@/components/ApplicationsView";
-import { PageHeader } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
 export default async function ApplicationsPage() {
   await pageAuth("/applications");
   return (
-    <div className="page page--wide">
-      <PageHeader title="Pipeline" />
+    <AppFrame wide title="Applications" intro="Every job you've saved or applied to, where it stands, and what to do next.">
       <ApplicationsView />
-    </div>
+    </AppFrame>
   );
 }

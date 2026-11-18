@@ -21,6 +21,7 @@ import * as track from "./commands/track.js";
 import * as doctor from "./commands/doctor.js";
 import * as serve from "./commands/serve.js";
 import * as legacy from "./commands/legacy.js";
+import * as status from "./commands/status.js";
 
 export const VERSION = "0.1.0";
 
@@ -55,16 +56,21 @@ export function buildProgram(opts: BuildOptions = {}): { program: Command; ctx: 
     .addHelpText(
       "after",
       `
-Get started:
-  jobflow init                 set your details (résumé + preferences)
-  jobflow search "backend engineer" --remote
-  jobflow sync && jobflow feed
-  jobflow tailor 1 && jobflow apply 1
+The loop:
+  jobflow init                         1. who you are (résumé → review → preferences)
+  jobflow sync && jobflow feed         2. fetch jobs, see them ranked for you
+  jobflow search "backend" --remote    …or search live right now
+  jobflow show 1                       3. one job in full: fit, description, apply checklist
+  jobflow tailor 1                     4. a résumé/letter grounded in your own material
+  jobflow apply 1 --fill               5. pre-fill the form; YOU review and submit
+  jobflow track                        6. your applications and follow-ups
 
+Run \`jobflow\` on its own to see where you are and what to do next.
 Row numbers (1, 2, …) refer to the last feed/search/track listing. Docs: docs/cli.md`,
     );
   ctx.attach(program);
 
+  status.register(program, ctx);
   init.register(program, ctx);
   profile.register(program, ctx);
   evidence.register(program, ctx);
@@ -83,7 +89,8 @@ Row numbers (1, 2, …) refer to the last feed/search/track listing. Docs: docs/
 
   program.arguments("[command...]").action((args: string[]) => {
     if (args.length) throw new CliError(`unknown command "${args[0]}"`, EXIT.usage, "Run `jobflow --help` for the list of commands.");
-    program.outputHelp();
+    // no command: where you are + the next step (full help is `jobflow --help`)
+    return status.showStatus(ctx);
   });
   return { program, ctx };
 }

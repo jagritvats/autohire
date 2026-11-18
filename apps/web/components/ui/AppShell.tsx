@@ -3,18 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { NAV, activeNav } from "@/lib/nav";
 import { AccountMenu } from "../AccountMenu";
 import { Icon } from "./Icon";
 import { ThemeToggle } from "./ThemeToggle";
-
-export const NAV_ITEMS: Array<{ href: string; label: string; match: (p: string) => boolean }> = [
-  { href: "/", label: "Feed", match: (p) => p === "/" || p.startsWith("/tailor") },
-  { href: "/searches", label: "Search", match: (p) => p.startsWith("/searches") },
-  { href: "/discovery", label: "Discovery", match: (p) => p.startsWith("/discovery") },
-  { href: "/applications", label: "Pipeline", match: (p) => p.startsWith("/applications") },
-  { href: "/companies", label: "Registry", match: (p) => p.startsWith("/companies") || p.startsWith("/company/") },
-  { href: "/settings", label: "Settings", match: (p) => p.startsWith("/settings") },
-];
 
 const BARE = ["/login", "/signup"]; // auth screens: brand + theme only, no app nav
 
@@ -30,10 +22,14 @@ export function Brand() {
   );
 }
 
-/** One header for every page: brand, primary nav (a disclosure menu on small screens), account, theme. */
+/**
+ * One header for every page: brand, THE primary nav (items + order from lib/nav.ts, see
+ * docs/internal/UX_AUDIT.md §1; a disclosure menu on small screens), account, theme.
+ */
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "/";
   const bare = BARE.some((p) => pathname.startsWith(p));
+  const current = activeNav(pathname);
   const [open, setOpen] = useState(false);
   const menuBtn = useRef<HTMLButtonElement>(null);
 
@@ -61,11 +57,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           {!bare && (
             <nav className="app-nav" id="app-nav" aria-label="Primary" data-open={open ? "true" : undefined}>
               <ul className="app-nav__list">
-                {NAV_ITEMS.map((n) => {
-                  const active = n.match(pathname);
+                {NAV.map((n) => {
+                  const active = current === n.href;
                   return (
                     <li key={n.href}>
-                      <Link className="app-nav__link" href={n.href} aria-current={active ? "page" : undefined}>
+                      <Link className="app-nav__link" href={n.href} aria-current={active ? "page" : undefined} title={n.description}>
                         {n.label}
                       </Link>
                     </li>

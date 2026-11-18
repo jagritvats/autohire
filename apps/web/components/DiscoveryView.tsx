@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Button, Skeleton } from "./ui";
 
 interface PresetView {
   id: string;
@@ -24,6 +25,14 @@ interface SourceDTO {
 
 type AddKind = "rss" | "json_feed" | "telegram" | "hn_thread" | "company";
 
+const KIND_LABEL: Record<string, string> = {
+  rss: "RSS feed",
+  json_feed: "JSON feed",
+  telegram: "Telegram channel",
+  hn_thread: "HN Who is hiring",
+  company_list: "company list",
+};
+
 /**
  * Where JobFlow looks for jobs: a built-in preset (switchable, feeds toggleable) PLUS your
  * own sources. Everything here is public data fetched politely from the server (Tier 1–2);
@@ -36,6 +45,7 @@ export function DiscoveryView() {
   const [value, setValue] = useState("");
   const [label, setLabel] = useState("");
   const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = async () => {
     const r = await fetch("/api/discovery");
@@ -48,6 +58,7 @@ export function DiscoveryView() {
   async function op(body: Record<string, unknown>) {
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
       const r = await fetch("/api/discovery", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const out = await r.json();
@@ -81,27 +92,37 @@ export function DiscoveryView() {
                   : { kind, storyId: v || null },
           };
     if (await op(body)) {
+      setNotice(`Added ${kind === "company" ? "the company" : `“${label || v || "the latest HN thread"}”`}. It's fetched on the next sync — or sync now under “Sync” below.`);
       setValue("");
       setLabel("");
     }
   }
 
-  if (!data) return <p className="hint" role="status">loading…</p>;
+  if (!data)
+    return (
+      <div role="status">
+        <p className="hint">Loading your sources…</p>
+        <Skeleton lines={3} />
+      </div>
+    );
   const active = data.presets.filter((p) => p.active);
 
   return (
     <div className="settings">
       <section className="card-block">
-        <h2>
-          Built-in presets <span className="hint">— curated starting sets of companies and boards; switch on as many as you like</span>
-        </h2>
+        <h2>Presets</h2>
+        <p className="hint">
+          Curated starting sets of companies and job boards. Switch on every region you'd work in — each one is also a tag you can filter Jobs and
+          Search by.
+        </p>
         <div className="onb-presets">
           {data.presets.map((p) => (
             <button
               key={p.id}
               type="button"
               className="onb-preset"
-              data-on={p.active} aria-pressed={p.active}
+              data-on={p.active}
+              aria-pressed={p.active}
               disabled={busy || (p.active && active.length === 1)}
               title={p.active && active.length === 1 ? "keep at least one preset on" : p.active ? "click to switch off" : "click to switch on"}
               onClick={() => void op({ op: "preset", id: p.id, enabled: !p.active })}
@@ -116,11 +137,20 @@ export function DiscoveryView() {
         </div>
         {active.map((a) => (
           <div key={a.id}>
-            <p className="hint" style={{ marginTop: 12 }}>Feeds in “{a.label}” (click to turn off/on):</p>
+            <p className="hint" style={{ marginTop: 12 }}>Boards in “{a.label}” — click one to pause or resume it:</p>
             <div className="chip-row">
               {a.feeds.map((f) => (
-                <button key={f.id} type="button" className="chip" data-on={f.enabled} aria-pressed={f.enabled} onClick={() => void op({ op: "preset_feed", feedId: f.id, enabled: !f.enabled })}>
-                  {f.source} · {f.id}
+                <button
+                  key={f.id}
+                  type="button"
+                  className="chip"
+                  data-on={f.enabled}
+                  aria-pressed={f.enabled}
+                  title={f.enabled ? "polled on every sync — click to pause" : "paused — click to resume"}
+                  onClick={() => void op({ op: "preset_feed", feedId: f.id, enabled: !f.enabled })}
+                >
+                  {f.source.replace(/_/g, " ")}
+                  {f.enabled ? "" : " (paused)"}
                 </button>
               ))}
             </div>
@@ -129,9 +159,11 @@ export function DiscoveryView() {
       </section>
 
       <section className="card-block">
-        <h2>
-          Your sources <span className="hint">— added on top of the preset; polled on every sync</span>
-        </h2>
+        <h2>Your own sources</h2>
+        <p className="hint">
+          Add a company you want to watch, a job feed, a Telegram channel or an HN “Who is hiring” thread. They're fetched on every sync, on
+          top of your presets. Public links only — logged-in sites are only ever read by your local agent.
+        </p>
         <div className="field-row">
           <label>
             type
@@ -140,12 +172,25 @@ export function DiscoveryView() {
               <option value="json_feed">JSON feed</option>
               <option value="telegram">Telegram channel</option>
               <option value="hn_thread">HN “Who is hiring” thread</option>
-              <option value="company">company (careers URL or name)</option>
+              <option value="company">a company (careers page or name)</option>
             </select>
           </label>
           <label style={{ flex: "1 1 260px" }}>
-            {kind === "telegram" ? "channel" : kind === "hn_thread" ? "story id (blank = latest)" : kind === "company" ? "careers URL or name" : "feed URL"}
-            <input value={value} onChange={(e) => setValue(e.target.value)} />
+            {kind === "telegram" ? "channel" : kind === "hn_thread" ? "story id (blank = the latest thread)" : kind === "company" ? "careers page URL or company name" : "feed URL"}
+            <input
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && void add()}
+              placeholder={
+                kind === "telegram"
+                  ? "e.g. remote_jobs_channel or https://t.me/…"
+                  : kind === "hn_thread"
+                    ? "e.g. 42575537"
+                    : kind === "company"
+                      ? "e.g. https://boards.greenhouse.io/acme or Acme"
+                      : "https://example.com/jobs.rss"
+              }
+            />
           </label>
           {kind !== "company" && (
             <label>
@@ -153,29 +198,45 @@ export function DiscoveryView() {
               <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="optional" />
             </label>
           )}
-          <button type="button" className="save" disabled={busy} onClick={() => void add()}>
-            add
-          </button>
+          <Button variant="primary" disabled={busy || (!value.trim() && kind !== "hn_thread")} onClick={() => void add()}>
+            {busy ? "checking…" : "Add"}
+          </Button>
         </div>
-        {error && <p className="auth-error" role="alert">{error}</p>}
+        {error && (
+          <p className="auth-error" role="alert">
+            Couldn't add that: {error}
+          </p>
+        )}
+        <div aria-live="polite">{notice && <p className="notice">{notice}</p>}</div>
         <ul className="tokens-list" style={{ marginTop: 14 }}>
           {data.sources.map((s) => (
             <li key={s.id} data-revoked={!s.enabled}>
               <b>{s.label}</b>
-              <span className="hint">{s.config.kind}</span>
-              <span className="hint">
-                {s.lastRunAt ? `${s.lastStatus ?? ""} · ${s.lastCount ?? 0} found` : "not run yet"}
-                {s.lastError ? ` · ${s.lastError}` : ""}
+              <span className="hint">{KIND_LABEL[s.config.kind] ?? s.config.kind}</span>
+              <span className="hint" data-error={!!s.lastError || undefined}>
+                {!s.enabled
+                  ? "paused"
+                  : s.lastRunAt
+                    ? `last run ${new Date(s.lastRunAt).toLocaleString()} · ${s.lastError ? `failed: ${s.lastError}` : `${s.lastCount ?? 0} job${s.lastCount === 1 ? "" : "s"} found`}`
+                    : "not run yet — runs on the next sync"}
               </span>
-              <button type="button" className="chip" onClick={() => void op({ op: "toggle", id: s.id, enabled: !s.enabled })}>
-                {s.enabled ? "disable" : "enable"}
-              </button>
-              <button type="button" className="chip" onClick={() => void op({ op: "remove", id: s.id })}>
-                remove
-              </button>
+              <span className="tokens-list__actions">
+                <Button size="sm" variant="ghost" onClick={() => void op({ op: "toggle", id: s.id, enabled: !s.enabled })} aria-label={`${s.enabled ? "Pause" : "Resume"} ${s.label}`}>
+                  {s.enabled ? "pause" : "resume"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="btn--danger-quiet"
+                  aria-label={`Remove ${s.label}`}
+                  onClick={() => window.confirm(`Remove “${s.label}”? Jobs it already found stay in your list.`) && void op({ op: "remove", id: s.id })}
+                >
+                  remove
+                </Button>
+              </span>
             </li>
           ))}
-          {data.sources.length === 0 && <li className="hint">None yet — the preset is doing all the work.</li>}
+          {data.sources.length === 0 && <li className="hint">None yet — your presets are doing all the work. That's fine to start with.</li>}
         </ul>
       </section>
     </div>

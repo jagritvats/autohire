@@ -1,15 +1,6 @@
-import { pageAuth } from "@/lib/auth";
-import { PageHeader } from "@/components/ui";
-import { SearchView } from "@/components/SearchView";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export default async function SearchesPage() {
-  await pageAuth("/searches");
-  return (
-    <div className="page">
-      <PageHeader title="Search" />
-      <SearchView />
-    </div>
-  );
+/** Renamed: Search lives at /search. */
+export default function SearchesPage() {
+  redirect("/search");
 }

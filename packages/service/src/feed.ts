@@ -112,6 +112,8 @@ export interface FeedOptions {
 }
 
 let corpusSync: Promise<void> | null = null;
+/** what to run once the current sync finishes — every caller's, including ones that JOINED it */
+let afterSync: Array<() => Promise<void>> = [];
 
 /** Is a background corpus sync running in this process? */
 export function corpusSyncing(): boolean {
@@ -120,18 +122,29 @@ export function corpusSyncing(): boolean {
 
 /**
  * Start (or join) a background discover → poll of the shared corpus. Deduped: concurrent
- * callers share one run. Request handlers never await it — the UI shows "syncing".
+ * callers share one run, and each joiner's `after` still runs when it ends (e.g. a person
+ * who finishes onboarding while the first browse sync is running still gets ranked).
+ * Request handlers never await it — the UI shows "syncing".
  */
-export function startCorpusSync(repo: Repository, after?: () => Promise<void>): Promise<void> {
+export function startCorpusSync(repo: Repository, after?: () => Promise<void>, sync: (repo: Repository) => Promise<unknown> = syncCorpus): Promise<void> {
+  if (after) afterSync.push(after);
   corpusSync ??= (async () => {
     try {
-      await syncCorpus(repo);
-      if (after) await after();
+      await sync(repo);
     } catch (e) {
       console.error("[jobflow] corpus sync failed:", e instanceof Error ? e.message : e);
-    } finally {
-      corpusSync = null;
     }
+    // still "syncing" until every follow-up (ranking) is done, so the UI never reads a
+    // finished-but-unranked feed; steps added meanwhile run in this same loop
+    while (afterSync.length) {
+      const fn = afterSync.shift()!;
+      try {
+        await fn();
+      } catch (e) {
+        console.error("[jobflow] after-sync step failed:", e instanceof Error ? e.message : e);
+      }
+    }
+    corpusSync = null;
   })();
   return corpusSync;
 }
@@ -239,8 +252,9 @@ async function shapeBrowse(repo: Repository, tenantId: string, postings: Posting
 
 /** Card context — the per-user overlays needed to render correct action state. */
 interface CardCtx {
-  /** the profile's years of experience — to mark how far the JD's ask is. */
-  yoe: number;
+  /** the profile's years of experience — to mark how far the JD's ask is (null before
+   *  onboarding: there's no candidate to compare with yet). */
+  yoe: number | null;
   appliedKeys: Set<string>;
   bookmarked: Set<string>;
   archived: Set<string>;
@@ -257,7 +271,7 @@ async function cardCtx(repo: Repository, tenantId: string, companies?: Awaited<R
     companies ?? repo.listCompanies(),
   ]);
   return {
-    yoe: (profile ?? blankProfile(tenantId)).yoe,
+    yoe: isOnboarded(profile) ? (profile ?? blankProfile(tenantId)).yoe : null,
     appliedKeys,
     bookmarked: userState.bookmarked,
     archived: userState.archived,
@@ -398,8 +412,8 @@ function ratingOf(p: Posting): { overall: number; reviews: number } | null {
 }
 
 /** Same bands the scorer uses: ≤1 yr short is normal, 2 a stretch, 3+ usually screened out. */
-function experienceFit(min: number | null, yoe: number): "ok" | "stretch" | "far" | null {
-  if (min == null) return null;
+function experienceFit(min: number | null, yoe: number | null): "ok" | "stretch" | "far" | null {
+  if (min == null || yoe == null) return null;
   const gap = min - yoe;
   return gap <= 1 ? "ok" : gap <= 2 ? "stretch" : "far";
 }

@@ -1,6 +1,6 @@
 import type { Command } from "commander";
 import { isOnboarded, loadProfile } from "@jobflow/pipeline";
-import { findSearch, getFeed, listTailored, toCards } from "@jobflow/service";
+import { findSearch, getFeed, getJob, listTailored, toCards } from "@jobflow/service";
 import type { Ctx } from "../context.js";
 import { notFound, usage } from "../errors.js";
 import { ago } from "../output.js";
@@ -75,8 +75,17 @@ export function register(program: Command, ctx: Ctx): void {
       const [card] = await toCards(repo, ctx.tenantId, [{ posting, match }]);
       const app = await repo.getApplicationByPosting(ctx.tenantId, posting.id);
       const drafts = await listTailored(repo, ctx.tenantId, posting.id).catch(() => []);
+      const job = await getJob(repo, ctx.files(), ctx.tenantId, posting.id);
+      const r = ref.replace(/^#/, "");
       ctx.out.emit(
-        { card, posting: { ...posting, jdEmbedding: undefined }, match, application: app, drafts: drafts.map((d) => ({ kind: d.kind, source: d.source, stale: d.stale, createdAt: d.createdAt })) },
+        {
+          card,
+          posting: { ...posting, jdEmbedding: undefined },
+          match,
+          application: app,
+          drafts: drafts.map((d) => ({ kind: d.kind, source: d.source, stale: d.stale, createdAt: d.createdAt })),
+          apply: job.apply,
+        },
         () => {
           const out = ctx.out;
           if (kept) out.hint("(saved this search result to your corpus)");
@@ -94,10 +103,20 @@ export function register(program: Command, ctx: Ctx): void {
           kv("tracker", app ? `${app.status}${app.nextAction ? ` · next: ${app.nextAction}` : ""}` : "not tracked");
           if (drafts.length) kv("drafts", drafts.map((d) => `${d.kind}${d.source === "builtin" ? " (builtin)" : ""}${d.stale ? " (stale)" : ""}`).join(", "));
           kv("apply", posting.applyUrl ?? "(no apply link)");
+          const gaps = job.apply.missing.filter((m) => m !== "applyUrl");
+          kv("ready?", gaps.length ? out.yellow(`not yet — missing ${gaps.join(", ")} (jobflow apply ${r} shows how to fix)`) : out.green("yes — name, email and a résumé file are set"));
+          if (match?.whyFit) kv("why", match.whyFit);
+          if (match?.gap) kv("gap", match.gap);
           if (o.jd) {
             out.line();
             out.line(posting.jdText || out.dim("(no description)"));
           } else if (posting.jdText) out.hint("full description: add --jd");
+          const next = !app
+            ? [`jobflow track add ${r}`, `jobflow tailor ${r}`, `jobflow apply ${r}`]
+            : ["saved", "drafting", "ready"].includes(app.status)
+              ? [`jobflow tailor ${r}`, `jobflow apply ${r} --fill`, `jobflow track status ${r} applied`]
+              : [`jobflow track next ${r} "follow up" --due <date>`, `jobflow track status ${r} interviewing`];
+          out.hint(`next: ${next.join(" · ")}`);
         },
       );
     });
