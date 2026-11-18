@@ -1,15 +1,112 @@
 # JobFlow web — design system
 
-The visual contract for `apps/web`. Tokens and component classes live in
-`apps/web/app/globals.css`; React wrappers in `apps/web/components/ui/`. If you add UI, compose
-these. Don't add bespoke colours or sizes.
+The visual contract for `apps/web`. The shared structure CSS is `apps/web/app/globals.css`;
+each visual style's tokens and component overrides are in `apps/web/app/styles/<style>.css`;
+React wrappers are in `apps/web/components/ui/`. If you add UI, compose these. Don't add
+bespoke colours or sizes.
 
-The current visual layer is **Concept A, "Editorial light"** (next section). It re-skins the
-"calm ledger" system below: the class names, primitives, semantic tones, component anatomy and
-accessibility rules are unchanged, while the palette, type, shape and page layouts differ. Where
-the two disagree, Concept A wins. The older tables are kept for the reasoning behind them.
+The app has **three styles** on one component tree (next section): **Editorial** (Concept A,
+"Editorial light" — the default), **Classic** (the "calm ledger" system it replaced) and
+**Spark** (Concept B). They share the class names, primitives, semantic tones, component
+anatomy and accessibility rules; the palette, type, shape and some page layouts differ. Each
+style's own section below keeps its reasoning and tokens.
+
+## Styles
+
+### How the switch works
+
+- **Style × theme.** `<html data-style="editorial|classic|spark">` sits next to the theme's
+  `data-theme` (`light`, `dark`, or absent for "follow the OS"). Six combinations, every one
+  measured (table below). Settings → Appearance picks the style (three small live preview cards)
+  and the theme; the header toggle still cycles the theme, and the two stay in sync through a
+  `jobflow:theme` window event.
+- **No flash.** The server renders `data-style="editorial"`. An inline `<head>` script
+  (`STYLE_INIT_SCRIPT` in `lib/style.ts`, next to `THEME_INIT_SCRIPT` in `lib/theme.ts`) sets a
+  saved style before first paint. Both scripts live in plain modules: a server component that
+  imports a constant from a `"use client"` file gets a client reference, not the string.
+- **Persistence.** Per browser, like the theme: `localStorage["jobflow-style"]` (the default is
+  stored as "no choice"), every access in try/catch. There's no cookie, because the theme has
+  none and the head script makes one unnecessary. It isn't saved to the account.
+- **Fonts.** `app/layout.tsx` loads all five families through `next/font` as CSS variables
+  (`--font-fraunces`, `--font-schibsted`, `--font-inter`, `--font-jakarta`, `--font-jbmono`).
+  Each style's tokens pick theirs (`--font-sans`, `--font-display`, `--font-mono`). Only
+  Editorial's faces are preloaded. A browser downloads the others only when a style uses them.
+
+### How the CSS is organised
+
+| file | holds |
+|---|---|
+| `app/globals.css` | everything the three styles share: layout, components and states written against tokens only, unscoped |
+| `app/styles/editorial.css`, `classic.css`, `spark.css` | that style's tokens (light + dark) and component overrides, every selector scoped `:where([data-style="<style>"]) …` |
+
+`:where()` adds no specificity, so a style's rule competes with a shared rule exactly as it did
+when each style was a single sheet: by specificity, then by order. The style sheets load after
+`globals.css`. A style rule that a **later** shared rule must still beat would win wrongly
+there, so those few rules sit inline in `globals.css`, scoped, right where the cascade needs
+them. Classic and Spark also define Editorial's token names (`--rule`, `--font-display`,
+`--fs-2xs`, `--tracking-caps`, `--measure`, `--read-max`, …) in their own terms. A shared rule
+written against any token therefore renders in every style.
+
+When you add UI:
+
+- Put structure and anything token-driven in `globals.css`, unscoped. It then looks right in all
+  three styles. Check it in each one (Settings → Appearance, or
+  `node scripts/screenshots.mjs --only styles`).
+- Put a look that only one style has in that style's sheet, scoped. If a shared rule after it
+  must still win a tie, put it inline in `globals.css`, scoped.
+- Never add a second component tree or page per style. Express markup differences as data
+  plus CSS (below).
+
+### One component tree, three presentations
+
+| piece | markup (rendered for every style) | Editorial | Classic | Spark |
+|---|---|---|---|---|
+| match score | `ScoreRing` → `.match__score` › `.score-ring` (svg ring + `.score-num` + `.score-ring__word`) + `.score-meter` | serif numeral over a band-colour rule | numeral + meter bar | ring around the numeral + the band's word |
+| Jobs header | `.feed-hero`: `Dateline`, `.feed-hero__eyebrow`, h1, `TodayLede`, stats incl. `.stat--shown` and `.feed-hero__extra` chips; numbers from `todaySummary()` (`lib/today.ts`) | dated masthead + one-sentence lede + shown/total | title + shown/total | "Today" hero + count chips (new this week, great matches, follow-ups due) |
+| empty state | `EmptyState` → `.empty__art` (svg drawing + icon tile) | italic serif line, no art | icon tile | the drawing + floating tile |
+
+A style hides what it doesn't draw (`display: none`, so it's out of the accessibility tree too)
+and flattens wrappers it doesn't need (`display: contents` on presentational spans only, never on
+an element that carries a role). The score keeps one accessible name in every style ("Match
+score 92 of 100, a great match").
+
+### Measured contrast, all six combinations (WCAG 2.2; text ≥ 4.5, UI ≥ 3)
+
+| pair | Editorial light | Editorial dark | Classic light | Classic dark | Spark light | Spark dark |
+|---|---|---|---|---|---|---|
+| text on bg / surface / surface-2 | 15.6 / 16.8 / 14.4 | 15.8 / 14.9 / 13.6 | 15.3 / 16.4 / 14.4 | 16.2 / 15.2 / 13.7 | 16.6 / 17.9 / 15.9 | 17.3 / 16.1 / 14.7 |
+| text-2 on bg / surface / surface-2 | 8.2 / 8.8 / 7.5 | 10.6 / 10.0 / 9.2 | 7.0 / 7.5 / 6.6 | 9.1 / 8.4 / 7.6 | 8.5 / 9.1 / 8.1 | 11.1 / 10.3 / 9.4 |
+| text-3 on bg / surface / surface-2 | 5.8 / 6.3 / 5.4 | 7.0 / 6.6 / 6.1 | 5.4 / 5.8 / 5.1 | 7.0 / 6.5 / 5.9 | 6.2 / 6.7 / 5.9 | 7.7 / 7.2 / 6.5 |
+| accent-text on bg / surface / accent-soft | 5.7 / 6.1 / 5.2 | 8.5 / 8.1 / 7.0 | 5.6 / 6.0 / 5.4 | 9.1 / 8.5 / 7.3 | 7.1 / 7.6 / 6.6 | 9.1 / 8.5 / 7.4 |
+| accent-on on accent-solid (primary button) | 5.5 | 6.5 | 5.2 | 5.2 | 6.4 | 6.0 |
+| good on bg / surface / good-soft | 5.8 / 6.3 / 5.4 | 9.9 / 9.3 / 8.1 | 5.0 / 5.3 / 4.8 | 9.9 / 9.3 / 7.9 | 5.0 / 5.4 / 4.8 | 11.0 / 10.2 / 8.6 |
+| info on bg / surface / info-soft | 6.2 / 6.7 / 5.7 | 9.0 / 8.5 / 7.7 | 5.3 / 5.7 / 5.1 | 9.0 / 8.4 / 7.1 | 5.7 / 6.1 / 5.4 | 9.5 / 8.8 / 7.8 |
+| warn on bg / surface / warn-soft | 5.7 / 6.2 / 5.3 | 10.9 / 10.3 / 9.1 | 5.3 / 5.7 / 5.5 | 12.3 / 11.5 / 10.3 | 5.8 / 6.2 / 5.7 | 12.6 / 11.8 / 10.2 |
+| bad on bg / surface / bad-soft | 6.7 / 7.2 / 5.8 | 8.5 / 8.0 / 7.3 | 5.9 / 6.3 / 5.5 | 9.0 / 8.3 / 7.7 | 5.6 / 6.1 / 5.3 | 9.0 / 8.4 / 7.6 |
+| spark-text on surface / spark-soft | — | — | — | — | 5.8 / 5.2 | 10.0 / 8.5 |
+| control-border on bg / surface (UI) | 3.4 / 3.7 | 4.2 / 3.9 | 3.5 / 3.8 | 3.7 / 3.4 | 3.2 / 3.5 | 4.4 / 4.1 |
+| focus ring on bg / surface (UI) | 4.9 / 5.3 | 8.5 / 8.1 | 4.9 / 5.2 | 7.8 / 7.3 | 5.9 / 6.4 | 9.1 / 8.5 |
+| score ring great / good / stretch on surface (UI) | — | — | — | — | 3.5 / 4.7 / 3.8 | 9.0 / 7.4 / 7.8 |
+| Spark header: white / `#f1ecff` on the lightest gradient stop | — | — | — | — | 5.7 / 4.9 | 5.7 / 4.9 |
+
+All values were computed from the style sheets' token blocks with the WCAG relative-luminance
+formula. Recompute after any palette change and update this table in the same PR. Every style
+keeps the 2px `--focus` ring with a 2px offset (Spark's is pill-safe, and white inside its brand
+bar), stops animations and transitions under `prefers-reduced-motion`, and has no horizontal
+scroll at 375px.
+
+### Tokens per style
+
+- **Editorial:** see [Concept A](#concept-a--editorial-light) below. Light (paper) is the base;
+  dark is "night paper".
+- **Classic:** see [Calm ledger](#calm-ledger-classic) below. Dark is the base and light
+  follows the OS or the toggle. Inter, the Radix slate/indigo/grass/blue/amber/red scales.
+- **Spark:** see [Concept B](#concept-b--spark) below. Dark is the base. Plus Jakarta Sans,
+  violet/coral, `--brand-gradient`, the score ring tokens.
 
 ## Concept A — "Editorial light"
+
+The Editorial style, and the default.
 
 ### Rationale
 
@@ -114,14 +211,127 @@ grey), so strength reads in type weight and colour, never in colour alone.
 
 ### Where it lives
 
-`globals.css` §1 (tokens), §2–4 (base, the masthead shell, primitives), §5–6 (feed and match
-card), and §13 (Concept A surfaces: the Jobs masthead, the Job page article grid, Applications
-figures, onboarding steps, presets, the Tailor grounding strip). Markup changes were limited to
-presentation: `Dateline` and `TodayLede` in `FeedView.tsx`, section class hooks in `JobView.tsx`
-(`ux-fit`, `ux-apply`, `ux-drafts`, `ux-desc`, `ux-dismiss`), the wordmark in `AppShell.tsx`,
-and the fonts in `app/layout.tsx`.
+Tokens and Editorial-only rules are in `app/styles/editorial.css` (the Jobs masthead, the Job
+page article grid, Applications figures, onboarding steps, presets, the Tailor grounding strip);
+what Editorial shares with the other styles is in `globals.css`. Its markup hooks are
+`Dateline` and `TodayLede` in `FeedView.tsx` and the section class hooks in `JobView.tsx`
+(`ux-fit`, `ux-apply`, `ux-drafts`, `ux-desc`, `ux-dismiss`). The other styles don't
+draw the dateline or the lede.
 
-## Calm ledger (the previous layer: reasoning kept, values superseded above)
+## Concept B — "Spark"
+
+The Spark style: a bold, colourful, consumer-grade product feel, built on the same tokens and
+primitives. Its tokens and overrides are in `app/styles/spark.css`.
+
+### Rationale
+
+- **Energy without noise.** The last overhaul was correct but read as "the same" neutral dark
+  tool. Spark keeps the information density and the honesty rules, and adds a brand: an
+  electric violet with a warm coral spark, a gradient brand bar, round friendly shapes and
+  soft tinted shadows. Trend research (2026 consumer UI round-ups: rounded cards, pill
+  buttons, vivid gradient accents; glassmorphism considered and rejected for readability)
+  informed the direction; the palette, mark and motifs are original.
+- **Colour still means something, and never alone.** Violet = you can act here. Emerald /
+  azure / amber / rose keep the `good` / `info` / `warn` / `bad` meanings. Coral is decoration
+  and the "stretch" score band only. Every coloured signal also carries a word or an icon
+  (score ring + number + "great/good/stretch", ✓ on selected chips, ⚠ on flags, `~ … est N%`
+  on estimates).
+- **The score is a ring.** A 0–100 arc in the band colour around the number, with the band
+  word underneath (`ScoreRing`; great ≥ 78 emerald, good 60–77 azure, stretch < 60 coral).
+  The same thresholds as before; one accessible name ("Match score 92 of 100, a great match").
+- **A "today" hero on Jobs.** Eyebrow, the h1, and stat chips derived from data already on the
+  page: new this week (≤ 7 days), great matches, follow-ups due (links to Applications), jobs
+  in your list, left out by pay/location. Other pages open on the same hero card (wash +
+  h1 + intro), so every page shares one rhythm.
+- **Drawn empty states.** `EmptyState` renders a small inline-SVG scene (two cards on a tinted
+  blob, a mini score ring, sparkles) with the state's own icon on a brand tile — theme tokens
+  only, no assets, `aria-hidden`.
+- **Motion with a job.** The ring draws in (900ms), selected chips pop their ✓, cards lift 2px
+  on hover, buttons press to 97%, notices and the mobile menu rise in, the empty-state tile
+  floats. All of it stops under `prefers-reduced-motion` (durations → 0, hover transforms off).
+
+### Palette (dark is `:root`; light via the OS or the toggle)
+
+| token | light | dark | role |
+|---|---|---|---|
+| `--bg` | `#f7f5fc` | `#0e0b1a` | page (a faint violet tint) |
+| `--surface` / `-2` / `-3` | `#ffffff` / `#f3f0fa` / `#e9e4f6` | `#171329` / `#201b36` / `#2a2442` | cards, fills, pressed |
+| `--border` / `-strong` | `#e7e2f3` / `#d6cfea` | `#2c2645` / `#3b3459` | decorative edges |
+| `--control-border` | `#8c84a8` | `#7a72a0` | input edges (≥ 3:1) |
+| `--text` / `-2` / `-3` | `#18132e` / `#4a4463` / `#5f5878` | `#f3f0fd` / `#c6c0de` / `#a59fc0` | text |
+| `--accent-solid` → `--accent-solid-2` | `#6633ee` → `#8a35e0` | `#6a3cf0` → `#8a35e0` | `--button-gradient`: primary buttons, selected chips/nav |
+| `--accent-text` / `-soft` / `-border` | `#5a2bd6` / `#f0ebff` / `#cbbcff` | `#b9a4ff` / `#251a4d` / `#4e38a6` | links, tonal fills |
+| `--spark` / `-text` / `-soft` | `#ff7a45` / `#b43d0e` / `#fff0e8` | `#ff8a5c` / `#ffad8a` / `#3a1d14` | warm secondary (decor, "stretch") |
+| `--good` / `--info` / `--warn` / `--bad` | `#0b7a50` / `#0a63b0` / `#925000` / `#c0193f` | `#5ad9a3` / `#72bbff` / `#ffc857` / `#ff8fa8` | semantic text + icons |
+| `--score-great` / `-good` / `-stretch` | `#0f9d63` / `#2f6fe4` / `#e0561f` | `#3ccf8e` / `#5aa9ff` / `#ff8a5c` | ring strokes |
+| `--focus` | `#6633ee` | `#b9a4ff` | 2px ring, 2px offset (white inside the brand bar) |
+| `--brand-gradient` | `#4b1fd1 → #6a2ae0 → #8b2fd6 → #b8306f` | same | the header (same chrome in both themes) |
+
+Inside `.app-header` the colour tokens are re-pointed at a light-on-brand set (`--text` white,
+`--text-2/-3` `#f1ecff`, translucent surfaces, pale semantic tones), so anything rendered in the
+header — theme toggle, account menu, a sync/status pill — stays legible with no bespoke colour.
+The active nav item is a white pill with `#5a2bd6` text.
+
+### Measured contrast (WCAG 2.2; text ≥ 4.5, UI ≥ 3)
+
+| pair | light | dark |
+|---|---|---|
+| text on bg / surface | 16.6 / 17.9 | 17.3 / 16.1 |
+| text-2 on bg / surface-2 / surface-3 | 8.5 / 8.1 / 7.4 | 11.1 / 9.4 / 8.4 |
+| text-3 on bg / surface / surface-2 / surface-3 | 6.2 / 6.7 / 5.9 / 5.4 | 7.7 / 7.2 / 6.5 / 5.8 |
+| white on accent-solid / accent-solid-2 (gradient ends) | 6.4 / 5.7 | 6.0 / 5.7 |
+| accent-text on surface / accent-soft / surface-2 | 7.6 / 6.6 / 6.8 | 8.5 / 7.4 / 7.7 |
+| good / info / warn / bad on surface | 5.4 / 6.1 / 6.2 / 6.1 | 10.2 / 8.8 / 11.8 / 8.4 |
+| good / info / warn / bad on own soft fill (badges, ring word) | 4.8 / 5.4 / 5.7 / 5.3 | 8.7 / 7.8 / 10.2 / 7.6 |
+| spark-text on surface / spark-soft ("stretch") | 5.8 / 5.2 | 10.0 / 8.5 |
+| count pill (`#1d0c05` on spark) | 7.3 | 8.2 |
+| control-border on surface (UI) | 3.5 | 4.1 |
+| focus on surface / bg (UI) | 6.4 / 5.9 | 8.5 / 9.1 |
+| ring strokes great / good / stretch on surface (UI) | 3.5 / 4.7 / 3.8 | 9.1 / 7.4 / 7.8 |
+| header: white on darkest / lightest gradient stop | 8.7 / 5.7 | same |
+| header: `#f1ecff` on lightest stop; active nav on white | 4.9; 7.6 | same |
+
+### Type — Plus Jakarta Sans (UI) + JetBrains Mono (code-like only)
+
+Both through `next/font/google`, self-hosted at build (Jakarta at 400/500/600/700/800). Jakarta's
+word space is narrow, so `body` adds `word-spacing: 0.05em`. Numbers use tabular figures.
+
+| token | px | use |
+|---|---|---|
+| `--fs-xs` | 12 | badges, captions, uppercase rail labels (700, +0.05em) |
+| `--fs-sm` | 13 | secondary text, buttons, chips |
+| `--fs-base` | 14 | body (line-height 1.55) |
+| `--fs-md` | 15 | page intros, hero stat values |
+| `--fs-lg` | 18 | panel titles (800); card titles are 19px/800 |
+| `--fs-xl` | 22 | stats |
+| `--fs-2xl` | 30 | page h1 (800, −0.03em) |
+| `--fs-3xl` | 36 | the Jobs hero h1 |
+
+### Shape, space, elevation
+
+- Radii: `--r-sm` 8 · `--r-md` 12 (inputs, flags, banners) · `--r-lg` 20 (cards, panels) ·
+  `--r-xl` 28 (hero cards) · `--r-full` (buttons, chips, badges, segmented, nav, search bar).
+- Controls: `--h-sm` 30 · `--h-md` 38 · `--h-lg` 44 (40 minimum on coarse pointers; the search
+  bar is 48).
+- Shadows are tinted violet in light (`--shadow-sm/md/lg`), deeper black in dark; primary
+  buttons and selected states add `--shadow-brand`.
+- Layout: `--header-h` 60 (56 on phones) · `--gutter` 28 (16 at ≤ 640px) · `--rail-w` 292 (the
+  filter rail floats as its own rounded card; a 360px sheet ≤ 960px).
+
+### New / changed primitives
+
+| piece | where | notes |
+|---|---|---|
+| `ScoreRing` (`.score-ring`, `--md`/`--lg`) | `components/ui/primitives.tsx` | `scoreBand()` + `SCORE_WORD`; tested in `apps/web/test/style.test.ts` |
+| `EmptyState` art (`.empty__art`) | same | inline SVG, tokens only |
+| `Stat` tones `accent` / `info` / `warn` | same | hero stat chips |
+| `.feed-hero`, `.stat-link` | `styles/spark.css` | Jobs "today" hero |
+| skill pills | `.match__skill` | dot + name; they make no have/learn claim (the stack note does) |
+
+## Calm ledger (Classic)
+
+The Classic style. Its tokens and overrides are in `app/styles/classic.css`; the tables below
+are its values.
 
 ### Rationale
 

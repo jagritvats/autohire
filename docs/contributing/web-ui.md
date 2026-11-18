@@ -54,19 +54,31 @@ lib/*.ts                    web-only glue (repo, auth, nav, card text). App logi
 
 ## The design system
 
-Tokens and component classes are in `apps/web/app/globals.css`. React wrappers are in
+The shared structure CSS is `apps/web/app/globals.css`. Each visual style's tokens and
+overrides are in `apps/web/app/styles/<style>.css`. React wrappers are in
 `apps/web/components/ui/` and exported from `apps/web/components/ui/index.ts`. Compose these.
 Don't add one-off colours, font sizes, spacing or shadows.
 
-### Tokens and themes
+### Styles and themes
 
-- The look is Concept A, "Editorial light" ([DESIGN.md](../internal/DESIGN.md#concept-a--editorial-light)).
-  Light (warm paper) is the `:root` base. Dark ("night paper") applies when the OS asks for
-  it, or when the user picks it with the header toggle (`ThemeToggle`, stored in
-  `localStorage["jobflow-theme"]`). Every colour token is defined for both themes, so use
-  `var(--text-2)`, never a hex value.
-- Two faces: `--font-display` (Fraunces) for headings and score numerals, and `--font-sans`
-  (Schibsted Grotesk) for everything else. `h1`–`h3` get the display face automatically.
+- There are three **styles** on one component tree, picked in Settings → Appearance:
+  **Editorial** (the default, Concept A), **Classic** (the calm ledger) and **Spark**
+  (Concept B). Each has a light and a dark **theme**. The style is `data-style` on `<html>`
+  (`lib/style.ts`, `localStorage["jobflow-style"]`). The theme is `data-theme`
+  (`lib/theme.ts`, `localStorage["jobflow-theme"]`, also switched by the header toggle). Both
+  are applied before first paint by inline head scripts. See
+  [DESIGN.md → Styles](../internal/DESIGN.md#styles).
+- **New UI goes in `globals.css`, unscoped and written against tokens.** It then renders in
+  all six style × theme combinations. Every style defines every token, so use
+  `var(--text-2)`, never a hex value. A look that only one style should have goes in that
+  style's sheet, scoped `:where([data-style="…"])`. Check your change in each style:
+  `node scripts/screenshots.mjs --only styles`, or switch in Settings → Appearance.
+- Never fork a component or a page per style. When styles present the same thing
+  differently, render the parts once and let each style's CSS show the ones it uses. The
+  match score (`ScoreRing`), the Jobs header (`todaySummary`) and `EmptyState` work this way.
+- Faces come from tokens: `--font-display` for headings and score numerals (Fraunces in
+  Editorial, the sans in the others) and `--font-sans` for everything else (Schibsted
+  Grotesk, Inter or Plus Jakarta Sans). `h1`–`h3` get the display face automatically.
 - Type sizes (`--fs-2xs` 11px to `--fs-2xl` 44px, plus `--fs-score`), spacing on a 4px grid
   (`--s-1` to `--s-16`), radii, control heights and shadows are all tokens. Nothing is smaller
   than 11px. Numbers use tabular figures.
@@ -93,10 +105,10 @@ always marked as an estimate: a modeled salary gets `.badge--estimate` (dashed b
 
 ### Contrast
 
-Text pairs must be at least 4.5:1 in **both** themes, and UI edges (input borders, focus
-ring) at least 3:1. The measured pairs are in
-[DESIGN.md](../internal/DESIGN.md#measured-contrast-wcag-22-aa-text--45-ui--3). If you
-change a palette value, recompute the table and update it in the same PR.
+Text pairs must be at least 4.5:1 in **every** style × theme combination (six), and UI edges
+(input borders, focus ring) at least 3:1. The measured pairs are in
+[DESIGN.md → Styles](../internal/DESIGN.md#measured-contrast-all-six-combinations-wcag-22-text--45-ui--3).
+If you change a palette value, recompute the table and update it in the same PR.
 
 ### Primitives
 
@@ -152,7 +164,7 @@ These come from [UX_AUDIT.md](../internal/UX_AUDIT.md) and hold on every screen.
 - [ ] Async results, saves and sync progress are announced (`Banner live` or `aria-live`).
 - [ ] Animations stop under `prefers-reduced-motion`; nothing depends on motion.
 - [ ] At 375px wide nothing scrolls horizontally, and touch targets grow on coarse pointers.
-- [ ] Contrast holds in light and dark.
+- [ ] Contrast holds in light and dark, in every style (Editorial, Classic, Spark).
 
 ## Screenshots and visual review
 
@@ -162,11 +174,15 @@ fictional people and companies:
 ```bash
 pnpm screenshots                                                   # build the web app, then shoot everything
 pnpm --filter @jobflow/web build && node scripts/screenshots.mjs --only jobs,settings-light
+node scripts/screenshots.mjs --only styles                         # the Jobs page in every style, light + dark
+node scripts/screenshots.mjs --only jobs,job --style spark         # the docs pages in another style
 ```
 
 `scripts/screenshots.mjs` starts the app with `JOBFLOW_DEMO_DATA=1` and the echo model, then
 writes `docs/screenshots/*.png`: every page in dark, key pages in light (`*-light.png`), and
-375px mobile views (`*-mobile*.png`). It warns when a page overflows horizontally. It needs
+375px mobile views (`*-mobile*.png`), all in one style (`--style`, default Editorial). It
+also writes the style set: `styles-<style>-light.png` / `-dark.png`, the Jobs page in each
+style. It warns when a page overflows horizontally. It needs
 Playwright and Chromium. If Playwright isn't resolvable from the repo root the script prints
 how to add it; don't commit that `package.json` change. If Playwright can't find its own
 Chromium, set `JOBFLOW_CHROMIUM` to a local Chrome or Chromium. The `cli-*.png` images are

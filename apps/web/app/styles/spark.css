@@ -1,0 +1,1429 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Style: SPARK — Concept B.
+   An energetic, friendly product: an electric-violet brand with a warm coral spark, a
+   gradient brand bar, rounded cards on soft tinted shadows, Plus Jakarta Sans, and colour
+   that always MEANS something (and never works alone — every coloured signal also carries a
+   word or icon):
+     brand  (violet)  you can act here: primary buttons, selected chips, links, focus
+     good   (emerald) strong match / stated & verified / done
+     info   (azure)   a neutral fact worth noticing (employer board, fair match)
+     warn   (amber)   caution — read before you apply (flags, US-only remote, low trust)
+     bad    (rose)    exclusions, invalidations, destructive actions
+   Match score is a ring: great (emerald) · good (azure) · stretch (coral), always with the
+   number AND the word. Dark is this style's base theme; light when the OS or toggle asks.
+   Every selector is scoped to [data-style="spark"] with :where() (no added specificity);
+   the shared structure is app/globals.css. Spec + measured ratios: docs/internal/DESIGN.md.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* ── 1. tokens — dark is the base; light is the system default when the OS asks for it ── */
+:root:where([data-style="spark"]), :root [data-style-preview="spark"] {
+  color-scheme: dark;
+  --bg: #0e0b1a;
+  --surface: #171329;
+  --surface-2: #201b36;
+  --surface-3: #2a2442;
+  --border: #2c2645;
+  --border-strong: #3b3459;
+  --control-border: #7a72a0;
+  --text: #f3f0fd;
+  --text-2: #c6c0de;
+  --text-3: #a59fc0;
+
+  --accent-solid: #6a3cf0;
+  --accent-solid-hover: #7a4ef8;
+  --accent-solid-2: #8a35e0;
+  --accent-on: #ffffff;
+  --accent-text: #b9a4ff;
+  --accent-soft: #251a4d;
+  --accent-border: #4e38a6;
+
+  /* the warm secondary: decoration, the "stretch" ring, sparkles — never a status on its own */
+  --spark: #ff8a5c;
+  --spark-text: #ffad8a;
+  --spark-soft: #3a1d14;
+
+  --good: #5ad9a3;
+  --good-soft: #0f2a22;
+  --good-border: #1f5c47;
+  --good-solid: #3ccf8e;
+  --info: #72bbff;
+  --info-soft: #0d2240;
+  --info-border: #24508a;
+  --warn: #ffc857;
+  --warn-soft: #2e2108;
+  --warn-border: #6b4f16;
+  --bad: #ff8fa8;
+  --bad-soft: #3a1220;
+  --bad-border: #85304a;
+  --bad-solid: #e5294f;
+
+  /* match-score ring strokes (UI ≥ 3:1 on surface); the text beside them uses good/info/spark-text */
+  --score-great: #3ccf8e;
+  --score-good: #5aa9ff;
+  --score-stretch: #ff8a5c;
+  --score-track: #2c2645;
+
+  --focus: #b9a4ff;
+  --overlay: rgba(8, 5, 20, 0.66);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.02);
+  --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.6);
+  --shadow-brand: 0 6px 18px rgba(106, 60, 240, 0.45);
+  --header-bg: rgba(14, 11, 26, 0.86);
+  --paper: #f4f4f2; /* document previews are always paper-white */
+
+  /* brand gradients — the same chrome in both themes */
+  --brand-gradient: linear-gradient(100deg, #4b1fd1 0%, #6a2ae0 38%, #8b2fd6 62%, #b8306f 100%);
+  --button-gradient: linear-gradient(135deg, var(--accent-solid) 0%, var(--accent-solid-2) 100%);
+  --hero-wash: radial-gradient(120% 140% at 0% 0%, rgba(106, 60, 240, 0.28) 0%, rgba(106, 60, 240, 0) 55%),
+    radial-gradient(90% 120% at 100% 100%, rgba(255, 138, 92, 0.18) 0%, rgba(255, 138, 92, 0) 60%);
+
+  /* type — a rounded geometric sans for everything; mono only for code-like bits */
+  --font-sans: var(--font-jakarta, "Plus Jakarta Sans"), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: var(--font-jbmono, "JetBrains Mono"), ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-base: 14px;
+  --fs-md: 15px;
+  --fs-lg: 18px;
+  --fs-xl: 22px;
+  --fs-2xl: 30px;
+  --fs-3xl: 36px;
+  --lh-tight: 1.2;
+  --lh: 1.55;
+
+  /* space (4px grid) */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --s-10: 40px;
+  --s-12: 48px;
+
+  /* shape — friendly and round */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 20px;
+  --r-xl: 28px;
+  --r-full: 999px;
+
+  /* controls */
+  --h-sm: 30px;
+  --h-md: 38px;
+  --h-lg: 44px;
+
+  /* layout */
+  --header-h: 60px;
+  --gutter: 28px;
+  --content-max: 1080px;
+  --wide-max: 1440px;
+  --rail-w: 292px;
+
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur: 160ms;
+
+  /* Editorial's token names, in this style's terms — shared structure may use any token */
+  --rule: var(--border-strong);
+  --font-display: var(--font-sans);
+  --fs-2xs: 11px;
+  --fs-score: 24px;
+  --fs-score-lg: 30px;
+  --lh-read: 1.65;
+  --measure: 70ch;
+  --tracking-caps: 0.06em;
+  --s-16: 64px;
+  --read-max: 760px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:where([data-style="spark"]):not([data-theme="dark"]), :root:not([data-theme="dark"]) [data-style-preview="spark"] {
+    color-scheme: light;
+    --bg: #f7f5fc;
+    --surface: #ffffff;
+    --surface-2: #f3f0fa;
+    --surface-3: #e9e4f6;
+    --border: #e7e2f3;
+    --border-strong: #d6cfea;
+    --control-border: #8c84a8;
+    --text: #18132e;
+    --text-2: #4a4463;
+    --text-3: #5f5878;
+    --accent-solid: #6633ee;
+    --accent-solid-hover: #5726d9;
+    --accent-solid-2: #8a35e0;
+    --accent-on: #ffffff;
+    --accent-text: #5a2bd6;
+    --accent-soft: #f0ebff;
+    --accent-border: #cbbcff;
+    --spark: #ff7a45;
+    --spark-text: #b43d0e;
+    --spark-soft: #fff0e8;
+    --good: #0b7a50;
+    --good-soft: #e2f7ee;
+    --good-border: #94dcbc;
+    --good-solid: #16a86a;
+    --info: #0a63b0;
+    --info-soft: #e6f1fd;
+    --info-border: #9cc9f3;
+    --warn: #925000;
+    --warn-soft: #fff4dc;
+    --warn-border: #f0c46a;
+    --bad: #c0193f;
+    --bad-soft: #ffebf0;
+    --bad-border: #f6a7ba;
+    --bad-solid: #e5294f;
+    --score-great: #0f9d63;
+    --score-good: #2f6fe4;
+    --score-stretch: #e0561f;
+    --score-track: #ece8f6;
+    --focus: #6633ee;
+    --overlay: rgba(24, 19, 46, 0.42);
+    --shadow-sm: 0 1px 2px rgba(48, 28, 110, 0.06), 0 2px 8px rgba(72, 44, 160, 0.06);
+    --shadow-md: 0 14px 34px rgba(72, 44, 160, 0.14), 0 2px 6px rgba(48, 28, 110, 0.06);
+    --shadow-lg: 0 24px 60px rgba(48, 28, 110, 0.22);
+    --shadow-brand: 0 6px 16px rgba(102, 51, 238, 0.32);
+    --header-bg: rgba(255, 255, 255, 0.9);
+    --hero-wash: radial-gradient(120% 140% at 0% 0%, rgba(102, 51, 238, 0.13) 0%, rgba(102, 51, 238, 0) 55%),
+      radial-gradient(90% 120% at 100% 100%, rgba(255, 122, 69, 0.14) 0%, rgba(255, 122, 69, 0) 60%);
+  }
+}
+/* explicit choice from the theme toggle (kept identical to the block above) */
+:root:where([data-style="spark"])[data-theme="light"], :root[data-theme="light"] [data-style-preview="spark"] {
+  color-scheme: light;
+  --bg: #f7f5fc;
+  --surface: #ffffff;
+  --surface-2: #f3f0fa;
+  --surface-3: #e9e4f6;
+  --border: #e7e2f3;
+  --border-strong: #d6cfea;
+  --control-border: #8c84a8;
+  --text: #18132e;
+  --text-2: #4a4463;
+  --text-3: #5f5878;
+  --accent-solid: #6633ee;
+  --accent-solid-hover: #5726d9;
+  --accent-solid-2: #8a35e0;
+  --accent-on: #ffffff;
+  --accent-text: #5a2bd6;
+  --accent-soft: #f0ebff;
+  --accent-border: #cbbcff;
+  --spark: #ff7a45;
+  --spark-text: #b43d0e;
+  --spark-soft: #fff0e8;
+  --good: #0b7a50;
+  --good-soft: #e2f7ee;
+  --good-border: #94dcbc;
+  --good-solid: #16a86a;
+  --info: #0a63b0;
+  --info-soft: #e6f1fd;
+  --info-border: #9cc9f3;
+  --warn: #925000;
+  --warn-soft: #fff4dc;
+  --warn-border: #f0c46a;
+  --bad: #c0193f;
+  --bad-soft: #ffebf0;
+  --bad-border: #f6a7ba;
+  --bad-solid: #e5294f;
+  --score-great: #0f9d63;
+  --score-good: #2f6fe4;
+  --score-stretch: #e0561f;
+  --score-track: #ece8f6;
+  --focus: #6633ee;
+  --overlay: rgba(24, 19, 46, 0.42);
+  --shadow-sm: 0 1px 2px rgba(48, 28, 110, 0.06), 0 2px 8px rgba(72, 44, 160, 0.06);
+  --shadow-md: 0 14px 34px rgba(72, 44, 160, 0.14), 0 2px 6px rgba(48, 28, 110, 0.06);
+  --shadow-lg: 0 24px 60px rgba(48, 28, 110, 0.22);
+  --shadow-brand: 0 6px 16px rgba(102, 51, 238, 0.32);
+  --header-bg: rgba(255, 255, 255, 0.9);
+  --hero-wash: radial-gradient(120% 140% at 0% 0%, rgba(102, 51, 238, 0.13) 0%, rgba(102, 51, 238, 0) 55%),
+    radial-gradient(90% 120% at 100% 100%, rgba(255, 122, 69, 0.14) 0%, rgba(255, 122, 69, 0) 60%);
+}
+:root:where([data-style="spark"])[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+@media (max-width: 640px) {
+  :root:where([data-style="spark"]), :root [data-style-preview="spark"] {
+    --gutter: 16px;
+    --header-h: 56px;
+  }
+}
+:where([data-style="spark"]) body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  line-height: var(--lh);
+  /* Jakarta sets a narrow word space; a touch more keeps "Fetch jobs" from reading as one word */
+  word-spacing: 0.05em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+:where([data-style="spark"]) h1,
+:where([data-style="spark"]) h2,
+:where([data-style="spark"]) h3,
+:where([data-style="spark"]) h4 {
+  margin: 0;
+  line-height: var(--lh-tight);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+:where([data-style="spark"]) code {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1px 5px;
+}
+:where([data-style="spark"]) .skip-link {
+  position: absolute;
+  left: var(--s-3);
+  top: -100px;
+  z-index: 100;
+  background: var(--surface);
+  color: var(--accent-text);
+  padding: var(--s-2) var(--s-4);
+  border-radius: var(--r-full);
+  box-shadow: var(--shadow-md);
+  font-weight: 700;
+}
+:where([data-style="spark"]) .eyebrow {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-text);
+}
+:where([data-style="spark"]) .brand__mark {
+  display: block;
+  filter: drop-shadow(0 2px 6px rgba(20, 6, 70, 0.35));
+  transition: transform 300ms var(--ease-bounce);
+}
+:where([data-style="spark"]) .brand:hover .brand__mark {
+  transform: rotate(-8deg) scale(1.06);
+}
+:where([data-style="spark"]) .app-nav__link:hover {
+  color: var(--text);
+  background: var(--surface-2);
+  text-decoration: none;
+}
+/* the active page: a white pill on the brand bar, brand-violet text (7.6:1) */
+:where([data-style="spark"]) .app-nav__link[aria-current="page"] {
+  color: #5a2bd6;
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(20, 6, 70, 0.25);
+}
+:where([data-style="spark"]) .page-header__text {
+  min-width: 0;
+}
+:where([data-style="spark"]) .page-title {
+  font-size: var(--fs-2xl);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+:where([data-style="spark"]) .btn:active:not(:disabled),
+:where([data-style="spark"]) .save:active:not(:disabled),
+:where([data-style="spark"]) .cmd:active:not(:disabled),
+:where([data-style="spark"]) .apply:active,
+:where([data-style="spark"]) .track:active:not(:disabled),
+:where([data-style="spark"]) .mini:active:not(:disabled) {
+  transform: scale(0.97);
+}
+:where([data-style="spark"]) .btn--primary:disabled,
+:where([data-style="spark"]) .btn--primary[aria-disabled="true"] {
+  filter: saturate(0.4);
+}
+:where([data-style="spark"]) .chip:active:not(:disabled) {
+  transform: scale(0.95);
+}
+:where([data-style="spark"]) .chip[data-on="true"]::before,
+:where([data-style="spark"]) .chip[aria-pressed="true"]::before {
+  content: "✓";
+  font-weight: 800;
+  font-size: 0.95em;
+  animation: tick-in 220ms var(--ease-bounce);
+}
+:where([data-style="spark"]) .count-pill {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--r-full);
+  background: var(--spark);
+  color: #1d0c05;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+:where([data-style="spark"]) .badge--good .badge__dot {
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 22%, transparent);
+}
+:where([data-style="spark"]) .input:focus,
+:where([data-style="spark"]) .select:focus,
+:where([data-style="spark"]) .textarea:focus,
+:where([data-style="spark"]) .field input:focus,
+:where([data-style="spark"]) .field select:focus,
+:where([data-style="spark"]) .field textarea:focus,
+:where([data-style="spark"]) .field-row input:focus,
+:where([data-style="spark"]) .field-row select:focus,
+:where([data-style="spark"]) .add-row input:focus,
+:where([data-style="spark"]) .search-bar input:focus,
+:where([data-style="spark"]) .tokens-new input:focus,
+:where([data-style="spark"]) .auth-field input:focus,
+:where([data-style="spark"]) .ev-row input:focus,
+:where([data-style="spark"]) .ev-row textarea:focus,
+:where([data-style="spark"]) .reg-row select:focus,
+:where([data-style="spark"]) .crm-row select:focus,
+:where([data-style="spark"]) .crm-input:focus,
+:where([data-style="spark"]) .crm-date:focus,
+:where([data-style="spark"]) .big-text:focus,
+:where([data-style="spark"]) .answer-text:focus,
+:where([data-style="spark"]) .onb-paste:focus,
+:where([data-style="spark"]) .doc-src:focus {
+  outline: none;
+  border-color: var(--focus);
+  box-shadow: 0 0 0 1px var(--focus), 0 0 0 5px var(--accent-soft);
+}
+:where([data-style="spark"]) input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: var(--r-full);
+  background: linear-gradient(90deg, var(--accent-border), var(--surface-3));
+}
+:where([data-style="spark"]) input[type="range"]::-moz-range-track {
+  height: 6px;
+  border-radius: var(--r-full);
+  background: linear-gradient(90deg, var(--accent-border), var(--surface-3));
+}
+:where([data-style="spark"]) input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: -7px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 4px solid var(--accent-solid);
+  box-shadow: var(--shadow-brand);
+  transition: transform 140ms var(--ease-bounce);
+}
+:where([data-style="spark"]) input[type="range"]::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 4px solid var(--accent-solid);
+  box-shadow: var(--shadow-brand);
+}
+:where([data-style="spark"]) input[type="range"]:hover::-webkit-slider-thumb,
+:where([data-style="spark"]) input[type="range"]:focus-visible::-webkit-slider-thumb {
+  transform: scale(1.15);
+}
+:where([data-style="spark"]) .banner--good,
+:where([data-style="spark"]) .tailor-app-msg {
+  border-color: var(--good-border);
+  background: var(--good-soft);
+}
+:where([data-style="spark"]) .banner--warn,
+:where([data-style="spark"]) .stale-banner,
+:where([data-style="spark"]) .worker-hint,
+:where([data-style="spark"]) .tailor-warn,
+:where([data-style="spark"]) .page-note {
+  border-color: var(--warn-border);
+  background: var(--warn-soft);
+}
+:where([data-style="spark"]) .banner--bad,
+:where([data-style="spark"]) .tailor-err,
+:where([data-style="spark"]) .auth-error {
+  border-color: var(--bad-border);
+  background: var(--bad-soft);
+}
+:where([data-style="spark"]) .panel--warn,
+:where([data-style="spark"]) .card-block.danger {
+  border-color: var(--warn-border);
+  box-shadow: inset 3px 0 0 var(--warn), var(--shadow-sm);
+}
+:where([data-style="spark"]) .panel--bad {
+  border-color: var(--bad-border);
+  box-shadow: inset 3px 0 0 var(--bad), var(--shadow-sm);
+}
+:where([data-style="spark"]) .empty__art svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+:where([data-style="spark"]) .empty__art .empty__icon {
+  position: absolute;
+  right: 0;
+  bottom: -6px;
+  margin: 0;
+  transform: rotate(8deg);
+  animation: float 4s ease-in-out infinite;
+}
+:where([data-style="spark"]) .empty__title {
+  font-weight: 800;
+  color: var(--text);
+  font-size: var(--fs-lg);
+  letter-spacing: -0.02em;
+}
+:where([data-style="spark"]) .empty__body {
+  max-width: 52ch;
+  font-size: var(--fs-sm);
+}
+:where([data-style="spark"]) .gen-empty {
+  padding: var(--s-3) var(--s-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+:where([data-style="spark"]) .skeleton {
+  display: block;
+  height: 12px;
+  border-radius: var(--r-full);
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 50%, var(--surface-2) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+:where([data-style="spark"]) .segmented__item,
+:where([data-style="spark"]) .view-tab,
+:where([data-style="spark"]) .variant-tabs .chip {
+  height: 32px;
+  min-height: 32px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--r-full);
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+:where([data-style="spark"]) .variant-tabs .chip::before {
+  content: none;
+}
+:where([data-style="spark"]) .segmented__item:hover,
+:where([data-style="spark"]) .view-tab:hover,
+:where([data-style="spark"]) .variant-tabs .chip:hover {
+  color: var(--text);
+}
+:where([data-style="spark"]) .segmented__item[aria-pressed="true"],
+:where([data-style="spark"]) .view-tab[data-on="true"],
+:where([data-style="spark"]) .view-tab[aria-pressed="true"],
+:where([data-style="spark"]) .variant-tabs .chip[data-on="true"],
+:where([data-style="spark"]) .variant-tabs .chip[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--accent-text);
+  box-shadow: var(--shadow-sm), 0 0 0 1px var(--accent-border);
+}
+:where([data-style="spark"]) .table__row:hover,
+:where([data-style="spark"]) .reg-row:hover,
+:where([data-style="spark"]) .crm-row:hover {
+  background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface));
+}
+:where([data-style="spark"]) .toast,
+:where([data-style="spark"]) .saved-toast {
+  position: fixed;
+  bottom: var(--s-6);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  display: inline-flex;
+  gap: var(--s-2);
+  align-items: center;
+  max-width: calc(100vw - 2 * var(--gutter));
+  padding: 12px 20px;
+  border-radius: var(--r-full);
+  background: var(--text);
+  color: var(--bg);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  box-shadow: var(--shadow-lg);
+  animation: rise-in 220ms var(--ease-bounce);
+}
+:where([data-style="spark"]) .rail-group h4,
+:where([data-style="spark"]) .rail-group legend,
+:where([data-style="spark"]) .rail-group__label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  width: 100%;
+  padding: 0;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--text-2);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+:where([data-style="spark"]) .rail-group .chip {
+  min-height: 30px;
+  padding: 0 12px;
+  font-size: var(--fs-xs);
+}
+:where([data-style="spark"]) .slider-val {
+  color: var(--accent-text);
+  background: var(--accent-soft);
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+:where([data-style="spark"]) .feed-count {
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+/* activity / command bar */
+:where([data-style="spark"]) .activity {
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  overflow: hidden;
+}
+:where([data-style="spark"]) .activity .worker-hint {
+  border-radius: 0;
+  border-width: 1px 0 0;
+}
+:where([data-style="spark"]) .match:hover {
+  border-color: var(--accent-border);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+:where([data-style="spark"]) .match[data-invalid="true"] {
+  border-color: var(--bad-border);
+}
+:where([data-style="spark"]) .score-num {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  color: var(--text-2);
+}
+:where([data-style="spark"]) .score-cap {
+  font-size: 11px;
+  color: var(--text-3);
+  font-weight: 500;
+}
+:where([data-style="spark"]) .match__more a::before {
+  content: "";
+  flex: none;
+  width: 11px;
+  height: 9px;
+  margin-top: 3px;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+  box-shadow: 2px -4px 0 -1.5px var(--surface-2), 2px -4px 0 0 currentColor;
+}
+:where([data-style="spark"]) .match__more a:hover::before {
+  box-shadow: 2px -4px 0 -1.5px var(--accent-soft), 2px -4px 0 0 currentColor;
+}
+:where([data-style="spark"]) .match__skill::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  vertical-align: 1px;
+  border-radius: 50%;
+  background: var(--accent-border);
+}
+
+@media (max-width: 640px) {
+  :where([data-style="spark"]) .page {
+    padding-top: var(--s-5);
+  }
+  :where([data-style="spark"]) .page-title {
+    font-size: 22px;
+  }
+  :where([data-style="spark"]) .panel,
+  :where([data-style="spark"]) .card-block {
+    padding: var(--s-4);
+    border-radius: var(--r-md);
+  }
+  :where([data-style="spark"]) .score-num {
+    font-size: 20px;
+  }
+  :where([data-style="spark"]) .score-meter {
+    width: 32px;
+  }
+  :where([data-style="spark"]) .match__go {
+    width: 100%;
+  }
+}
+:where([data-style="spark"]) .inputs-strip:has(.in-warnings) {
+  border-color: var(--warn-border);
+  background: linear-gradient(var(--warn-soft), var(--warn-soft)) left / 6px 100% no-repeat, var(--surface);
+  padding-left: calc(var(--s-4) + 6px);
+}
+:where([data-style="spark"]) .match__title-link:hover {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+:where([data-style="spark"]) .match[data-selected="true"] {
+  border-color: var(--accent-solid);
+  box-shadow: 0 0 0 1px var(--accent-solid), var(--shadow-md);
+}
+
+/* Jobs: the get-started checklist */
+:where([data-style="spark"]) .ux-setup {
+  border-color: var(--accent-border);
+  background: linear-gradient(var(--accent-soft), var(--accent-soft)) top / 100% 3px no-repeat, var(--surface);
+}
+:where([data-style="spark"]) .ux-job .card-block + .card-block {
+  margin-top: 0;
+}
+:where([data-style="spark"]) .chip--code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  word-spacing: 0;
+}
+
+/* ── 13. Concept B surfaces — score ring, the Jobs "today" hero, page accents, motion ── */
+
+/* the match score: a ring (arc = score), the number inside, the band's word underneath */
+:where([data-style="spark"]) .score-ring {
+  --ring: var(--text-3);
+  --ring-text: var(--text-2);
+  --ring-soft: var(--surface-2);
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+:where([data-style="spark"]) .score-ring[data-band="hi"] {
+  --ring: var(--score-great);
+  --ring-text: var(--good);
+  --ring-soft: var(--good-soft);
+}
+:where([data-style="spark"]) .score-ring[data-band="mid"] {
+  --ring: var(--score-good);
+  --ring-text: var(--info);
+  --ring-soft: var(--info-soft);
+}
+:where([data-style="spark"]) .score-ring[data-band="lo"] {
+  --ring: var(--score-stretch);
+  --ring-text: var(--spark-text);
+  --ring-soft: var(--spark-soft);
+}
+:where([data-style="spark"]) .score-ring__dial {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--ring-soft) 0 56%, transparent 57%);
+}
+:where([data-style="spark"]) .score-ring__dial svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+:where([data-style="spark"]) .score-ring__track {
+  fill: none;
+  stroke: var(--score-track);
+  stroke-width: 4.5;
+}
+:where([data-style="spark"]) .score-ring__arc {
+  fill: none;
+  stroke: var(--ring);
+  stroke-width: 4.5;
+  stroke-linecap: round;
+  animation: ring-draw 900ms var(--ease) both;
+}
+:where([data-style="spark"]) .score-ring__num {
+  position: relative;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ring-text);
+}
+:where([data-style="spark"]) .score-ring__word {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ring-text);
+  background: var(--ring-soft);
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  line-height: 1.35;
+}
+:where([data-style="spark"]) .score-ring--lg .score-ring__dial {
+  width: 84px;
+  height: 84px;
+}
+:where([data-style="spark"]) .score-ring--lg .score-ring__num {
+  font-size: 30px;
+}
+:where([data-style="spark"]) .score-ring--lg .score-ring__word {
+  font-size: 12px;
+}
+:where([data-style="spark"]) .score-ring--none .score-ring__dial {
+  border: 2px dashed var(--border-strong);
+  background: var(--surface-2);
+}
+:where([data-style="spark"]) .score-ring--none .score-num {
+  color: var(--text-3);
+}
+:where([data-style="spark"]) .score-ring--none .score-ring__word {
+  color: var(--text-3);
+  background: var(--surface-2);
+}
+
+/* Jobs: the "today" hero — eyebrow, h1, colourful stat chips, sync on the right */
+:where([data-style="spark"]) .feed-hero {
+  position: relative;
+  align-items: flex-end;
+  padding: var(--s-6) var(--s-8);
+  border-radius: var(--r-xl);
+  background: var(--hero-wash), var(--surface);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+/* decoration only: two concentric score-ring arcs peeking from the corner, echoing the cards */
+:where([data-style="spark"]) .feed-hero::before,
+:where([data-style="spark"]) .feed-hero::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+:where([data-style="spark"]) .feed-hero::before {
+  right: -80px;
+  top: -150px;
+  width: 240px;
+  height: 240px;
+  border: 22px solid var(--accent-soft);
+  border-left-color: var(--accent-border);
+  border-bottom-color: var(--accent-border);
+  opacity: 0.7;
+}
+:where([data-style="spark"]) .feed-hero::after {
+  right: 150px;
+  top: -58px;
+  width: 104px;
+  height: 104px;
+  border: 12px solid var(--spark-soft);
+  border-bottom-color: var(--spark);
+  opacity: 0.55;
+}
+:where([data-style="spark"]) .feed-hero .feed-toolbar__start {
+  display: grid;
+  gap: var(--s-1);
+  justify-items: start;
+}
+:where([data-style="spark"]) .feed-hero__eyebrow {
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--spark-text);
+}
+:where([data-style="spark"]) .feed-hero .page-title {
+  font-size: var(--fs-3xl);
+  letter-spacing: -0.035em;
+}
+:where([data-style="spark"]) .feed-hero__stats {
+  margin-top: var(--s-3);
+  gap: var(--s-2);
+}
+:where([data-style="spark"]) .feed-hero .feed-toolbar__end {
+  position: relative;
+  z-index: 1;
+}
+:where([data-style="spark"]) .feed-hero__stats .stat,
+:where([data-style="spark"]) .funnel-stage {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 14px 6px 12px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+:where([data-style="spark"]) .feed-hero__stats .stat__value {
+  font-size: var(--fs-md);
+  font-weight: 800;
+}
+:where([data-style="spark"]) .feed-hero__stats .stat__label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-2);
+}
+:where([data-style="spark"]) .stat--accent .stat__value {
+  color: var(--accent-text);
+}
+:where([data-style="spark"]) .stat--info .stat__value {
+  color: var(--info);
+}
+:where([data-style="spark"]) .stat--warn .stat__value {
+  color: var(--warn);
+}
+:where([data-style="spark"]) .feed-hero__stats .stat--accent {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+}
+:where([data-style="spark"]) .feed-hero__stats .stat--good {
+  background: var(--good-soft);
+  border-color: var(--good-border);
+}
+:where([data-style="spark"]) .feed-hero__stats .stat--warn {
+  background: var(--warn-soft);
+  border-color: var(--warn-border);
+}
+:where([data-style="spark"]) .feed-hero__stats .stat--muted {
+  background: transparent;
+}
+:where([data-style="spark"]) .stat-link {
+  border-radius: var(--r-full);
+  transition: transform var(--dur) var(--ease);
+}
+:where([data-style="spark"]) .stat-link:hover {
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+:where([data-style="spark"]) .stat-link:hover .stat__label {
+  text-decoration: underline;
+}
+
+/* Applications: the funnel reads as colourful count pills */
+:where([data-style="spark"]) .funnel-stage:nth-child(4n + 1) b {
+  color: var(--accent-text);
+}
+:where([data-style="spark"]) .funnel-stage:nth-child(4n + 2) b {
+  color: var(--info);
+}
+:where([data-style="spark"]) .funnel-stage:nth-child(4n + 3) b {
+  color: var(--spark-text);
+}
+:where([data-style="spark"]) .funnel-stage:nth-child(4n + 4) b {
+  color: var(--good);
+}
+:where([data-style="spark"]) .crm-group {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+/* Job page: the big ring leads the facts */
+:where([data-style="spark"]) .ux-job-facts {
+  align-items: center;
+  gap: var(--s-5);
+}
+/* the notice slot stays in the DOM (a live region must exist before it speaks), but an empty
+   one shouldn't add a gap above the summary */
+:where([data-style="spark"]) .ux-job > [aria-live]:empty {
+  margin-bottom: calc(-1 * var(--s-4));
+}
+:where([data-style="spark"]) .ux-option {
+  border-radius: var(--r-lg);
+  background: var(--surface-2);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+:where([data-style="spark"]) .ux-option:hover {
+  border-color: var(--accent-border);
+  box-shadow: var(--shadow-sm);
+}
+:where([data-style="spark"]) .ux-copy code {
+  border-radius: var(--r-md);
+}
+
+/* Get-started checklist: round step marks */
+:where([data-style="spark"]) .ux-setup {
+  background: var(--hero-wash), var(--surface);
+  border-color: var(--accent-border);
+}
+:where([data-style="spark"]) .ux-setup__mark {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 12px;
+  background: var(--surface-2);
+}
+:where([data-style="spark"]) .ux-setup li[data-done="true"] .ux-setup__mark {
+  background: var(--good-soft);
+}
+:where([data-style="spark"]) .ux-setup li[data-next="true"] .ux-setup__mark {
+  background: var(--accent-soft);
+}
+:where([data-style="spark"]) .ux-setup li {
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+}
+
+/* Onboarding steps + presets */
+:where([data-style="spark"]) .onb-steps li {
+  font-weight: 700;
+}
+:where([data-style="spark"]) .onb-steps li[data-on="true"],
+:where([data-style="spark"]) .onb-steps li[aria-current="step"] {
+  border-color: transparent;
+  background: var(--button-gradient);
+  color: var(--accent-on);
+  box-shadow: var(--shadow-brand);
+}
+:where([data-style="spark"]) .onb-preset {
+  border-radius: var(--r-lg);
+  border-color: var(--border);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+:where([data-style="spark"]) .onb-preset:hover {
+  border-color: var(--accent-border);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+:where([data-style="spark"]) .onb-preset[data-on="true"],
+:where([data-style="spark"]) .onb-preset[aria-pressed="true"] {
+  border-color: var(--accent-solid);
+  background: var(--hero-wash), var(--accent-soft);
+  box-shadow: 0 0 0 1px var(--accent-solid), var(--shadow-sm);
+}
+:where([data-style="spark"]) .onb-preset[data-on="true"]::after,
+:where([data-style="spark"]) .onb-preset[aria-pressed="true"]::after {
+  width: 22px;
+  height: 22px;
+  background-color: var(--accent-solid);
+  background-size: 13px;
+  box-shadow: var(--shadow-brand);
+}
+
+/* Search: the query bar is a big friendly pill */
+:where([data-style="spark"]) .search-bar input {
+  min-height: 48px;
+  border-radius: var(--r-full);
+  padding: 0 var(--s-5);
+}
+:where([data-style="spark"]) .search-bar .btn,
+:where([data-style="spark"]) .search-bar .save {
+  --btn-h: 48px;
+  padding: 0 var(--s-6);
+}
+
+/* Profile / Settings save bar */
+:where([data-style="spark"]) .save-bar {
+  border-radius: var(--r-full);
+  padding: var(--s-2) var(--s-2) var(--s-2) var(--s-5);
+}
+
+/* Tailor */
+:where([data-style="spark"]) .tailor-role {
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+:where([data-style="spark"]) .inputs-strip,
+:where([data-style="spark"]) .page-frame,
+:where([data-style="spark"]) .page-empty {
+  border-radius: var(--r-lg);
+}
+:where([data-style="spark"]) .ev-row {
+  border-radius: var(--r-lg);
+}
+
+/* tables: round, airy */
+:where([data-style="spark"]) .table,
+:where([data-style="spark"]) .reg-table {
+  border-radius: var(--r-lg);
+}
+:where([data-style="spark"]) .reg-head,
+:where([data-style="spark"]) .reg-row,
+:where([data-style="spark"]) .crm-head,
+:where([data-style="spark"]) .crm-row {
+  padding: 12px var(--s-5);
+}
+:where([data-style="spark"]) .crm-role a {
+  font-weight: 700;
+}
+
+/* the keyboard hint */
+:where([data-style="spark"]) .ux-kbd kbd,
+:where([data-style="spark"]) .empty kbd {
+  border-radius: 6px;
+}
+:where([data-style="spark"]) .ux-hidden-report {
+  border-radius: var(--r-md);
+  border-left-width: 1px;
+  background: var(--info-soft);
+  border-color: var(--info-border);
+}
+
+/* async notices arrive with a small rise */
+:where([data-style="spark"]) .notice {
+  animation: rise-in 260ms var(--ease-bounce);
+}
+
+/* ── motion: purposeful and small; everything stops under prefers-reduced-motion ── */
+@keyframes ring-draw {
+  from {
+    stroke-dasharray: 0 100;
+  }
+}
+@keyframes tick-in {
+  from {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+}
+@keyframes pop-in {
+  from {
+    transform: translateY(-6px) scale(0.98);
+    opacity: 0;
+  }
+}
+@keyframes rise-in {
+  from {
+    transform: translateY(6px);
+    opacity: 0;
+  }
+}
+@keyframes float {
+  50% {
+    transform: rotate(8deg) translateY(-4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :where([data-style="spark"]) .match:hover,
+  :where([data-style="spark"]) .onb-preset:hover,
+  :where([data-style="spark"]) .stat-link:hover,
+  :where([data-style="spark"]) .brand:hover .brand__mark {
+    transform: none;
+  }
+  :where([data-style="spark"]) .empty__art .empty__icon {
+    animation: none;
+  }
+}
+
+/* ── responsive for the surfaces above ── */
+@media (max-width: 960px) {
+  :where([data-style="spark"]) .filter-rail {
+    top: 0;
+    margin: 0;
+    max-height: none;
+    border: 0;
+    border-radius: 0 var(--r-xl) var(--r-xl) 0;
+  }
+  :where([data-style="spark"]) .filter-bar .btn {
+    box-shadow: var(--shadow-sm);
+  }
+}
+@media (max-width: 640px) {
+  :where([data-style="spark"]) .page-header,
+  :where([data-style="spark"]) .feed-hero {
+    padding: var(--s-5);
+    border-radius: var(--r-lg);
+  }
+  :where([data-style="spark"]) .feed-hero .page-title {
+    font-size: var(--fs-2xl);
+  }
+  :where([data-style="spark"]) .feed-toolbar.feed-hero .stats {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+    gap: 6px;
+  }
+  :where([data-style="spark"]) .feed-hero__stats .stat {
+    padding: 4px 10px;
+  }
+  :where([data-style="spark"]) .feed-hero__stats .stat__value {
+    font-size: var(--fs-sm);
+  }
+  :where([data-style="spark"]) .feed-hero__stats .stat__label {
+    font-size: var(--fs-xs);
+  }
+  :where([data-style="spark"]) .feed-hero::before {
+    width: 180px;
+    height: 180px;
+    right: -80px;
+    top: -90px;
+    border-width: 16px;
+  }
+  :where([data-style="spark"]) .feed-hero::after {
+    display: none;
+  }
+  :where([data-style="spark"]) .feed-hero .feed-toolbar__end {
+    justify-content: flex-start;
+    gap: var(--s-2) var(--s-3);
+  }
+  :where([data-style="spark"]) .ux-job-facts {
+    align-items: flex-start;
+  }
+
+  :where([data-style="spark"]) .match {
+    grid-template-columns: 58px minmax(0, 1fr);
+    column-gap: var(--s-3);
+    padding: var(--s-4) var(--s-4) 0 var(--s-3);
+  }
+  :where([data-style="spark"]) .match__foot {
+    margin: 0 calc(-1 * var(--s-4)) 0 calc(-1 * var(--s-3));
+    padding: var(--s-2) var(--s-4) var(--s-2) var(--s-3);
+  }
+  :where([data-style="spark"]) .score-ring__dial {
+    width: 52px;
+    height: 52px;
+  }
+  :where([data-style="spark"]) .score-ring__num {
+    font-size: 18px;
+  }
+  :where([data-style="spark"]) .score-ring__word {
+    font-size: 10px;
+    padding: 1px 6px;
+  }
+  :where([data-style="spark"]) .score-ring--lg .score-ring__dial {
+    width: 68px;
+    height: 68px;
+  }
+  :where([data-style="spark"]) .score-ring--lg .score-ring__num {
+    font-size: 24px;
+  }
+  :where([data-style="spark"]) .match__title {
+    font-size: 17px;
+  }
+  :where([data-style="spark"]) .match__sub {
+    font-size: var(--fs-sm);
+  }
+  :where([data-style="spark"]) .match__kind {
+    gap: 4px;
+  }
+  :where([data-style="spark"]) .save-bar {
+    border-radius: var(--r-lg);
+  }
+}
+
+/* ── unified markup: the parts of the one component tree that Spark doesn't draw ── */
+/* (Editorial's dateline and lede; the plain meter and "shown" count) */
+:where([data-style="spark"]) .score-meter,
+:where([data-style="spark"]) .feed-dateline,
+:where([data-style="spark"]) .feed-lede,
+:where([data-style="spark"]) .stat--shown {
+  display: none;
+}
+/* the wordmark: one weight in this style (the mark itself is the shared brand asset) */
+:where([data-style="spark"]) .brand__name em {
+  font-style: normal;
+}
+
+/* ── Appearance: the Spark preview — the gradient bar, a rounded card, the score ring ── */
+[data-style-preview="spark"] .style-preview__bar {
+  border-bottom: 0;
+  background: var(--brand-gradient);
+  color: #ffffff;
+}
+[data-style-preview="spark"] .style-preview__brand {
+  font-weight: 800;
+}
+[data-style-preview="spark"] .style-preview__brand::before {
+  content: "";
+  width: 13px;
+  height: 13px;
+  border-radius: 4px;
+  background: #ffffff;
+  box-shadow: inset -3px -3px 0 -1px #ff7a45;
+}
+[data-style-preview="spark"] .style-preview__nav {
+  background: rgba(255, 255, 255, 0.45);
+}
+[data-style-preview="spark"] .style-preview__card {
+  border-radius: 16px;
+  box-shadow: var(--shadow-sm);
+}
+[data-style-preview="spark"] .style-preview__score {
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  align-content: center;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--good-soft) 0 56%, transparent 57%);
+}
+[data-style-preview="spark"] .style-preview__score svg {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+[data-style-preview="spark"] .style-preview__track {
+  fill: none;
+  stroke: var(--score-track);
+  stroke-width: 4.5;
+}
+[data-style-preview="spark"] .style-preview__arc {
+  fill: none;
+  stroke: var(--score-great);
+  stroke-width: 4.5;
+  stroke-linecap: round;
+}
+[data-style-preview="spark"] .style-preview__num {
+  position: relative;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+[data-style-preview="spark"] .style-preview__meter {
+  display: none;
+}
+[data-style-preview="spark"] .style-preview__title {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+[data-style-preview="spark"] .style-preview__tag {
+  border-radius: 999px;
+}
+[data-style-preview="spark"] .style-preview__btn {
+  border-radius: 999px;
+  background: var(--button-gradient);
+  font-weight: 700;
+}
+
+/* ── sync (header indicator, panel, Sources history): pills, gradient bars, soft boxes ── */
+:where([data-style="spark"]) .sync-ind {
+  padding: 0 var(--s-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+:where([data-style="spark"]) .sync-ind:hover {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+}
+:where([data-style="spark"]) .sync-ind__next {
+  color: var(--text-2);
+  font-weight: 500;
+}
+:where([data-style="spark"]) .sync-ring__fill {
+  stroke: var(--good);
+}
+:where([data-style="spark"]) .sync-row__head,
+:where([data-style="spark"]) .sync-inflight__label,
+:where([data-style="spark"]) .sync-counts dt,
+:where([data-style="spark"]) .sync-table thead th {
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+:where([data-style="spark"]) .sync-row__head .num {
+  font-weight: 800;
+}
+:where([data-style="spark"]) .sync-bar {
+  height: 6px;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+}
+:where([data-style="spark"]) .sync-bar--lg {
+  height: 8px;
+}
+:where([data-style="spark"]) .sync-bar__fill {
+  border-radius: inherit;
+  background: var(--button-gradient);
+}
+:where([data-style="spark"]) .sync-drawer {
+  border-left: 1px solid var(--border);
+  border-radius: 24px 0 0 24px;
+}
+:where([data-style="spark"]) .sync-drawer__head {
+  border-bottom: 0;
+  border-radius: 24px 0 0 0;
+  background: var(--hero-wash), var(--surface);
+}
+:where([data-style="spark"]) .sync-drawer__title {
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+:where([data-style="spark"]) .sync-drawer__lead {
+  font-size: var(--fs-md);
+  font-weight: 500;
+  line-height: 1.5;
+}
+:where([data-style="spark"]) .sync-drawer__lead b,
+:where([data-style="spark"]) .sync-subtitle {
+  font-weight: 800;
+}
+:where([data-style="spark"]) .sync-counts {
+  gap: var(--s-2);
+  border: 0;
+}
+:where([data-style="spark"]) .sync-counts > div,
+:where([data-style="spark"]) .sync-counts > div:nth-child(n) {
+  padding: var(--s-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface-2);
+}
+:where([data-style="spark"]) .sync-counts dd {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+:where([data-style="spark"]) .sync-steps {
+  gap: 2px;
+  border-top: 0;
+}
+:where([data-style="spark"]) .sync-step {
+  border: 0;
+  border-radius: var(--r-md);
+}
+:where([data-style="spark"]) .sync-step[data-state="active"] {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+:where([data-style="spark"]) .sync-table {
+  border-top: 0;
+}
+:where([data-style="spark"]) .sync-table thead th {
+  background: var(--surface-2);
+}
+:where([data-style="spark"]) .sync-table th:first-child,
+:where([data-style="spark"]) .sync-table td:first-child {
+  padding-left: var(--s-3);
+}
+:where([data-style="spark"]) .sync-table thead th:first-child {
+  border-radius: var(--r-md) 0 0 var(--r-md);
+}
+:where([data-style="spark"]) .sync-table thead th:last-child {
+  border-radius: 0 var(--r-md) var(--r-md) 0;
+  padding-right: var(--s-3);
+}
+:where([data-style="spark"]) .sync-table th.num:last-child,
+:where([data-style="spark"]) .sync-table td.num:last-child {
+  padding-right: var(--s-3);
+}
+:where([data-style="spark"]) .sync-errors {
+  padding: var(--s-3);
+  border: 1px solid var(--warn-border);
+  border-radius: var(--r-lg);
+  background: var(--warn-soft);
+}
+
+/* "Also posted for …" (sibling postings): each place is a pill, so the commas between them
+   step aside visually (still read by screen readers) */
+:where([data-style="spark"]) .match__more > span {
+  font-size: 0;
+}
+:where([data-style="spark"]) .match__more > span a {
+  margin-left: 6px;
+  font-size: var(--fs-sm);
+}

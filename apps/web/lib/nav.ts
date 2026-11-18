@@ -18,7 +18,7 @@ export const NAV: NavItem[] = [
   { href: "/applications", label: "Applications", description: "Where each application stands, and follow-ups" },
   { href: "/profile", label: "Profile", description: "Your résumé, skills, what you want, and evidence", match: ["/onboarding"] },
   { href: "/sources", label: "Sources", description: "Where JobFlow looks: presets, your own sources, companies", match: ["/companies", "/company/"] },
-  { href: "/settings", label: "Settings", description: "Model, applying, data and tokens" },
+  { href: "/settings", label: "Settings", description: "Pay display, appearance, model, applying, data and tokens" },
 ];
 
 /** which nav item a pathname belongs to */

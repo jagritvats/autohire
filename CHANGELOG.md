@@ -267,5 +267,5 @@ tailoring and an autofill that always stops at a human review gate.
 - Docs: getting started, CLI reference, guides, configuration, architecture, legal & ethics.
 - CI: build, typecheck, ~650 offline tests, plus personal-data and tenant-isolation guards.
 
-[Unreleased]: https://github.com/jagritvats/autohire/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/jagritvats/autohire/releases/tag/v0.1.0
+[Unreleased]: https://github.com/jagritvats/jobflow/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/jagritvats/jobflow/releases/tag/v0.1.0

@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Please report vulnerabilities **privately** through GitHub's
-[security advisories](https://github.com/jagritvats/autohire/security/advisories/new) —
+[security advisories](https://github.com/jagritvats/jobflow/security/advisories/new) —
 never in a public issue, discussion or pull request. Include steps to reproduce and the
 affected version/commit. We aim to acknowledge reports within 7 days.
 
