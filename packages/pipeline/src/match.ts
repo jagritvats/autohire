@@ -68,8 +68,14 @@ export async function rebuildMatches(
 
   // dedup → keep canonical winners only (richest source per cluster)
   const { canonicalByPostingId } = dedup(active);
+  const activeById = new Map(active.map((p) => [p.id, p]));
   for (const [pid, cid] of canonicalByPostingId) {
-    if (pid !== cid) await repo.setCanonical(pid, cid);
+    const stored = activeById.get(pid)?.canonicalId ?? null;
+    const want = pid === cid ? null : cid;
+    // a posting that is its own canonical again (its old cluster split, or the winner went
+    // stale) must drop the pointer — the browse feed hides anything that still has one.
+    // The repo stores null as "no canonical"; its signature predates clearing (string).
+    if (stored !== want) await repo.setCanonical(pid, want as string);
   }
   const canonicalIds = new Set(canonicalByPostingId.values());
   const canonical: Posting[] = active.filter((p) => canonicalIds.has(p.id));

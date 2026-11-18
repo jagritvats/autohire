@@ -7,7 +7,7 @@ import type {
   ExecutionTier,
 } from "../schema/enums.js";
 import type { ExperienceRange, ParsedLocation, Requirement, SalaryBand } from "../schema/entities.js";
-import { normCompany, parseTitle, slugify } from "./titles.js";
+import { dedupTitleKey, normCompany, parseTitle, slugify } from "./titles.js";
 import { extractSkills, parseRequirements } from "./skills.js";
 import { parseLocation } from "./location.js";
 import { parseExperience } from "./experience.js";
@@ -98,7 +98,7 @@ export function normalizePosting(raw: RawPosting): NormalizedPosting {
     applyUrl: raw.applyUrl,
     postedAt: parsePostedAt(raw.postedAt),
     postedByAgency: raw.postedByAgency ?? false,
-    dedupKey: canonicalKey(companyNameNorm, title.titleNorm, location),
+    dedupKey: canonicalKey(companyNameNorm, dedupTitleKey(raw.title), location),
   };
 }
 
@@ -142,18 +142,45 @@ export function parsePostedAt(v: RawPosting["postedAt"] | undefined): string | n
 }
 
 /**
- * Stage-1 dedup key (§ Deduper): cheap exact hash of normalized
- * company + title + coarse location. Stage-2 (embedding cosine) lives in the
- * deduper for near-collisions this key misses.
+ * Stage-1 dedup key (§ Deduper): cheap exact hash of normalized company + the role's
+ * dedup title key (`dedupTitleKey` — team, specialty and level kept) + coarse location.
+ * Stage 2 (cross-source near-collisions the key misses) lives in the deduper.
  */
 export function canonicalKey(
   companyNameNorm: string,
-  titleNorm: string,
+  titleKey: string,
   loc: ParsedLocation,
 ): string {
   const locKey =
     loc.mode === "remote"
       ? `remote:${loc.remoteGeo}`
-      : `${loc.mode}:${slugify(loc.city ?? loc.country ?? "na")}`;
-  return `${companyNameNorm}|${titleNorm}|${locKey}`;
+      : `${loc.mode}:${cityKey(loc.city ?? loc.country ?? "na")}`;
+  return `${companyNameNorm}|${titleKey}|${locKey}`;
+}
+
+/** The dedup key computed from a stored posting (a stored key may predate a key change). */
+export function postingDedupKey(p: { companyName: string; title: string; location: ParsedLocation }): string {
+  return canonicalKey(normCompany(p.companyName), dedupTitleKey(p.title), p.location);
+}
+
+/** one spelling per city, so "Bangalore" on an aggregator and "Bengaluru" on a board key alike. */
+const CITY_ALIASES: Readonly<Record<string, string>> = {
+  bangalore: "bengaluru",
+  "bangalore-urban": "bengaluru",
+  gurgaon: "gurugram",
+  bombay: "mumbai",
+  "new-delhi": "delhi",
+  "delhi-ncr": "delhi",
+  madras: "chennai",
+  calcutta: "kolkata",
+  nyc: "new-york",
+  "new-york-city": "new-york",
+  sf: "san-francisco",
+  "bay-area": "san-francisco",
+  "sf-bay-area": "san-francisco",
+};
+
+export function cityKey(city: string): string {
+  const s = slugify(city);
+  return CITY_ALIASES[s] ?? s;
 }

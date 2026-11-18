@@ -222,8 +222,10 @@ async function upsertBoard(
 ): Promise<void> {
   const stored = new Map(existing.map((p) => [p.atsJobId, p]));
   // `limit` caps the (embedding-costly) upserts, not the fetch. Global boards list
-  // hundreds of roles with a handful in the polled markets, so upsert workable ones first.
-  const toUpsert = opts.limit ? prioritizeWorkable(raws, opts.markets).slice(0, opts.limit) : raws;
+  // hundreds of roles with a handful in the polled markets, so upsert workable ones first —
+  // and within each, roles we don't hold yet: the ones we do are re-confirmed below anyway,
+  // and re-upserting the same first N every poll meant a board's later roles never landed.
+  const toUpsert = opts.limit ? prioritizeWorkable(raws, opts.markets, known).slice(0, opts.limit) : raws;
   // repost-proof publish dates from the WHOLE board (id order needs every neighbour)
   const dates = repostSafeDates(adapter.source, raws.map((raw) => ({ id: scopedJobId(raw), raw })), stored);
   const written = new Set<string>();
@@ -244,9 +246,12 @@ async function upsertBoard(
   if (opts.stale) stats.staled = await repo.markStale(company.id, seenIds);
 }
 
-/** Stable sort: roles workable in `markets` first (cheap location-string parse only). */
-export function prioritizeWorkable(raws: RawPosting[], markets: readonly string[]): RawPosting[] {
-  const rank = (r: RawPosting) => (isWorkableIn(parseLocation(r.locationRaw), markets) ? 0 : 1);
+/**
+ * Stable sort: roles workable in `markets` first (cheap location-string parse only); within
+ * each group, roles not in `held` (scoped ids already stored with a JD) first.
+ */
+export function prioritizeWorkable(raws: RawPosting[], markets: readonly string[], held: ReadonlySet<string> = new Set()): RawPosting[] {
+  const rank = (r: RawPosting) => (isWorkableIn(parseLocation(r.locationRaw), markets) ? 0 : 2) + (held.has(scopedJobId(r)) ? 1 : 0);
   return raws
     .map((r, i) => ({ r, i, k: rank(r) }))
     .sort((a, b) => a.k - b.k || a.i - b.i)
