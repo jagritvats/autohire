@@ -2,6 +2,8 @@ import type { Posting, Profile, ScoreBreakdown } from "../schema/entities.js";
 import { LevelBandOrder, type LevelBand, type RemoteGeo, type RoleArchetype } from "../schema/enums.js";
 import { cosine, clamp } from "../util/vector.js";
 import { convertCurrency, formatSalary } from "../salary/fx.js";
+import { comparablePay, statedCeilingBelow } from "../salary/compare.js";
+import { PERIOD_WORD } from "../salary/period.js";
 import { canonicalStack, isDomainSkill, skillText, stackAdjacency, transfer, type StackAdjacencyResult } from "./stack.js";
 import { countryDisplayName, inEurope, locationInCountry, primaryRemoteGeo, remoteGeosForCountry } from "../normalize/location.js";
 import { effectiveHomeCountry, effectiveMarkets, effectiveRemoteGeos } from "./region.js";
@@ -554,15 +556,17 @@ export function scoreSalary(posting: Posting, profile: Profile): { score: number
   const want = profile.prefs.currency;
   const s = posting.salary;
 
-  const stated = s.source !== "none" ? (s.max ?? s.min) : null;
-  if (stated != null) {
-    const top = convertCurrency(stated, s.currency, want);
-    if (top == null) return { score: SALARY_NEUTRAL, flag: null };
-    const score = SALARY_NEUTRAL + STATED_TRUST[s.confidence] * (floorFit(top, floor) - SALARY_NEUTRAL);
+  if (s.source !== "none" && (s.max != null || s.min != null)) {
+    // annual, in your currency; a converted band counts one confidence step lower
+    const c = comparablePay(s, want);
+    const top = c ? (c.max ?? c.min) : null;
+    if (!c || top == null) return { score: SALARY_NEUTRAL, flag: null };
+    const score = SALARY_NEUTRAL + STATED_TRUST[c.confidence] * (floorFit(top, floor) - SALARY_NEUTRAL);
     // only a stated CEILING can be below the floor; a "from ₹X" says nothing about the top
+    const how = c.converted ? ` (converted at ${c.rateDate} rates)` : s.period && s.period !== "year" && s.period !== "month" ? ` (annualised from ${PERIOD_WORD[s.period]})` : "";
     const flag =
-      s.max != null && top < floor * 0.8
-        ? `Posted pay tops out at ~${formatSalary(top, want)}, below your floor (${formatSalary(floor, want)})`
+      c.max != null && top < floor * 0.8
+        ? `Posted pay tops out at ~${formatSalary(top, want)}${how}, below your floor (${formatSalary(floor, want)})`
         : null;
     return { score, flag };
   }
@@ -587,20 +591,17 @@ function floorFit(top: number, floor: number): number {
 
 // ── the only two hard exclusions (§11.3) ────────────────────────────────────
 function hardExclude(posting: Posting, profile: Profile): string | null {
-  // 1. salary genuinely below floor — only a HIGH-confidence STATED ceiling, in your own
-  //    currency (no FX guesswork at a hard gate). A floor-only band ("from ₹X") never
-  //    qualifies, and an estimate lives in `salaryEstimate`, never here.
+  // 1. salary genuinely below floor — only a HIGH-confidence STATED annual/monthly ceiling.
+  //    In another currency it is converted, and must stay below the line even after the
+  //    rate's full uncertainty is added (`statedCeilingBelow`) — no FX guesswork at a hard
+  //    gate. A floor-only band ("from ₹X") never qualifies, nor an hourly rate annualised on
+  //    an assumption, and an estimate lives in `salaryEstimate`, never here.
   const floor = profile.prefs.salaryFloor;
-  const top = posting.salary.max;
-  if (
-    floor > 0 &&
-    top != null &&
-    posting.salary.source !== "none" &&
-    posting.salary.confidence === "high" &&
-    posting.salary.currency === profile.prefs.currency &&
-    top < floor * 0.7
-  ) {
-    return `Comp ${top} ${posting.salary.currency} is well below your floor (${floor})`;
+  const below = statedCeilingBelow(posting.salary, floor, profile.prefs.currency, 0.7);
+  if (below.below && below.top != null) {
+    const want = profile.prefs.currency;
+    const conv = below.converted ? ` (${formatSalary(posting.salary.max!, posting.salary.currency)} at ${below.rateDate} rates)` : "";
+    return `Comp tops out at ${formatSalary(below.top, want)}${conv}, well below your floor (${formatSalary(floor, want)})`;
   }
 
   // 2. genuinely impossible location: onsite abroad, no sponsorship, you can't relocate.

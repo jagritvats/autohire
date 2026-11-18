@@ -17,8 +17,8 @@ export function locationLabel(c: Pick<FeedCard, "location">): string {
 export function compLabel(c: FeedCard): string | null {
   if (!c.comp) return null;
   if (c.comp.estimate) {
-    const pct = c.comp.confidenceScore != null ? ` ${Math.round(c.comp.confidenceScore * 100)}%` : "";
-    return `~${c.comp.label} (estimate${pct})`;
+    const pct = c.comp.confidenceScore != null ? ` (${Math.round(c.comp.confidenceScore * 100)}% confident)` : "";
+    return `${c.comp.label}${pct}`;
   }
   return `${c.comp.label} (stated)`;
 }

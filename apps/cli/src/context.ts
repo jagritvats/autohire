@@ -6,7 +6,7 @@ import { Writable } from "node:stream";
 import type { Command } from "commander";
 import { createFileStore, createRepository, ensurePrivateDir, loadRootEnv, type FileStore, type Repository, type StoreKind } from "@jobflow/db";
 import { DEFAULT_TENANT, blankProfile } from "@jobflow/pipeline";
-import { defaultConfig } from "@jobflow/service";
+import { defaultConfig, type SyncRunner } from "@jobflow/service";
 import type { Posting } from "@jobflow/core";
 import { CliError, EXIT } from "./errors.js";
 import { Out, type CliIO } from "./output.js";
@@ -28,6 +28,8 @@ export interface CtxOptions {
   io: CliIO;
   /** tests: share one repository across invocations (never closed by the CLI) */
   repo?: Repository;
+  /** tests: the poll `jobflow sync` runs instead of the live one */
+  sync?: SyncRunner;
 }
 
 /** What the CLI remembers between runs (`<dataDir>/cli.json`) — the last listing for #N refs. */
@@ -57,9 +59,13 @@ export class Ctx {
   private lines: LineReader | null = null;
   private envLoaded = false;
 
+  /** tests: the poll `jobflow sync` runs (default: the live, bounded sweep) */
+  readonly syncRunner: SyncRunner | undefined;
+
   constructor(opts: CtxOptions) {
     this.io = opts.io;
     this.injected = opts.repo;
+    this.syncRunner = opts.sync;
   }
 
   attach(program: Command): void {

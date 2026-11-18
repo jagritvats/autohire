@@ -1,4 +1,3 @@
-import { setupProgress } from "@jobflow/service";
 import { pageAuth } from "@/lib/auth";
 import { getRepo } from "@/lib/repo";
 import { AppFrame } from "@/components/AppFrame";
@@ -10,9 +9,10 @@ export const dynamic = "force-dynamic";
 
 /** Sources — where JobFlow looks for jobs, whether each source worked, and Sync. */
 export default async function SourcesPage() {
-  const auth = await pageAuth("/sources");
+  // the viewer must be signed in; the sync panel fetches its own (tenant-scoped) view
+  await pageAuth("/sources");
   const repo = await getRepo();
-  const [progress, companies] = await Promise.all([setupProgress(repo, auth.tenantId), repo.listCompanies()]);
+  const companies = await repo.listCompanies();
   return (
     <AppFrame
       title="Sources"
@@ -23,7 +23,7 @@ export default async function SourcesPage() {
     >
       <div className="sources-stack">
         <DiscoveryView />
-        <SyncPanel initial={JSON.parse(JSON.stringify(progress))} />
+        <SyncPanel />
       </div>
     </AppFrame>
   );

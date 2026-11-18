@@ -2,6 +2,7 @@ import { InMemoryRepository, type PurgeOptions, type Repository } from "@jobflow
 import {
   blankProfile,
   isOnboarded,
+  loadFxRates,
   presetsForPosting,
   pollAll,
   pollBacklog,
@@ -13,9 +14,10 @@ import {
   type RecheckStats,
 } from "@jobflow/pipeline";
 import type { Match, Posting, SearchQueryInput, ViewHiddenReason } from "@jobflow/core";
-import { alsoPostedText, applyView, companyDisplayName, describeLocation, diversifyByCompany, diversifyKey, foldSiblings, formatSalary, postingAgeDays, scoreSourceTrust, siblingPlace, workableFor, type ProfilePrefs } from "@jobflow/core";
+import { alsoPostedText, applyView, companyDisplayName, describeLocation, describePay, diversifyByCompany, diversifyKey, foldSiblings, payDisplayOptions, postingAgeDays, scoreSourceTrust, siblingPlace, workableFor, type FormatPayOptions, type ProfilePrefs } from "@jobflow/core";
 import { ensureTenant } from "./tenant.js";
 import { corpusEmbedder } from "./embedder.js";
+import { corpusSyncing, startCorpusSync } from "./sync.js";
 
 /** Serializable match-card DTO for the client UI (§11.6). */
 export interface FeedCard {
@@ -65,8 +67,9 @@ export interface FeedCard {
   stackNote: string | null;
   skills: string[];
   /**
-   * Pay: what the posting states, else our estimate (§11.4). `estimate` is never blurred —
-   * the UI marks it "~ … est N%" with its basis; stated pay shows its parse confidence.
+   * Pay: what the posting states, else our estimate (§11.4), formatted ONCE by core's
+   * `describePay` in the reader's "show pay in" currency and period: "₹30L–45L / yr (≈ $32k–48k)".
+   * `estimate` is never blurred; a low-confidence one is a single "rough est. ~…" figure.
    */
   comp: {
     label: string;
@@ -77,6 +80,14 @@ export interface FeedCard {
     confidenceScore: number | null;
     /** estimates only: "14 similar posted ranges in India (5 same level) · levels.fyi …" */
     basis: string | null;
+    /** a low-confidence estimate shown as one rough figure */
+    rough?: boolean;
+    /** "annualised from hourly" */
+    note?: string | null;
+    /** the stated currency disagrees with the role's location (also in redFlags) */
+    warning?: string | null;
+    /** FX rate date when the label converts a figure */
+    rateDate?: string | null;
   } | null;
   rating: { overall: number; reviews: number } | null;
   redFlags: string[];
@@ -160,44 +171,6 @@ export interface FeedOptions {
   groupSiblings?: boolean;
 }
 
-let corpusSync: Promise<void> | null = null;
-/** what to run once the current sync finishes — every caller's, including ones that JOINED it */
-let afterSync: Array<() => Promise<void>> = [];
-
-/** Is a background corpus sync running in this process? */
-export function corpusSyncing(): boolean {
-  return corpusSync != null;
-}
-
-/**
- * Start (or join) a background discover → poll of the shared corpus. Deduped: concurrent
- * callers share one run, and each joiner's `after` still runs when it ends (e.g. a person
- * who finishes onboarding while the first browse sync is running still gets ranked).
- * Request handlers never await it — the UI shows "syncing".
- */
-export function startCorpusSync(repo: Repository, after?: () => Promise<void>, sync: (repo: Repository) => Promise<unknown> = syncCorpus): Promise<void> {
-  if (after) afterSync.push(after);
-  corpusSync ??= (async () => {
-    try {
-      await sync(repo);
-    } catch (e) {
-      console.error("[jobflow] corpus sync failed:", e instanceof Error ? e.message : e);
-    }
-    // still "syncing" until every follow-up (ranking) is done, so the UI never reads a
-    // finished-but-unranked feed; steps added meanwhile run in this same loop
-    while (afterSync.length) {
-      const fn = afterSync.shift()!;
-      try {
-        await fn();
-      } catch (e) {
-        console.error("[jobflow] after-sync step failed:", e instanceof Error ? e.message : e);
-      }
-    }
-    corpusSync = null;
-  })();
-  return corpusSync;
-}
-
 /** What one sync polls: `full` (every due board and slow feed, no time box) or the default sweep. */
 export interface SyncOptions {
   full?: boolean;
@@ -206,6 +179,10 @@ export interface SyncOptions {
   /** a tighter board-fetch time budget (a request-bound refresh); else `JOBFLOW_SYNC_MINUTES`, else 5 min */
   timeBudgetMs?: number;
   log?: (m: string) => void;
+  /** structured progress events (the sync run manager folds them into SyncProgress) */
+  onProgress?: PollOptions["onProgress"];
+  /** cancel: stop starting boards/feeds; nothing is retired from the partial run */
+  signal?: AbortSignal;
 }
 
 /**
@@ -224,7 +201,11 @@ export const SYNC_TIME_BUDGET_MS = 5 * 60_000;
  * the first feed comes fast (`pollAll`'s "auto"). `full` drops every bound.
  */
 export function syncPollOptions(opts: SyncOptions = {}): PollOptions {
-  const log = opts.log ? { log: opts.log } : {};
+  const log = {
+    ...(opts.log ? { log: opts.log } : {}),
+    ...(opts.onProgress ? { onProgress: opts.onProgress } : {}),
+    ...(opts.signal ? { signal: opts.signal } : {}),
+  };
   if (opts.full) return { embedder: corpusEmbedder(), maxBoards: opts.maxBoards ?? Infinity, timeBudgetMs: Infinity, ...log };
   const env = syncLimitsFromEnv();
   return {
@@ -281,7 +262,7 @@ export async function getFeed(repo: Repository, tenantId: string, opts: FeedOpti
     const fetched = await browsePostings(repo, group ? limit * 2 : limit);
     const folded = group ? foldSiblings(fetched, (p) => p) : null;
     const browse = (folded ? folded.shown : fetched).slice(0, limit);
-    if (browse.length === 0 && opts.bootstrap !== false) void startCorpusSync(repo);
+    if (browse.length === 0 && opts.bootstrap !== false) void startCorpusSync(repo, undefined, undefined, { trigger: "first_run" });
     const sibs = new Map(browse.map((p) => [p.id, (folded?.siblings.get(p) ?? []).map((s) => ({ posting: s, score: 0 }))]));
     return shapeBrowse(repo, tenantId, spread ? diversifyByCompany(browse, (p) => diversifyKey(p.companyName)) : browse, sibs);
   }
@@ -290,7 +271,7 @@ export async function getFeed(repo: Repository, tenantId: string, opts: FeedOpti
   let matches = await repo.listMatches(tenantId, fetchLimit);
   if (matches.length === 0 && opts.bootstrap !== false) {
     const corpus = await repo.listActivePostings();
-    if (corpus.length === 0) void startCorpusSync(repo, async () => void (await rankTenant(repo, tenantId)));
+    if (corpus.length === 0) void startCorpusSync(repo, async () => void (await rankTenant(repo, tenantId)), undefined, { trigger: "first_run" });
     else {
       await rankTenant(repo, tenantId);
       matches = await repo.listMatches(tenantId, fetchLimit);
@@ -393,6 +374,8 @@ interface CardCtx {
   servicesCompanyIds: Set<string>;
   /** the onboarded profile's region prefs — for `workable` (null before onboarding) */
   prefs: ProfilePrefs | null;
+  /** how this reader wants pay shown ("show pay in" currency + per year/month) */
+  pay: Pick<FormatPayOptions, "currency" | "period">;
 }
 
 /** Everything `buildCard` needs beyond the posting, loaded once per request. */
@@ -402,6 +385,8 @@ async function cardCtx(repo: Repository, tenantId: string, companies?: Awaited<R
     repo.getPostingUserState(tenantId),
     repo.getProfile(tenantId),
     companies ?? repo.listCompanies(),
+    // the store's cached FX table (refreshed by syncs), so "≈" figures use the newest rate
+    loadFxRates(repo).catch(() => null),
   ]);
   return {
     yoe: isOnboarded(profile) ? (profile ?? blankProfile(tenantId)).yoe : null,
@@ -410,6 +395,7 @@ async function cardCtx(repo: Repository, tenantId: string, companies?: Awaited<R
     archived: userState.archived,
     servicesCompanyIds: new Set(cos.filter((c) => c.tags.includes("services")).map((c) => c.id)),
     prefs: isOnboarded(profile) && profile ? profile.prefs : null,
+    pay: payDisplayOptions(profile?.prefs),
   };
 }
 
@@ -422,6 +408,7 @@ function buildCard(
   const ageDays = Math.floor(postingAgeDays(p)); // source publish date, else first seen
   const where = describeLocation(p.location);
   const trust = scoreSourceTrust(p);
+  const comp = compLabel(p, ctx);
   return {
     id: p.id,
     companyId: p.companyId,
@@ -453,9 +440,9 @@ function buildCard(
     levelNote: m?.levelNote ?? null,
     stackNote: m?.stackNote ?? null,
     skills: p.jdSkills.slice(0, 10),
-    comp: compLabel(p),
+    comp,
     rating: ratingOf(p),
-    redFlags: m?.redFlags ?? [],
+    redFlags: comp?.warning ? [...(m?.redFlags ?? []), comp.warning] : (m?.redFlags ?? []),
     applyUrl: p.applyUrl,
     applied: ctx.appliedKeys.has(p.dedupKey),
     bookmarked: ctx.bookmarked.has(p.id),
@@ -530,24 +517,9 @@ export async function purgeOldFeed(repo: Repository, tenantId: string, opts: Pur
   return { ...(await shape(repo, tenantId, matches)), purged };
 }
 
-function compLabel(p: Posting): FeedCard["comp"] {
-  const s = p.salary;
-  if (s.source !== "none" && (s.min != null || s.max != null)) {
-    const f = (n: number) => formatSalary(n, s.currency);
-    const label =
-      s.min != null && s.max != null ? `${f(s.min)}–${f(s.max)}` : s.max != null ? `up to ${f(s.max)}` : `${f(s.min!)}+`;
-    return { label, confidence: s.confidence, source: s.source, estimate: false, confidenceScore: null, basis: null };
-  }
-  const e = p.salaryEstimate;
-  if (!e) return null;
-  return {
-    label: `${formatSalary(e.min, e.currency)}–${formatSalary(e.max, e.currency)}`,
-    confidence: e.confidence,
-    source: e.sources.map((x) => x.source).join(" + "),
-    estimate: true,
-    confidenceScore: e.confidenceScore,
-    basis: e.basis,
-  };
+/** The card's pay — core's one formatter, in this reader's display currency + period. */
+function compLabel(p: Posting, ctx: Pick<CardCtx, "pay">): FeedCard["comp"] {
+  return describePay(p, ctx.pay);
 }
 
 function ratingOf(p: Posting): { overall: number; reviews: number } | null {

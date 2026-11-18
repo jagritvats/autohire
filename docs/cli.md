@@ -180,6 +180,8 @@ pnpm jobflow config set llm.baseUrl <url>            # optional gateway / local 
 pnpm jobflow config set automation.fill on           # allow apply --fill (it never submits)
 pnpm jobflow config set automation.rate human        # human (default) | fast
 pnpm jobflow config set discovery.presets us,eu-uk
+pnpm jobflow config set display.currency USD         # show pay in: auto (home currency) | none | USD, EUR, INR, …
+pnpm jobflow config set display.payPeriod month      # the converted figure per year (default) | month
 pnpm jobflow config get llm.key                      # ••••abcd
 pnpm jobflow config unset llm.key
 ```
@@ -196,15 +198,23 @@ and it never changes a score.
 ```bash
 pnpm jobflow search "backend engineer" --remote
 pnpm jobflow search "staff platform" --loc "Berlin,DE" --seniority staff --min-salary "120000 EUR"
+pnpm jobflow search backend --min-salary "40L INR" --sort pay   # highest pay first, in one currency
+pnpm jobflow search sre --min-salary "5000 EUR/mo"              # periods are annualised (×12)
 pnpm jobflow search golang --must kafka --posted 7d --save-as go-kafka
 pnpm jobflow search backend --preset us,eu-uk       # only roles tagged #us / #eu-uk
 pnpm jobflow search "data engineer" --ingest         # also add the results to your feed
 ```
 
+`--min-salary` reads amounts the way postings are read: `"150k USD"`, `"$120k"`, `"40L INR"`,
+`"30 LPA"`, `"5000 EUR/mo"`, `"€50/hr"`. It hides only roles whose stated, high-confidence
+ceiling is below it — in another currency only when still below after the exchange rate's
+margin of error. `--sort pay` orders by annual pay converted to your display currency (stated
+pay first, else the estimate's median).
+
 Flags: `--remote`, `--onsite`, `--loc <place>` (repeatable), `--country <CC>`,
 `--seniority`, `--min-salary`, `--currency`, `--posted 7d|2w|1m`, `--sources a,b`,
 `--must`, `--nice`, `--title`, `--exclude-company`, `--exclude`, `--preset`/`--tag`,
-`-n/--limit` (15), `--sort score|relevance`, `--format cards|table`, `--save-as <name>`,
+`-n/--limit` (15), `--sort score|relevance|pay`, `--format cards|table`, `--save-as <name>`,
 `--ingest`.
 
 Before `init` the results are **unscored**: no score, no notes about "your stack" or level,
@@ -263,6 +273,22 @@ pnpm jobflow sync --full    # every due board and slow feed, no time limit — t
 pnpm jobflow rank           # re-score only (after a profile change)
 pnpm jobflow renormalize    # re-parse stored postings' locations + agency flags (no polling), then rank
 ```
+
+Progress goes to stderr, so stdout stays data:
+
+- **In a terminal**: a live two-line display (step, bar, boards `n/N`, failures, jobs fetched
+  and new, time left; then the boards being fetched).
+- **Not a terminal** (CI, a pipe, a log file): plain lines, one when each step starts and
+  ends, plus the board count every 10%.
+- **`--json`**: one JSON object per line on stderr (`{"type":"sync.progress","phase":…,
+  "boards":{…},"postings":{…},"etaMs":…}`), at each step change and at most twice a second.
+  stdout is still one summary document: the poll stats plus `status`, `newPostings`,
+  `newMatches` (score 60+), `strongMatches` and the whole `run` (steps, counts, errors).
+
+The summary says how many new matches score 60 or more for you. Ctrl-C cancels cleanly: no
+new boards start, everything fetched is kept and ranked, nothing is retired from the partial
+run, and the exit code is 130. A second Ctrl-C quits at once. The run is recorded in your
+data, so the web app's **Sources → Recent syncs** shows terminal syncs too.
 
 Re-polling is idempotent; postings that disappeared from their board are retired, and
 aggregator postings expire when nobody re-confirms them. After an upgrade that improves the

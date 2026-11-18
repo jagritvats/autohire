@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NAV, activeNav } from "@/lib/nav";
 import { AccountMenu } from "../AccountMenu";
+import { SyncIndicator } from "../SyncIndicator";
 import { Icon } from "./Icon";
 import { ThemeToggle } from "./ThemeToggle";
 
@@ -73,6 +74,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </nav>
           )}
           <div className="app-header__end">
+            {!bare && <SyncIndicator />}
             {!bare && <AccountMenu />}
             <ThemeToggle />
             {!bare && (

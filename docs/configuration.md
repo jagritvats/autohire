@@ -42,6 +42,7 @@ Grouped by what they unlock. Storage and accounts are covered above.
 |---|---|---|
 | `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` | optional | developer.adzuna.com (free). Unlocks country-aware salary estimates incl. India. **Without these, the cascade falls back to levels.fyi (US).** |
 | _(levels.fyi)_ | none | No key — free `.md` endpoint, attribution surfaced automatically. |
+| `JOBFLOW_FX_REFRESH` | default on | Exchange rates for pay conversion. JobFlow ships a dated table of ECB reference rates; a sync also fetches the day's rates from the free, keyless ECB feed (api.frankfurter.dev), caches them in your store with their date, and uses them when reachable. `0` = never fetch (the shipped table is used). Conversions always show the rate's date. |
 
 ### Local agent (Tier 3 + form-fill) — §7.1, all OFF by default
 | Var | Default | What it does |

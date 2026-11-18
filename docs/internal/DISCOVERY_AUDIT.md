@@ -595,16 +595,16 @@ this one on the same stored rows; feed numbers compare the feed review's final t
 
 | top 50 (IN / DE / US / CA) | before | after |
 |---|---|---|
-| a domain ("fintech") listed as missing | 3 / 5 / 7 / 0 | 1* / 0 / 0 / 0 |
+| a domain ("fintech") listed as missing | 3 / 5 / 7 / 0 | 0 / 0 / 0 / 0 |
 | `#india` on a role not workable in India | 0 / 2 / 15 / 9 | 0 / 0 / 0 / 0 |
-| same company + title shown twice | 2 / 0 / 0 / 2 | 2** / 0 / 0 / 0 |
-| cards carrying "Also posted for …" (folded) | — | 0 / 2 (2) / 2 (2) / 6 (6) |
+| same company + title shown twice | 2 / 0 / 0 / 2 | 1\* / 0 / 0 / 0 |
+| cards carrying "Also posted for …" (folded) | — | 0 / 1 (1) / 2 (2) / 6 (6) |
 | US analyst: data / analytics-titled roles, `other` cards | 16, 5 | 17, 0 (persona targets `data_ml`, read as both) |
 | same analyst with `--roles data_analytics` | — | 26 data-titled, 5 SWE (was 18) |
 
-\* the one left is a JD that names fintech as a team, not a must-have flag. \*\* GE HealthCare
-and American Express "Software Engineer" pairs: same place or different JDs — separate reqs,
-correctly not siblings. Résumé import of the fictional personas (`feedqa/resumes`): analyst 1
+\* GE HealthCare's two Bengaluru "Software Engineer" reqs (hybrid / onsite, one place): separate
+headcount, correctly not siblings. An American Express pair was a duplicate whose match row
+from before the re-dedup was still listed — `listMatches` now lists canonical postings only. Résumé import of the fictional personas (`feedqa/resumes`): analyst 1
 skill → 9 (SQL, Python, pandas, Excel, Tableau, Power BI, R, statistics, A/B testing), frontend
 4 → 12 ("Next.js" / "Vue.js" were read as JavaScript; Vue, CSS, HTML, Jest, Playwright,
 webpack, Storybook were unknown), backend 13 (unchanged). Every one is a span in the file.
@@ -646,3 +646,58 @@ Performance") stay `other`; the analyst persona's top 50 still holds AI-engineer
 `data_ml` mixes data science with ML engineering — a split of that value was not attempted;
 the salary pipeline's ENG archetype sets (owned by the salary pass) don't include
 `data_analytics` yet, so analyst roles are priced like `other` as before.
+
+## Salary units, periods and currencies (2026-11-18)
+
+Ask: read pay with its units (per year / month / week / day / hour, LPA / lakh / crore / CTC,
+k / M), its currency (incl. an ambiguous "$", "kr", "¥"), base vs OTE vs total comp and equity;
+compare in one currency via FX; show the posting's own figure plus a converted one.
+
+What changed:
+- **Parse** (`core/normalize/salary.ts`): the stated `period`, `basis` and `equity` are kept on
+  `posting.salary` (min/max stay annual; migration 0021). A bare "$" follows the posting's
+  country — CA$/A$/NZ$/S$/HK$/MX$, a US (or US-only remote, or US-office) posting's is USD, and
+  anywhere else (or unknown) it is read as USD at `medium_high`, which the hard floor never
+  acts on. "kr" needs SE/NO/DK/IS, "¥" CN/JP. A figure too small to be a year with no period
+  written is read as monthly at `medium_high`. Variable-pay labels ("Target Variable range",
+  commission, bonus) and equity grants ("INR 30-50L in stock") are never salary; with a base
+  and an OTE band, base wins and the two are never unioned. `SALARY_PARSE_VERSION` re-parses a
+  store once on its next sync.
+- **FX** (`core/salary/fx.ts`, `pipeline/src/fx.ts`): ECB table dated 2026-11-18 (+ AED/SAR
+  pegs); syncs refresh it from api.frankfurter.dev (keyless) and cache it in `store_meta`.
+- **Comparisons** (`core/salary/compare.ts`): floor, `--min-salary`, score, `--sort pay` in one
+  currency. Converted: one confidence step lower for soft uses; a hard decision only when
+  still below after the rate's uncertainty (3% + 1%/month of age). Hourly/daily/weekly rates
+  never decide alone.
+- **Display** (`core/salary/format.ts`): one formatter for web, CLI and MCP. Estimates under
+  0.4 confidence (or wider than ×2.2) show one rough figure; equal ends print once; a stated
+  currency that disagrees with the location is flagged (feed review items 1–3).
+
+QA corpus (sample persona, `india` preset, two syncs: 9,469 active postings, 336 with a source
+salary field). Old code + old `salary` vs new `salary`:
+
+| | before | after |
+|---|---|---|
+| postings with stated pay | 884 | 898 (+14: ₹ monthly intern stipends, PHP) |
+| currencies seen | 8 | 10 (+PHP, MXN) |
+| period recorded | none (everything annualised silently) | 416 explicit: 381 year, 10 month (1.1%), 22 hour (2.4%), 3 week; 482 unchanged rows read as year |
+| basis / equity | — | base 224, OTE 89, total 11; equity on top 41 |
+| confidence high / medium_high / medium | 804 / 78 / 2 | 793 / 103 / 2 |
+
+Of the 804 old `high` bands, 18 dropped to `medium_high` — every one a bare "$" on a posting
+not placed in the US (India offices, Wellfound "$35k – $40k" for India-remote, unplaced
+onsite roles): exactly the conversions that must not hard-exclude. 9 bands changed figures,
+all corrections (OTE or variable pay had been unioned into the base band: "$94.4k–$298.7k" →
+"$94.4k–$149.4k"; an equity grant had widened "15-25 LPA" to ₹15L–50L). One Canada-only remote
+"$55 - $75" is now CAD per hour.
+
+`salary-backtest`, median error by confidence band (`< 0.30 / 0.30–0.50 / 0.50–0.70 / ≥ 0.70`):
+
+| | before | after |
+|---|---|---|
+| all-evidence | 50% / 23% / 20% / 12% (n 738) | 46% / 23% / 20% / 12% (n 762) |
+| leak-free, calibrated | 45% / 24% / 19% / — (n 738) | 44% / 25% / 18% / — (n 762) |
+
+Monotonic in both. Left: the 482 untouched rows carry no explicit `period` until their board's
+next poll (absent = year by contract); an unplaced remote "$" band is no longer hard-excluded
+(by design).

@@ -10,12 +10,13 @@ import {
   type Match,
   type Profile,
   type SavedSearch,
+  type SyncRunRecord,
   type TenantConfig,
 } from "@jobflow/core";
 import { InMemoryRepository } from "../src/memory.js";
 import { openPglite } from "../src/pglite.js";
 import { PgRepository } from "../src/postgres.js";
-import type { NewPosting, Repository } from "../src/repository.js";
+import { SYNC_RUNS_KEPT, type NewPosting, type Repository } from "../src/repository.js";
 
 /**
  * One behavioural contract, run against every Repository implementation: the in-memory
@@ -629,6 +630,72 @@ describe.each(stores)("Repository contract — %s", (name, open) => {
     // omitted fields stay as stored
     await repo.updatePostingNormalized(p.id, { location: p.location, postedByAgency: true });
     expect((await repo.getPosting(p.id))!).toMatchObject({ title: "Data Analyst & Reporting", jdSkills: ["sql", "tableau"], postedByAgency: true });
+  });
+
+  it("keeps sync-run history: upsert by id, newest first, pruned to the newest SYNC_RUNS_KEPT", async () => {
+    const run = (i: number, status: SyncRunRecord["status"] = "done"): SyncRunRecord => {
+      const startedAt = Date.UTC(2026, 0, 1, 0, i);
+      return {
+        id: `run-${name}-${i}`,
+        trigger: "manual",
+        origin: "web",
+        status,
+        startedAt: new Date(startedAt),
+        finishedAt: status === "running" ? null : new Date(startedAt + 30_000),
+        summary: {
+          runId: `run-${name}-${i}`,
+          trigger: "manual",
+          origin: "web",
+          status,
+          startedAt,
+          finishedAt: status === "running" ? null : startedAt + 30_000,
+          cancelRequested: false,
+          phase: null,
+          phases: [{ id: "boards", status: "done", startedAt, finishedAt: startedAt + 1 }],
+          boards: { total: 3, done: 2, failed: 1, notDue: 0, deferred: 0, skipped: 0, inFlight: [] },
+          feeds: { total: 1, done: 1, failed: 0 },
+          postings: { fetched: 10, new: i, updated: 2, gone: 0, expired: 0 },
+          resolved: 0,
+          timing: { elapsedMs: 30_000, etaMs: null, budgetMs: null, avgBoardMs: 900, concurrency: 8 },
+          errors: [{ source: "Acme", message: "timed out", tenantIds: ["t1"] }],
+          sources: { remotive: { label: "remotive", kind: "feed", status: "ok", fetched: 4, created: 1, ms: 100, error: null } },
+          message: "ok",
+        },
+      };
+    };
+    await repo.saveSyncRun(run(1, "running"));
+    await repo.saveSyncRun(run(1, "done")); // the same run, finished: replaced, not duplicated
+    await repo.saveSyncRun(run(2, "cancelled"));
+    const got = (await repo.listSyncRuns(10)).filter((r) => r.id.startsWith(`run-${name}-`));
+    expect(got.map((r) => [r.id, r.status])).toEqual([
+      [`run-${name}-2`, "cancelled"],
+      [`run-${name}-1`, "done"],
+    ]);
+    expect(got[1]?.summary.postings.new).toBe(1);
+    expect(got[1]?.summary.errors[0]?.tenantIds).toEqual(["t1"]);
+    expect(iso(got[1]?.finishedAt)).toBe(new Date(Date.UTC(2026, 0, 1, 0, 1) + 30_000).toISOString());
+    for (let i = 3; i < SYNC_RUNS_KEPT + 5; i++) await repo.saveSyncRun(run(i));
+    const all = await repo.listSyncRuns(SYNC_RUNS_KEPT + 10);
+    expect(all.length).toBeLessThanOrEqual(SYNC_RUNS_KEPT);
+    expect(all[0]?.id).toBe(`run-${name}-${SYNC_RUNS_KEPT + 4}`);
+    expect(all.some((r) => r.id === `run-${name}-1`)).toBe(false);
+  });
+
+  it("a stated salary keeps how it was stated (period / basis / equity); annual figures unchanged", async () => {
+    const co = await repo.upsertCompany({ name: "Units Co", nameNorm: `units-${randomUUID()}` });
+    const p = await repo.upsertPosting(
+      postingFor(co.id, {
+        salary: { min: 66_000, max: 78_000, currency: "EUR", source: "jd_direct", confidence: "high", period: "month", basis: "ote", equity: true },
+      }),
+    );
+    expect((await repo.getPosting(p.id))?.salary).toMatchObject({ min: 66_000, max: 78_000, currency: "EUR", period: "month", basis: "ote", equity: true });
+    await repo.updatePostingSalary(p.id, { min: 104_000, max: 145_600, currency: "USD", source: "jd_direct", confidence: "medium_high", period: "hour", basis: null, equity: false });
+    expect((await repo.getPosting(p.id))?.salary).toMatchObject({ min: 104_000, max: 145_600, period: "hour", equity: false });
+    // a band written without the new fields (an older writer) reads back as before: no period
+    const legacy = await repo.upsertPosting(postingFor(co.id, { salary: { min: 1, max: 2, currency: "USD", source: "jd_direct", confidence: "low" } }));
+    const got = (await repo.getPosting(legacy.id))?.salary;
+    expect(got?.period).toBeUndefined();
+    expect(got?.basis ?? null).toBeNull();
   });
 
   it("store meta: absent → null, set, overwrite (no TTL)", async () => {

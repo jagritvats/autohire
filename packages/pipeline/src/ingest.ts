@@ -18,6 +18,8 @@ export interface IngestStats {
   upserted: number;
   staled: number;
   errors: string[];
+  /** upserted postings we didn't hold before (sync progress: "new") */
+  created?: number;
 }
 
 /**
@@ -84,6 +86,11 @@ export async function ingestCompany(
      * once per country and merged by id. Wins over `country` when it has 2+ entries.
      */
     countries?: string[];
+    /**
+     * asked right before the stale diff: false skips it (a cancelled sync never soft-deletes
+     * — the next full poll diffs instead; invariant #5). Default: allowed.
+     */
+    mayStale?: () => boolean;
   } = {},
 ): Promise<IngestStats> {
   const countries = [...new Set((opts.countries ?? []).map((c) => c.trim().toUpperCase()).filter(Boolean))];
@@ -97,7 +104,7 @@ export async function ingestCompany(
 async function ingestCompanySingle(
   repo: Repository,
   company: Company,
-  opts: { embedder?: Embedder; limit?: number; country?: string; adapter?: SourceAdapter },
+  opts: { embedder?: Embedder; limit?: number; country?: string; adapter?: SourceAdapter; mayStale?: () => boolean },
 ): Promise<IngestStats> {
   const embedder = opts.embedder ?? localEmbedder;
   const stats: IngestStats = { fetched: 0, upserted: 0, staled: 0, errors: [] };
@@ -136,6 +143,7 @@ async function ingestCompanySingle(
     // a partial list (an unfiltered fallback, a list cut at its cap) or a changed market set
     // can't be diffed: what's missing may still be live (invariant #5) — the TTL sweep retires
     stale: !isPartialFetch(raws) && !marketsChanged,
+    mayStale: opts.mayStale,
   });
   if (marketsChanged) await repo.updateCompany(company.id, { tags: company.tags.filter((t) => t !== marketsTag) });
   await repo.touchPolled(company.id);
@@ -152,7 +160,7 @@ async function ingestCompanySingle(
 async function ingestCompanyMulti(
   repo: Repository,
   company: Company,
-  opts: { embedder?: Embedder; limit?: number; adapter?: SourceAdapter; countries: string[] },
+  opts: { embedder?: Embedder; limit?: number; adapter?: SourceAdapter; countries: string[]; mayStale?: () => boolean },
 ): Promise<IngestStats> {
   const embedder = opts.embedder ?? localEmbedder;
   const stats: IngestStats = { fetched: 0, upserted: 0, staled: 0, errors: [] };
@@ -194,6 +202,7 @@ async function ingestCompanyMulti(
       limit: opts.limit,
       markets: opts.countries,
       stale: !anyEmpty && !anyPartial && !marketsChanged,
+      mayStale: opts.mayStale,
     });
   }
   if (marketsChanged) {
@@ -218,7 +227,7 @@ async function upsertBoard(
   known: Set<string>,
   embedder: Embedder,
   stats: IngestStats,
-  opts: { limit?: number; markets: string[]; stale: boolean },
+  opts: { limit?: number; markets: string[]; stale: boolean; mayStale?: () => boolean },
 ): Promise<void> {
   const stored = new Map(existing.map((p) => [p.atsJobId, p]));
   // `limit` caps the (embedding-costly) upserts, not the fetch. Global boards list
@@ -238,12 +247,13 @@ async function upsertBoard(
     const newPosting = await toNewPosting(normalized, company.id, company.name, embedder, stored.get(id));
     await repo.upsertPosting(newPosting);
     stats.upserted++;
+    if (!stored.has(id)) stats.created = (stats.created ?? 0) + 1;
   }
 
   // everything still listed but not re-written is re-confirmed, so it isn't flagged unverified
   const seenIds = raws.map((r) => scopedJobId(r));
   await repo.touchSeen(company.id, seenIds.filter((id) => !written.has(id) && known.has(id)));
-  if (opts.stale) stats.staled = await repo.markStale(company.id, seenIds);
+  if (opts.stale && (opts.mayStale?.() ?? true)) stats.staled = await repo.markStale(company.id, seenIds);
 }
 
 /**
@@ -296,7 +306,9 @@ export async function ingestFromAdapter(
   }
   stats.fetched = raws.length;
   opts.onRaws?.(raws);
-  stats.upserted = await ingestRaws(repo, adapter.source, raws, embedder);
+  const counted = await ingestRawsCounted(repo, adapter.source, raws, embedder);
+  stats.upserted = counted.upserted;
+  stats.created = counted.created;
   return stats;
 }
 
@@ -306,7 +318,13 @@ export async function ingestFromAdapter(
  * `ingestFromAdapter` and an ad-hoc search the user chose to keep.
  */
 export async function ingestRaws(repo: Repository, source: string, raws: RawPosting[], embedder: Embedder = localEmbedder): Promise<number> {
+  return (await ingestRawsCounted(repo, source, raws, embedder)).upserted;
+}
+
+/** `ingestRaws`, also counting the postings we didn't hold before. */
+async function ingestRawsCounted(repo: Repository, source: string, raws: RawPosting[], embedder: Embedder): Promise<{ upserted: number; created: number }> {
   let upserted = 0;
+  let created = 0;
   // what we already hold for these ids — an unchanged posting keeps its stored embedding
   const normalizedAll = raws.map((raw) => normalizePosting(raw));
   const prior = new Map<string, Posting>();
@@ -327,8 +345,9 @@ export async function ingestRaws(repo: Repository, source: string, raws: RawPost
     const newPosting = await toNewPosting(normalized, company.id, company.name, embedder, before);
     await repo.upsertPosting(newPosting);
     upserted++;
+    if (!before) created++;
   }
-  return upserted;
+  return { upserted, created };
 }
 
 export interface RecheckStats {

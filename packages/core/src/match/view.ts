@@ -5,6 +5,7 @@ import { extractSkills } from "../normalize/skills.js";
 import { normCompany } from "../normalize/titles.js";
 import { isWorkableIn, locationInCountry } from "../normalize/location.js";
 import { postingAgeDays } from "./score.js";
+import { statedCeilingBelow } from "../salary/compare.js";
 
 /**
  * Saved-search VIEWS (product plan "Views vs ranking", invariant #4). A view is the user's
@@ -132,18 +133,10 @@ export function viewHideReason(posting: Posting, query: SearchQuery, opts: ViewO
   // seniority — only a parsed band
   if (query.seniority.length && posting.levelBand && !query.seniority.includes(posting.levelBand)) return "seniority";
 
-  // salary — a stated, high-confidence ceiling in the same currency, below the minimum
-  if (query.minSalary) {
-    const s = posting.salary;
-    if (
-      s.source !== "none" &&
-      s.confidence === "high" &&
-      s.max != null &&
-      s.currency.toUpperCase() === query.minSalary.currency.toUpperCase() &&
-      s.max < query.minSalary.amount
-    ) {
-      return "salary";
-    }
+  // salary — a stated, high-confidence annual ceiling below the minimum; in another currency
+  // only when it stays below after the FX rate's uncertainty (core/salary/compare)
+  if (query.minSalary && statedCeilingBelow(posting.salary, query.minSalary.amount, query.minSalary.currency, 1, { now: opts.now != null ? new Date(opts.now) : undefined }).below) {
+    return "salary";
   }
 
   // age — a lower bound on the real age, so "older than N days" is known

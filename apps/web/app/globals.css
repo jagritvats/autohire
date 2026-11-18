@@ -955,7 +955,7 @@ a.chip {
   border-color: var(--bad-soft);
   color: var(--bad);
 }
-/* a MODELED number (salary estimate) never reads as a stated one: dashed edge, "~", "est N%" */
+/* a MODELED number (salary estimate) never reads as a stated one: dashed edge, "est." / "rough est. ~", "N%" */
 .badge--estimate,
 .tag.comp[data-estimate] {
   border-style: dashed;
@@ -4556,5 +4556,458 @@ input[type="file"]::file-selector-button {
   }
   .match__notes dd + dt {
     margin-top: var(--s-2);
+  }
+}
+
+/* ── sync: the header indicator, the sync panel (a side sheet), progress, history ──
+   Concept A: type-led, rules instead of boxes, ink on paper. The indicator reads like a
+   dateline; progress is an ink rule filling a hairline; the current step is the accent (the
+   one place it marks a position); status keeps the semantic tones. Tokens only. */
+.sync-ind {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  height: var(--h-sm);
+  max-width: 320px;
+  min-width: 0;
+  padding: 0 var(--s-1);
+  border: 0;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-2);
+  font-family: var(--font-sans);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.sync-ind:hover {
+  color: var(--text);
+  border-bottom-color: var(--border-strong);
+}
+.sync-ind[data-running="true"] {
+  color: var(--text);
+}
+.sync-ind__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.sync-ind__next {
+  color: var(--text-3);
+}
+.sync-ring {
+  flex: none;
+  display: block;
+}
+.sync-ring__track {
+  stroke: var(--border-strong);
+}
+.sync-ring__fill {
+  stroke: var(--info);
+  transition: stroke-dashoffset 400ms var(--ease);
+}
+
+/* progress: an ink rule filling a hairline */
+.sync-bar {
+  position: relative;
+  height: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+.sync-bar--lg {
+  height: 4px;
+  margin: var(--s-2) 0 var(--s-4);
+}
+.sync-bar__fill {
+  display: block;
+  height: 100%;
+  background: var(--rule);
+  transition: width 400ms var(--ease);
+}
+.sync-bar--warn .sync-bar__fill {
+  background: var(--warn);
+}
+.sync-bar--bad .sync-bar__fill {
+  background: var(--bad);
+}
+.sync-bar--good .sync-bar__fill {
+  background: var(--good);
+}
+
+/* the panel: a sheet of paper over the page (the drawer is allowed to lift) */
+.sync-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 45;
+  width: min(460px, 100vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-lg);
+  color: var(--text);
+  outline: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .sync-drawer {
+    animation: sync-drawer-in 180ms var(--ease);
+  }
+}
+@keyframes sync-drawer-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+}
+.sync-drawer__head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: var(--s-6) var(--s-5) var(--s-3) var(--s-6);
+  border-bottom: 1px solid var(--rule);
+}
+.sync-drawer__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  font-weight: 450;
+  line-height: var(--lh-tight);
+  letter-spacing: -0.01em;
+}
+.sync-drawer__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--s-5) var(--s-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+.sync-drawer__body > section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+.sync-drawer__lead {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: 400;
+  line-height: 1.35;
+}
+.sync-drawer__lead b {
+  font-weight: 500;
+}
+.sync-drawer__lead .hint {
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+}
+.sync-drawer__msg {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+.sync-drawer__next,
+.sync-drawer__fine {
+  margin: 0;
+}
+.sync-drawer__foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  align-items: center;
+  padding: var(--s-4) var(--s-6);
+  border-top: 1px solid var(--border);
+}
+
+.sync-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+.sync-row__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--s-2);
+  margin-bottom: var(--s-2);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.sync-row__head .num {
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  font-weight: 450;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text);
+}
+.sync-row__note {
+  margin: var(--s-2) 0 0;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+.sync-inflight {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+.sync-inflight__label {
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.sync-inflight ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--s-1);
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+/* in flight: a run of names, like the skills line ("acme · bolt · …"), not a wall of pills */
+.sync-inflight li + li::before {
+  content: "· ";
+  color: var(--text-3);
+}
+.sync-inflight .badge {
+  border: 0;
+  background: none;
+  padding: 0;
+  font-size: inherit;
+  color: inherit;
+}
+.sync-timing {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+
+/* the figures: serif numerals over small-caps labels, hairlines between, no boxes */
+.sync-counts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.sync-counts > div {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 2px;
+  padding: var(--s-3) var(--s-3) var(--s-3) 0;
+}
+.sync-counts > div + div {
+  padding-left: var(--s-3);
+  border-left: 1px solid var(--border);
+}
+.sync-counts dt {
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.sync-counts dd {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  font-weight: 400;
+  line-height: 1.1;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+/* the steps: a typeset list; the current one carries the accent rule */
+.sync-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+}
+.sync-step {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 7px 0 7px var(--s-2);
+  border-bottom: 1px solid var(--border);
+  border-left: 2px solid transparent;
+  font-size: var(--fs-sm);
+  color: var(--text-3);
+}
+.sync-step__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: var(--text-3);
+}
+.sync-step[data-state="done"] {
+  color: var(--text-2);
+}
+.sync-step[data-state="done"] .sync-step__mark {
+  color: var(--good);
+}
+.sync-step[data-state="active"] {
+  color: var(--text);
+  font-weight: 600;
+  border-left-color: var(--accent-solid);
+}
+.sync-step[data-state="active"] .sync-step__mark {
+  color: var(--accent-text);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .sync-step[data-state="active"] .sync-step__mark svg {
+    animation: sync-spin 1.2s linear infinite;
+  }
+}
+@keyframes sync-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.sync-step[data-state="skipped"] .sync-step__label {
+  font-style: italic;
+}
+.sync-step__meta {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+/* problems: a warn rule and plain sentences, not an alert box */
+.sync-errors {
+  border-left: 2px solid var(--warn);
+  padding: var(--s-1) 0 var(--s-1) var(--s-3);
+  font-size: var(--fs-sm);
+}
+.sync-errors summary {
+  cursor: pointer;
+  color: var(--warn);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+.sync-errors ul {
+  margin: var(--s-2) 0;
+  padding-left: var(--s-4);
+  color: var(--text-2);
+}
+.sync-errors li b {
+  color: var(--text);
+  font-weight: 600;
+}
+.sync-errors .hint {
+  margin: 0;
+}
+
+/* Sources → Sync: the live run, then open tables with an ink rule on top */
+.sync-live {
+  margin: var(--s-4) 0;
+}
+.sync-panel .banner,
+.sync-panel .sync-errors {
+  margin: var(--s-4) 0;
+}
+.sync-table-wrap {
+  margin-top: var(--s-6);
+  overflow-x: auto;
+}
+.sync-subtitle {
+  margin: 0 0 var(--s-2);
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: 500;
+}
+.sync-table {
+  width: 100%;
+  border-collapse: collapse;
+  border-top: 1px solid var(--rule);
+  font-size: var(--fs-sm);
+}
+.sync-table th,
+.sync-table td {
+  padding: var(--s-2) var(--s-3) var(--s-2) 0;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+.sync-table thead th {
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.sync-table tbody th {
+  font-weight: 500;
+}
+.sync-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.sync-table th.num:last-child,
+.sync-table td.num:last-child {
+  padding-right: 0;
+}
+.sync-table__err {
+  margin-top: 2px;
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  color: var(--bad);
+}
+
+@media (max-width: 1100px) {
+  .sync-ind__next {
+    display: none;
+  }
+}
+@media (max-width: 640px) {
+  .sync-ind {
+    max-width: 140px;
+  }
+  .sync-ind__phase {
+    display: none;
+  }
+  .sync-counts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .sync-counts > div:nth-child(3) {
+    padding-left: 0;
+    border-left: 0;
+  }
+  .sync-counts > div:nth-child(n + 3) {
+    border-top: 1px solid var(--border);
+  }
+  .sync-drawer__head,
+  .sync-drawer__body,
+  .sync-drawer__foot {
+    padding-left: var(--s-4);
+    padding-right: var(--s-4);
+  }
+}
+@media (pointer: coarse) {
+  .sync-ind {
+    height: var(--h-md);
   }
 }

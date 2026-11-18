@@ -7,6 +7,8 @@ import {
   operatorJobCtx,
   rankTenant,
   seedDemoCorpus,
+  setSyncSchedule,
+  subscribeSync,
   startCloudJobDrainer,
   startCorpusSync,
   type CloudJobDrainer,
@@ -68,21 +70,42 @@ function scheduleLocalSync(repo: Repository): void {
   const hours = Number(process.env.JOBFLOW_POLL_EVERY_HOURS?.trim() || 6);
   if (!(hours > 0)) return;
   scheduled = true;
+  const everyMs = hours * 3_600_000;
+  const tickMs = 15 * 60_000;
+  // tell the sync hub when the schedule looks next, so the header can say "next in 48 min"
+  const announce = async () => {
+    const catchUp = await needsCatchUpSync(repo).catch(() => false);
+    setSyncSchedule({ everyMs, nextCheckAt: Date.now() + tickMs, catchUp });
+  };
   const tick = async () => {
-    if (corpusSyncing()) return; // one at a time; the next tick looks again
     try {
+      if (corpusSyncing()) return; // one at a time; the next tick looks again
       const companies = await repo.listCompanies();
       const last = Math.max(0, ...companies.map((c) => (c.lastPolled ? new Date(c.lastPolled as string | Date).getTime() : 0)));
       // never synced → the first visit's background sync handles it; otherwise when due, or
       // sooner while the capped first sync left boards that were never polled
-      if (last > 0 && (Date.now() - last >= hours * 3_600_000 || (await needsCatchUpSync(repo)))) {
-        void startCorpusSync(repo, async () => void (await rankTenant(repo, DEFAULT_TENANT_ID)));
+      if (last > 0) {
+        const catchUp = await needsCatchUpSync(repo);
+        if (Date.now() - last >= everyMs || catchUp) {
+          void startCorpusSync(repo, async () => void (await rankTenant(repo, DEFAULT_TENANT_ID)), undefined, {
+            trigger: catchUp ? "catch_up" : "scheduled",
+            origin: "web",
+          });
+        }
       }
     } catch {
       /* best effort — the next tick retries */
+    } finally {
+      await announce().catch(() => {});
     }
   };
-  setInterval(() => void tick(), 15 * 60_000).unref?.();
+  void announce();
+  // after every run (a capped first sync leaves boards never polled → catch up soon), so the
+  // header's "next in …" is right straight away, not at the next tick
+  subscribeSync((s) => {
+    if (s.status !== "running") void announce().catch(() => {});
+  });
+  setInterval(() => void tick(), tickMs).unref?.();
 }
 
 /** True when this server is the only process on its store (local-first, single user). */

@@ -19,6 +19,20 @@ All notable changes to JobFlow are documented here. The format follows
   statistics, A/B testing, R, SAS, Vue, Nuxt, Angular, Svelte, Next.js, CSS, HTML, Sass, Jest,
   Cypress, Playwright, webpack, Storybook, Figma, Swift, SwiftUI, Objective-C, Dart / Flutter
   and C — in JDs and in your imported résumé (only what the file names).
+- **Salary units and currencies**: pay is read with its period (per year, month, week, day or
+  hour — "LPA", "p.a.", "/mo", "pm", "monatlich", "/hr", "an hour", "day rate"…), its basis
+  (base, OTE, total comp) and any equity on top, in 30+ currencies (₹/Rs/INR, lakh and crore,
+  €, £, CHF, kr, zł, ¥, R$, MX$, AED, …). A bare "$" follows the posting's country (CA$, A$,
+  NZ$, S$, HK$, MX$), and outside the US it is never trusted enough to hide a job. Cards show
+  the posting's own figure first, then your currency: "₹30L–45L / yr (≈ $32k–48k)",
+  "€5,500–6,500 / mo (≈ €66k–78k / yr)", "$50–70 / hr (≈ $104k–146k / yr, annualised from
+  hourly)".
+- **"Show pay in" setting**: web Settings → Pay display, or `jobflow config set
+  display.currency USD` and `display.payPeriod month`. Defaults to your home country's
+  currency, per year.
+- **Exchange rates**: a dated table of ECB reference rates ships with JobFlow; syncs refresh it
+  from the free ECB feed when reachable (`JOBFLOW_FX_REFRESH=0` turns that off). The salary
+  floor, `--min-salary`, the salary score and the new `--sort pay` compare in one currency.
 - **MCP server for AI agents**: `jobflow mcp` (new package `@jobflow/mcp`) serves JobFlow
   over the Model Context Protocol on stdio, for Claude Code, Claude Desktop or any MCP client.
   Tools: `jobflow_status`, `search_jobs`, `list_jobs`, `get_job`, saved searches,
@@ -50,6 +64,16 @@ All notable changes to JobFlow are documented here. The format follows
 - **Stored postings re-read on the next sync** (normalize version 3): JDs saved with HTML
   markup or entities are cleaned, titles' entities decoded, and role type, level, skills and
   years asked re-derived — no re-poll needed.
+- **Salary floor across currencies**: a posting stated in another currency is now compared
+  after conversion. It is hidden or excluded only when it stays below the line after the
+  rate's margin of error (3% plus 1% per month of rate age); hourly, daily and weekly rates
+  never decide alone. Converted pay counts a little less in the score.
+- **Estimates on cards**: a low-confidence or very wide estimate shows as one rough figure
+  ("rough est. ~₹17L / yr") instead of a precise-looking range; a range whose ends are equal
+  prints one value; a stated currency that doesn't match the job's location is flagged.
+- **`--min-salary` and filters** accept the same amounts as postings ("40L INR", "$120k",
+  "5000 EUR/mo").
+- Stored salaries are re-parsed once on your next sync (no re-poll needed).
 - **Bigger, verified presets.** Every non-India seed now carries a board URL checked live
   with at least one role in the preset's markets. Seeds: `us` 47 → 130, `eu-uk` 27 → 133,
   `global-remote` 24 → 31, `india` 230 → 239 (dead and India-less boards dropped, 18

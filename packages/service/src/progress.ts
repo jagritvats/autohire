@@ -1,7 +1,7 @@
 import type { Repository } from "@jobflow/db";
 import { isOfflineProvider } from "@jobflow/llm";
 import { isOnboarded, profileReadiness, blankProfile, type ReadinessGap } from "@jobflow/pipeline";
-import { corpusSyncing } from "./feed.js";
+import { corpusSyncing } from "./sync.js";
 import { tenantProvider } from "./tailor.js";
 import { ensureTenant } from "./tenant.js";
 

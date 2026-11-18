@@ -8,6 +8,8 @@ export const EXIT = {
   usage: 2,
   notFound: 3,
   needsSetup: 4,
+  /** stopped by the user (Ctrl-C) — the conventional SIGINT status */
+  cancelled: 130,
 } as const;
 export type ExitCode = (typeof EXIT)[keyof typeof EXIT];
 
