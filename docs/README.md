@@ -15,6 +15,7 @@ your first sync and search, and the web app.
 | [Search & discovery](guides/search-and-discovery.md) | Live search and its flags, saved searches, discovery presets and preset tags, your own sources, JSON feed mapping, freshness |
 | [Applying](guides/apply.md) | Tailoring, the Apply checklist, the form-filler's review gate, tracking, the local agent, the browser extension |
 | [The local agent](guides/local-agent.md) | Optional: pre-fill from the web app, and read logged-in sites (Tier 3) in your own browser; setup and caveats |
+| [AI agents (MCP)](guides/ai-agents-mcp.md) | Use JobFlow from Claude Code, Claude Desktop or any MCP client: setup, the single-writer note, the tools / prompts / resources, examples, safety |
 | [Keyboard shortcuts](guides/keyboard-shortcuts.md) | `j`/`k`/`o`/`t`/`a`/`s`/`x`/`/`/`?` on Jobs, and the keys elsewhere |
 | [LLM providers](guides/llm-providers.md) | Optional models, keys, default models, cost control, honesty rules |
 | [Troubleshooting](guides/troubleshooting.md) | A locked data directory, empty syncs and proxies, working without a model, PDFs that won't parse, Chromium, LaTeX, ports, resetting your data, logs |

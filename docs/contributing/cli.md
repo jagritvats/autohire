@@ -129,6 +129,37 @@ pnpm --filter @jobflow/cli test
 pnpm --filter @jobflow/cli exec vitest run -t "never-submit"
 ```
 
+## Adding an MCP tool
+
+`jobflow mcp` (in `apps/cli/src/commands/mcp.ts`) is a thin launcher. The MCP server itself
+lives in `packages/mcp`: `createJobflowMcpServer(ctx)` in `src/server.ts` registers the tools
+and resources, and `src/prompts.ts` registers the prompts. The user reference is
+[AI agents (MCP)](../guides/ai-agents-mcp.md). To add a tool:
+
+1. As with a command, put the logic in `packages/service` first. The tool only validates,
+   calls and shapes.
+2. Register it with `server.registerTool(name, { title, description, inputSchema,
+   outputSchema, annotations }, handler)`. Use zod shapes for both schemas, and set
+   `readOnlyHint` / `destructiveHint` / `idempotentHint` / `openWorldHint` truthfully. A tool
+   that hits job boards or a model API is `openWorldHint: true`.
+3. Wrap the body in `guard(() => ctx.withRepo(async (repo) => …))` and return
+   `ok(text, data)`: a short human-readable text plus `structuredContent` that matches the
+   output schema (dates as ISO strings; `ok` runs `plain()` for you). Throw `ToolError(message,
+   hint)` for anything the agent should relay. `guard` turns every error into an `isError`
+   result, so nothing crashes the server.
+4. Use `ctx.tenantId` for every repository call (invariant #7). Never return the tenant
+   config or anything else that holds a key. Error text passes through `redactSecrets`.
+5. Never print to stdout, because it is the protocol channel. Use stderr for logs.
+6. Add a test to `packages/mcp/test/server.test.ts`. It runs a real SDK `Client` against the
+   server over the in-memory transport, with an `InMemoryRepository` and the fictional sample
+   persona. Update the tool list in its first test.
+
+No tool may submit, click or fill a form (invariant #2). The audit test in
+`packages/mcp/test/server.test.ts` fails if any tool's name, description or schema mentions
+"submit" or "auto-apply" outside "never submits" wording, or if the package imports the
+browser filler. `prepare_application` returns the plan and the `jobflow apply <id> --fill`
+command for the person to run.
+
 ## Checklist for a CLI change
 
 - [ ] Logic in `packages/service`, not in the command

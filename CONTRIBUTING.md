@@ -131,6 +131,7 @@ packages/
   resume-io/  file bytes → résumé text (PDF, DOCX, LinkedIn export)
   service/    what the CLI, web app and worker share: feed, search, discovery, onboarding, tailoring, apply plan
   autofill/   the Playwright form-filler, which stops at the review gate
+  mcp/        the MCP server for AI agents (`jobflow mcp`): tools, prompts, resources over service
 apps/
   cli/        the `jobflow` command
   web/        Next.js UI and API
@@ -148,6 +149,7 @@ core                                     depends on nothing
 adapters · db · llm · autofill · resume-io → core
 pipeline                                 → core, adapters, db
 service                                  → pipeline, llm, resume-io, autofill (and what they use)
+mcp                                      → service (and what it uses), never autofill's browser side
 apps/cli · apps/web · apps/worker        → service and the packages
 apps/agent                               → pipeline, autofill, llm (no service)
 ```

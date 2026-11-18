@@ -6,6 +6,18 @@ All notable changes to JobFlow are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **MCP server for AI agents**: `jobflow mcp` (new package `@jobflow/mcp`) serves JobFlow
+  over the Model Context Protocol on stdio, for Claude Code, Claude Desktop or any MCP client.
+  Tools: `jobflow_status`, `search_jobs`, `list_jobs`, `get_job`, saved searches,
+  `track_application` / `list_applications`, `prepare_application` (a dry-run apply plan plus
+  the `jobflow apply <id> --fill` command; nothing is filled or sent), `draft_document`
+  (grounded generators) and `sync_sources`. Prompts: `tailor_application` (the HONEST_VOICE
+  rules and your own material, for agents writing with their own model) and `triage_jobs`.
+  Resources: `jobflow://profile`, `jobflow://job/{id}`. The local database is opened per call
+  and released after 20 s idle, so the CLI and web app keep working. See
+  `docs/guides/ai-agents-mcp.md`.
+
 ### Changed
 - **New design system** ("calm ledger"): neutral Radix-based palette with one action colour
   and fixed semantic colours, Inter type, light/dark/system themes at WCAG AA, a shared

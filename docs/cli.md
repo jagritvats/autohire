@@ -375,6 +375,26 @@ a Job page at `/jobs/<id>` with the apply checklist (`jobflow apply`). The old `
 `/discovery` addresses redirect to `/search` and `/sources`. A tour of every page is in
 [the web app tour](guides/web-app-tour.md).
 
+### `jobflow mcp`
+
+```bash
+pnpm jobflow mcp [--idle 20]
+claude mcp add jobflow -- node /path/to/jobflow/apps/cli/bin/jobflow.mjs mcp
+```
+
+Serves JobFlow to AI agents (Claude Code, Claude Desktop, any MCP client) over the Model
+Context Protocol on stdin/stdout. Your MCP client starts it; you don't run it by hand. It
+offers tools for search, the ranked feed, one job in full, saved searches, the tracker, a
+dry-run apply plan and grounded drafts, plus two prompts and two resources. Nothing it exposes
+fills or sends a form: to pre-fill, you run `jobflow apply <id> --fill` yourself.
+
+It uses the same data as every other command (`--data-dir`, `--store`, `DATABASE_URL`). Since
+stdout is the protocol channel, its only log line goes to stderr. It doesn't hold the
+single-writer database while the agent sits idle: the database is opened per tool call and
+released after `--idle` seconds (default 20), so other `jobflow` commands keep working. While
+`jobflow serve` holds the data, its tools return a clear error instead. Setup, the tool
+reference and examples are in [AI agents (MCP)](guides/ai-agents-mcp.md).
+
 ### `jobflow demo` / `jobflow harvest`
 
 - `jobflow demo` — a bounded live run of the whole pipeline (discover → poll → rank → match

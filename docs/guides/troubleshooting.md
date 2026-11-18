@@ -55,6 +55,10 @@ What to do:
   run the command again. This is why the Job page tells you to stop `jobflow serve` before you
   run `jobflow apply <id> --fill`.
 - **Another `jobflow` command is still running**, such as a long `sync --full`. Let it finish.
+- **An AI agent is using JobFlow** through `jobflow mcp`. The MCP server releases the database
+  after 20 s idle, so wait a moment, or until the agent's `sync_sources` finishes. If the web
+  app is running, the agent's JobFlow tools say so too. See
+  [AI agents (MCP)](ai-agents-mcp.md#the-single-writer-database).
 - **Nothing is running** (a crash or a killed terminal left the lock behind). The message then
   ends with "If no jobflow process is running, delete the stale .lock file in the data dir":
   delete `~/.jobflow/.lock` (or `$JOBFLOW_DATA_DIR/.lock`).

@@ -23,6 +23,7 @@ core                                       depends on nothing
 adapters · db · llm · autofill · resume-io → core
 pipeline                                   → core, adapters, db
 service                                    → pipeline, llm, resume-io, autofill
+mcp                                        → service (MCP server for agents; `jobflow mcp`; no form filling)
 apps/*                                     → service + packages (agent: no service)
 ```
 

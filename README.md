@@ -157,6 +157,21 @@ normalization logic), `adapters` (one per source), `pipeline`, `db` (PGlite loca
 when hosted), `llm`, `autofill`, `service`, and the `cli`, `web`, `worker`, `agent` and
 `extension` apps. See [docs/architecture.md](docs/architecture.md).
 
+## Use it from Claude Code and other AI agents
+
+`jobflow mcp` serves JobFlow over the [Model Context Protocol](https://modelcontextprotocol.io).
+An agent can then query JobFlow's data layer instead of scraping job boards: live search,
+your ranked feed with honest flags, one job in full, the tracker, a dry-run apply plan, and
+drafts grounded in your own material.
+
+```bash
+claude mcp add jobflow -- node /path/to/jobflow/apps/cli/bin/jobflow.mjs mcp
+```
+
+It works on your local data, doesn't hold the database while the agent sits idle, and never
+fills or submits a form. Setup for Claude Desktop and other clients, the tool reference and
+examples are in the [AI agents guide](docs/guides/ai-agents-mcp.md).
+
 ## Safety & ethics
 
 | | What JobFlow does |
@@ -179,6 +194,7 @@ when hosted), `llm`, `autofill`, `service`, and the `cli`, `web`, `worker`, `age
 | [Search & discovery](docs/guides/search-and-discovery.md) | Live search, saved searches, presets, your own sources, freshness |
 | [Applying](docs/guides/apply.md) | Tailoring, the apply checklist, the form-filler's review gate, tracking, the local agent, the extension |
 | [The local agent](docs/guides/local-agent.md) | Optional: pre-fill from the web app and read logged-in sites in your own browser |
+| [AI agents (MCP)](docs/guides/ai-agents-mcp.md) | Use JobFlow from Claude Code, Claude Desktop or any MCP client |
 | [Keyboard shortcuts](docs/guides/keyboard-shortcuts.md) | Moving through Jobs without the mouse |
 | [LLM providers](docs/guides/llm-providers.md) | Optional models, keys, cost control |
 | [Troubleshooting](docs/guides/troubleshooting.md) | A locked data directory, empty syncs, PDFs that won't parse, Chromium, LaTeX, resetting your data |
