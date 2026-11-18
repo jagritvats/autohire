@@ -34,11 +34,14 @@ export function experienceText(e: FeedCard["experience"]): string | null {
 
 export function payText(c: Pick<FeedCard, "comp">): { text: string; title: string; estimate: boolean } | null {
   if (!c.comp) return null;
+  const fx = c.comp.rateDate ? ` Converted at ${c.comp.rateDate} exchange rates.` : "";
   if (c.comp.estimate) {
     const pct = c.comp.confidenceScore != null ? ` · ${Math.round(c.comp.confidenceScore * 100)}% confident` : "";
-    return { text: `~${c.comp.label} (estimate${pct})`, title: `The posting states no pay — this is an estimate. ${c.comp.basis ?? ""}`, estimate: true };
+    const what = c.comp.rough ? "a rough estimate, too uncertain to show as a range" : "an estimate";
+    return { text: `${c.comp.label}${pct ? ` (${pct.slice(3)})` : ""}`, title: `The posting states no pay — this is ${what}. ${c.comp.basis ?? ""}${fx}`, estimate: true };
   }
-  return { text: c.comp.label, title: `Stated in the posting (parse confidence: ${c.comp.confidence})`, estimate: false };
+  const note = c.comp.warning ? ` ${c.comp.warning}.` : "";
+  return { text: c.comp.label, title: `Stated in the posting (parse confidence: ${c.comp.confidence}).${fx}${note}`, estimate: false };
 }
 
 export function sourceText(c: Pick<FeedCard, "atsDirect" | "ats" | "source">): string {

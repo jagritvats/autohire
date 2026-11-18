@@ -172,9 +172,12 @@ describe("applyView — hides only confidently-known values, counts every hide",
     expect(view.shown).toHaveLength(2);
   });
 
-  it("salary in another currency is never compared (no FX at a view gate)", () => {
-    const p = posting({ salary: { min: 10, max: 20, currency: "USD", source: "jd_direct", confidence: "high" } });
-    expect(viewHideReason(p, SearchQuery.parse({ minSalary: { amount: 80_000, currency: "EUR" } }), { now: NOW })).toBeNull();
+  it("salary in another currency is compared via FX — hidden only when clearly below after the rate's uncertainty", () => {
+    const q = SearchQuery.parse({ minSalary: { amount: 80_000, currency: "EUR" } });
+    const band = (max: number) => posting({ salary: { min: max * 0.8, max, currency: "USD", source: "jd_direct", confidence: "high" } });
+    expect(viewHideReason(band(60_000), q, { now: NOW })).toBe("salary"); // ≈ €55k
+    expect(viewHideReason(band(86_000), q, { now: NOW })).toBeNull(); // ≈ €78k: inside the FX margin
+    expect(viewHideReason(band(95_000), q, { now: NOW })).toBeNull();
   });
 });
 

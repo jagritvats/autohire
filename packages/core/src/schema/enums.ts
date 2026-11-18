@@ -172,6 +172,17 @@ export type RequirementStrength = z.infer<typeof RequirementStrength>;
 export const SalaryConfidence = z.enum(["high", "medium_high", "medium", "low"]);
 export type SalaryConfidence = z.infer<typeof SalaryConfidence>;
 
+/** The pay period a posting STATES its figures in ("₹30L / yr", "€5,500 / mo", "$60 / hr"). */
+export const SalaryPeriod = z.enum(["year", "month", "week", "day", "hour"]);
+export type SalaryPeriod = z.infer<typeof SalaryPeriod>;
+
+/**
+ * What a stated figure covers: `base` salary, `ote` (on-target earnings: base + commission
+ * at target), or `total` comp (base + bonus + equity). null = the posting doesn't say.
+ */
+export const SalaryBasis = z.enum(["base", "ote", "total"]);
+export type SalaryBasis = z.infer<typeof SalaryBasis>;
+
 export const ApplicationStatus = z.enum([
   "saved",
   "drafting",

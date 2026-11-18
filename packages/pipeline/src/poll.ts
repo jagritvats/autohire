@@ -5,7 +5,8 @@ import { ingestCompany, ingestFromAdapter } from "./ingest.js";
 import { DEFAULT_CONCURRENCY, discoverCompanies, mapPoolKeyed, resolveDiscoveredCompanies, type SeedCompany } from "./discover.js";
 import { harvestLinks } from "./harvest.js";
 import { localEmbedder, type Embedder } from "./embedder.js";
-import { estimatePostingSalaries } from "./salary.js";
+import { estimatePostingSalaries, reparseSalariesIfStale } from "./salary.js";
+import { fxRefreshEnabled, loadFxRates, refreshFxRates } from "./fx.js";
 import { renormalizeIfStale, renormalizeSummary, type RenormalizeRun } from "./renormalize.js";
 import { resolveDiscoveryPlan, type CustomSourceTarget, type DiscoveryPlan, type SearchTarget } from "./discovery.js";
 import type { DiscoveryFeed } from "./presets/types.js";
@@ -90,6 +91,11 @@ export interface PollOptions {
   discoverNewSeeds?: boolean;
   /** boards polled at once (default 8; ≤2 per host — politeness). */
   concurrency?: number;
+  /**
+   * refresh FX rates from the public ECB feed (cached a day in the store; never required).
+   * Default on, unless `JOBFLOW_FX_REFRESH=0` (tests never touch the network).
+   */
+  refreshFx?: boolean;
   log?: (m: string) => void;
 }
 
@@ -112,6 +118,10 @@ export interface PollStats {
   boardsDeferred?: number;
   /** stored postings re-derived because the store's NORMALIZE_VERSION was older (once per version) */
   renormalized?: RenormalizeRun;
+  /** stated salaries re-parsed because the store's SALARY_PARSE_VERSION was older (once per version) */
+  salaryReparsed?: number;
+  /** date of the FX rates comparisons now use, and whether this run fetched them */
+  fx?: { asOf: string; status: "fetched" | "cached" | "static" };
   errors: string[];
 }
 
@@ -138,6 +148,25 @@ export async function pollAll(repo: Repository, opts: PollOptions = {}): Promise
   const stats = await pollSources(repo, opts);
   if (renormalized) stats.renormalized = renormalized;
   if (renormalizeError) stats.errors.push(renormalizeError);
+  // FX for every comparison the ranking runs next: the store's cached ECB table, refreshed
+  // when a day old and reachable — else the newest we have (core's dated table). Never fails.
+  try {
+    const fx = (opts.refreshFx ?? fxRefreshEnabled()) ? await refreshFxRates(repo) : { table: await loadFxRates(repo), status: "cached" as const };
+    stats.fx = { asOf: fx.table.asOf, status: fx.status };
+  } catch (e) {
+    stats.errors.push(`fx: ${(e as Error).message}`);
+  }
+  // stated salaries parsed by an older extractor are re-parsed once (after renormalize: the
+  // location prices a bare "$"), so a local install picks up a salary-parser fix on its next sync
+  try {
+    const re = await reparseSalariesIfStale(repo);
+    if (re) {
+      stats.salaryReparsed = re.changed;
+      if (re.changed) opts.log?.(`  re-parsed stated salaries (v${re.fromVersion ?? 0} → v${re.toVersion}): ${re.changed} of ${re.scanned} changed`);
+    }
+  } catch (e) {
+    stats.errors.push(`salary reparse: ${(e as Error).message}`);
+  }
   // offline + cheap: re-price every posting that states no pay against the refreshed
   // corpus, so estimates track new comparables without waiting for an enrich run (§11.4).
   // Never fails the poll.

@@ -281,7 +281,7 @@ describe("weightedQuantile", () => {
 
 describe("FX + formatting", () => {
   it("converts through USD and refuses unknown currencies", () => {
-    expect(convertCurrency(100_000, "USD", "INR")).toBeCloseTo(9_582_000, -2);
+    expect(convertCurrency(100_000, "USD", "INR")).toBeCloseTo(9_344_000, -2);
     expect(convertCurrency(100, "INR", "INR")).toBe(100);
     expect(convertCurrency(100, "XYZ", "INR")).toBeNull();
   });
@@ -324,7 +324,8 @@ function estimate(maxLakhs: number, confidenceScore: number): SalaryEstimate {
 describe("scoreSalary", () => {
   it("converts a USD band into the profile's currency before comparing to the floor", () => {
     const p = posting({ salary: { min: 120_000, max: 150_000, currency: "USD", source: "jd_direct", confidence: "high" } });
-    expect(scoreSalary(p, profile()).score).toBe(1); // $150k ≈ ₹1.4 Cr ≫ ₹20 L
+    // $150k ≈ ₹1.4 Cr ≫ ₹20 L: a full fit, moved by a converted band's one-step-lower trust (0.8)
+    expect(scoreSalary(p, profile()).score).toBeCloseTo(0.92, 5);
   });
 
   it("a weak estimate barely moves the score; a confident one below floor is flagged", () => {

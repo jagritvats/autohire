@@ -8,9 +8,12 @@ import {
   compSampleOf,
   estimateSalary,
   estimateTargetOf,
+  SALARY_PARSE_VERSION,
+  SALARY_PARSE_VERSION_KEY,
   hasStatedSalary,
   parseStatedSalary,
   salaryRoleFamily,
+  type SalaryBand,
   type BacktestRow,
   type EstimateTarget,
   type MarketCalibration,
@@ -418,16 +421,40 @@ export async function reparseStatedSalaries(repo: Repository): Promise<ReparseSt
       next = { ...cur, confidence: "medium" };
       stats.capped++;
     }
-    const same =
-      (next.source === "none" && !had) ||
-      (next.min === cur.min && next.max === cur.max && next.currency === cur.currency &&
-        next.source === cur.source && next.confidence === cur.confidence);
+    const same = (next.source === "none" && !had) || sameBand(next, cur);
     if (same) continue;
     await repo.updatePostingSalary(p.id, next);
     stats.changed++;
     if (next.source === "none" && had) stats.removed++;
   }
   return stats;
+}
+
+function sameBand(a: SalaryBand, b: SalaryBand): boolean {
+  return (
+    a.min === b.min && a.max === b.max && a.currency === b.currency && a.source === b.source && a.confidence === b.confidence &&
+    (a.period ?? "year") === (b.period ?? "year") && (a.basis ?? null) === (b.basis ?? null) && !!a.equity === !!b.equity
+  );
+}
+
+export interface SalaryReparseRun extends ReparseStats {
+  fromVersion: number | null;
+  toVersion: number;
+}
+
+/**
+ * Re-parse stored salaries once per SALARY_PARSE_VERSION (core), the way `renormalizeIfStale`
+ * does for locations: null when the store is current. A store recorded by NEWER code is left
+ * alone. `force` re-runs regardless (the worker's `salary`). Idempotent.
+ */
+export async function reparseSalariesIfStale(repo: Repository, opts: { force?: boolean } = {}): Promise<SalaryReparseRun | null> {
+  const recorded = await repo.getStoreMeta(SALARY_PARSE_VERSION_KEY);
+  const parsed = recorded == null ? null : Number(recorded);
+  const fromVersion = parsed != null && Number.isFinite(parsed) ? parsed : null;
+  if (!opts.force && fromVersion != null && fromVersion >= SALARY_PARSE_VERSION) return null;
+  const stats = await reparseStatedSalaries(repo);
+  if (fromVersion == null || fromVersion < SALARY_PARSE_VERSION) await repo.setStoreMeta(SALARY_PARSE_VERSION_KEY, String(SALARY_PARSE_VERSION));
+  return { ...stats, fromVersion, toVersion: SALARY_PARSE_VERSION };
 }
 
 // ── backtest: does the confidence score mean anything? ───────────────────────────────
