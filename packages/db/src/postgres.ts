@@ -20,6 +20,7 @@ import type {
   Profile,
   SalaryBand,
   SalaryEstimate,
+  SyncRunRecord,
   SavedSearch,
   ScoreBreakdown,
   Session,
@@ -38,6 +39,7 @@ import type {
   SalaryCacheEntry,
   UpsertCompany,
 } from "./repository.js";
+import { SYNC_RUNS_KEPT } from "./repository.js";
 import { pgPoolClient, sqlState, type SqlClient, type SqlRow } from "./sql.js";
 
 /**
@@ -1017,6 +1019,33 @@ export class PgRepository implements Repository {
       [tenantId],
     );
     return rows.map((r) => r.company_id);
+  }
+
+  // ── sync runs ──
+  async saveSyncRun(run: SyncRunRecord): Promise<void> {
+    await this.q(
+      `insert into sync_run (id, trigger, origin, status, started_at, finished_at, summary)
+       values ($1, $2, $3, $4, $5, $6, $7)
+       on conflict (id) do update set
+         status = excluded.status, finished_at = excluded.finished_at, summary = excluded.summary`,
+      [run.id, run.trigger, run.origin, run.status, new Date(run.startedAt), run.finishedAt ? new Date(run.finishedAt) : null, JSON.stringify(run.summary)],
+    );
+    await this.q(
+      `delete from sync_run where id not in (select id from sync_run order by started_at desc limit $1)`,
+      [SYNC_RUNS_KEPT],
+    );
+  }
+  async listSyncRuns(limit = 20): Promise<SyncRunRecord[]> {
+    const { rows } = await this.q("select * from sync_run order by started_at desc limit $1", [limit]);
+    return rows.map((r) => ({
+      id: String(r.id),
+      trigger: r.trigger as SyncRunRecord["trigger"],
+      origin: r.origin as SyncRunRecord["origin"],
+      status: r.status as SyncRunRecord["status"],
+      startedAt: r.started_at as Date,
+      finishedAt: (r.finished_at as Date | null) ?? null,
+      summary: (typeof r.summary === "string" ? JSON.parse(r.summary) : r.summary) as SyncRunRecord["summary"],
+    }));
   }
 }
 

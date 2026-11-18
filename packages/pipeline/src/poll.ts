@@ -1,4 +1,4 @@
-import { AtsType, SourceKind, normCompany, type Company } from "@jobflow/core";
+import { AtsType, SourceKind, normCompany, type Company, type SyncPhaseId } from "@jobflow/core";
 import { atsAdapter, atsLinksFromRaws, fetchTelegramChannel, getAdapter, takeFeedError } from "@jobflow/adapters";
 import type { Repository } from "@jobflow/db";
 import { ingestCompany, ingestFromAdapter } from "./ingest.js";
@@ -10,6 +10,7 @@ import { fxRefreshEnabled, loadFxRates, refreshFxRates } from "./fx.js";
 import { renormalizeIfStale, renormalizeSummary, type RenormalizeRun } from "./renormalize.js";
 import { resolveDiscoveryPlan, type CustomSourceTarget, type DiscoveryPlan, type SearchTarget } from "./discovery.js";
 import type { DiscoveryFeed } from "./presets/types.js";
+import { emitter, type PollListener } from "./progress.js";
 
 // The feed/channel lists now live in the `india` preset (presets/india.ts) — re-exported
 // here so existing importers keep working.
@@ -97,6 +98,13 @@ export interface PollOptions {
    */
   refreshFx?: boolean;
   log?: (m: string) => void;
+  /** structured progress (service `sync-progress.ts` folds these into the one SyncProgress model) */
+  onProgress?: PollListener;
+  /**
+   * cancel: stop STARTING boards/feeds; in-flight fetches finish and are stored, but no board
+   * is diffed (markStale) and no sweep runs from a cancelled run (invariant #5).
+   */
+  signal?: AbortSignal;
 }
 
 export interface PollStats {
@@ -116,6 +124,8 @@ export interface PollStats {
   boardsDue?: number;
   /** due boards this run left for the next one (board cap or time budget reached) */
   boardsDeferred?: number;
+  /** the run was cancelled (`signal`) before it finished */
+  cancelled?: boolean;
   /** stored postings re-derived because the store's NORMALIZE_VERSION was older (once per version) */
   renormalized?: RenormalizeRun;
   /** stated salaries re-parsed because the store's SALARY_PARSE_VERSION was older (once per version) */
@@ -134,54 +144,83 @@ export interface PollStats {
  * re-checked.
  */
 export async function pollAll(repo: Repository, opts: PollOptions = {}): Promise<PollStats> {
+  const emit = emitter(opts.onProgress);
   // stored postings derived by an older parser are re-derived once, before this poll's
   // upserts, so the ranking every caller runs next sees one consistent corpus (§11.3).
-  // A no-op (one meta read) when the store is current; never fails the poll.
+  // A no-op (one meta read) when the store is current; never fails the poll. Progress shows
+  // it as its own step only when it actually ran ("Re-check stored jobs").
   let renormalized: RenormalizeRun | null = null;
   let renormalizeError: string | null = null;
+  emit({ type: "phase", phase: "renormalize", state: "start" });
   try {
     renormalized = await renormalizeIfStale(repo);
     if (renormalized?.changed) opts.log?.(`  re-normalized stored postings (v${renormalized.fromVersion ?? 0} → v${renormalized.toVersion}): ${renormalizeSummary(renormalized)}`);
   } catch (e) {
     renormalizeError = `renormalize: ${(e as Error).message}`;
+    emit({ type: "error", source: "re-checking stored jobs", message: (e as Error).message });
   }
-  const stats = await pollSources(repo, opts);
+  emit({ type: "phase", phase: "renormalize", state: renormalized ? "done" : "skipped" });
+  const stats = await pollSources(repo, opts, emit);
   if (renormalized) stats.renormalized = renormalized;
   if (renormalizeError) stats.errors.push(renormalizeError);
+  // a cancelled run stops here: what it fetched is stored (idempotent upserts), nothing was
+  // retired from a partial view (invariant #5), and the derived data catches up next run
+  if (stats.cancelled) {
+    emit({ type: "phase", phase: "fx", state: "skipped" });
+    emit({ type: "phase", phase: "reparse", state: "skipped" });
+    emit({ type: "phase", phase: "process", state: "skipped" });
+    return stats;
+  }
   // FX for every comparison the ranking runs next: the store's cached ECB table, refreshed
   // when a day old and reachable — else the newest we have (core's dated table). Never fails.
+  // Progress shows it as a step only when this run actually fetched rates.
   try {
-    const fx = (opts.refreshFx ?? fxRefreshEnabled()) ? await refreshFxRates(repo) : { table: await loadFxRates(repo), status: "cached" as const };
+    const refresh = opts.refreshFx ?? fxRefreshEnabled();
+    if (refresh) emit({ type: "phase", phase: "fx", state: "start" });
+    const fx = refresh ? await refreshFxRates(repo) : { table: await loadFxRates(repo), status: "cached" as const };
     stats.fx = { asOf: fx.table.asOf, status: fx.status };
+    emit({ type: "phase", phase: "fx", state: fx.status === "fetched" ? "done" : "skipped" });
   } catch (e) {
     stats.errors.push(`fx: ${(e as Error).message}`);
+    emit({ type: "error", source: "exchange rates", message: (e as Error).message });
+    emit({ type: "phase", phase: "fx", state: "skipped" });
   }
   // stated salaries parsed by an older extractor are re-parsed once (after renormalize: the
   // location prices a bare "$"), so a local install picks up a salary-parser fix on its next sync
+  emit({ type: "phase", phase: "reparse", state: "start" });
+  let reparsed = false;
   try {
     const re = await reparseSalariesIfStale(repo);
     if (re) {
+      reparsed = true;
       stats.salaryReparsed = re.changed;
       if (re.changed) opts.log?.(`  re-parsed stated salaries (v${re.fromVersion ?? 0} → v${re.toVersion}): ${re.changed} of ${re.scanned} changed`);
     }
   } catch (e) {
     stats.errors.push(`salary reparse: ${(e as Error).message}`);
+    emit({ type: "error", source: "re-reading pay", message: (e as Error).message });
   }
+  emit({ type: "phase", phase: "reparse", state: reparsed ? "done" : "skipped" });
   // offline + cheap: re-price every posting that states no pay against the refreshed
   // corpus, so estimates track new comparables without waiting for an enrich run (§11.4).
   // Never fails the poll.
+  emit({ type: "phase", phase: "process", state: "start" });
   try {
     stats.salaryEstimated = (await estimatePostingSalaries(repo)).estimated;
   } catch (e) {
     stats.errors.push(`salary estimate: ${(e as Error).message}`);
+    emit({ type: "error", source: "pay estimates", message: (e as Error).message });
   }
+  emit({ type: "phase", phase: "process", state: "done" });
   return stats;
 }
 
-async function pollSources(repo: Repository, opts: PollOptions): Promise<PollStats> {
+async function pollSources(repo: Repository, opts: PollOptions, emit: PollListener): Promise<PollStats> {
   const embedder = opts.embedder ?? localEmbedder;
   const log = opts.log ?? (() => {});
+  const signal = opts.signal;
   const stats: PollStats = { companiesPolled: 0, fetched: 0, staled: 0, feeds: {}, resolved: [], expired: 0, errors: [] };
+  const skip = (...phases: SyncPhaseId[]) => phases.forEach((phase) => emit({ type: "phase", phase, state: "skipped" }));
 
   // what to poll: explicit options win; everything else comes from the tenants' plan
   let plan = opts.plan;
@@ -190,6 +229,7 @@ async function pollSources(repo: Repository, opts: PollOptions): Promise<PollSta
       plan = await resolveDiscoveryPlan(repo);
     } catch (e) {
       stats.errors.push(`discovery plan: ${(e as Error).message}`);
+      emit({ type: "error", source: "discovery plan", message: (e as Error).message });
     }
   }
   const countries = opts.country ? [opts.country] : (plan?.pollCountries ?? []);
@@ -197,7 +237,8 @@ async function pollSources(repo: Repository, opts: PollOptions): Promise<PollSta
   // 0. seed employers new to the registry (first run, a newly switched-on preset, a custom
   //    company list) are resolved to boards FIRST, so this same run polls them — otherwise a
   //    fresh install's first sync polls zero boards and only feeds
-  if (plan && opts.discoverNewSeeds !== false && !opts.companyId) {
+  if (plan && opts.discoverNewSeeds !== false && !opts.companyId && !signal?.aborted) {
+    emit({ type: "phase", phase: "discover", state: "start" });
     const fresh: SeedCompany[] = [];
     for (const s of plan.seeds) {
       const c = await repo.findCompanyByNameNorm(normCompany(s.name));
@@ -207,20 +248,26 @@ async function pollSources(repo: Repository, opts: PollOptions): Promise<PollSta
       try {
         const d = await discoverCompanies(repo, fresh, { markets: plan.pollCountries });
         log(`  seeds: ${fresh.length} new → ${d.resolved} boards`);
+        if (d.resolved) emit({ type: "resolved", count: d.resolved });
       } catch (e) {
         stats.errors.push(`seed discovery: ${(e as Error).message}`);
+        emit({ type: "error", source: "new companies", message: (e as Error).message });
       }
     }
     for (const id of plan.companyListSourceIds) {
       await repo.recordDiscoverySourceRun(id, { status: "ok", count: fresh.length }).catch(() => {});
     }
-  }
+    emit({ type: "phase", phase: "discover", state: "done" });
+  } else skip("discover");
 
   // 1. registered ATS boards (the rich, ghost-free spine) — pooled across hosts
   let companies: Company[];
   let deadline = Infinity;
+  const concurrency = opts.concurrency ?? DEFAULT_CONCURRENCY;
   if (opts.companyId) {
     companies = (await repo.listCompanies()).filter((c) => c.id === opts.companyId);
+    emit({ type: "plan", boards: companies.length, deferred: 0, notDue: 0, budgetMs: null, concurrency });
+    emit({ type: "phase", phase: "boards", state: "start" });
   } else {
     const env = syncLimitsFromEnv();
     const pollable = (await repo.listCompanies({ status: "active" })).filter(isCloudPollable);
@@ -234,98 +281,194 @@ async function pollSources(repo: Repository, opts: PollOptions): Promise<PollSta
     deadline = Date.now() + limits.timeBudgetMs;
     stats.boardsDue = due.length;
     stats.boardsDeferred = due.length - companies.length;
+    emit({
+      type: "plan",
+      boards: companies.length,
+      deferred: stats.boardsDeferred,
+      notDue: pollable.length - due.length,
+      budgetMs: Number.isFinite(limits.timeBudgetMs) ? limits.timeBudgetMs : null,
+      concurrency,
+    });
+    emit({ type: "phase", phase: "boards", state: "start" });
     if (stats.boardsDeferred) log(`  boards: ${companies.length} of ${due.length} due this run${limits.first ? " (first sync — the rest follow)" : ""}`);
   }
+  // a cancelled run never diffs a board (no markStale) — even one whose fetch was in flight
+  const mayStale = () => !signal?.aborted;
   await mapPoolKeyed(
     companies,
-    { concurrency: opts.concurrency ?? DEFAULT_CONCURRENCY, perKey: 2, key: boardHostKey },
+    { concurrency, perKey: 2, key: boardHostKey },
     async (c) => {
-      if (c.atsType === "unknown" || !c.atsSlug) return;
-      // past the time budget: leave it due (untouched), so it leads the next run
-      if (Date.now() > deadline) {
-        stats.boardsDeferred = (stats.boardsDeferred ?? 0) + 1;
+      if (c.atsType === "unknown" || !c.atsSlug) {
+        emit({ type: "board", state: "deferred", id: c.id, name: c.name });
         return;
       }
+      // past the time budget, or cancelled: leave it due (untouched), so it leads the next run
+      if (Date.now() > deadline || signal?.aborted) {
+        stats.boardsDeferred = (stats.boardsDeferred ?? 0) + 1;
+        emit({ type: "board", state: "deferred", id: c.id, name: c.name });
+        return;
+      }
+      const t0 = Date.now();
+      emit({ type: "board", state: "start", id: c.id, name: c.name });
       try {
         const r = await ingestCompany(repo, c, {
           embedder,
           limit: opts.limitPerCompany,
+          mayStale,
           ...(countries.length > 1 ? { countries } : { country: countries[0] }),
         });
         stats.companiesPolled++;
         stats.fetched += r.fetched;
         stats.staled += r.staled;
         stats.errors.push(...r.errors);
+        const created = r.created ?? 0;
+        emit({
+          type: "board",
+          state: "done",
+          id: c.id,
+          name: c.name,
+          fetched: r.fetched,
+          created,
+          updated: Math.max(0, r.upserted - created),
+          staled: r.staled,
+          ms: Date.now() - t0,
+          ...(r.errors[0] ? { error: r.errors[0] } : {}),
+        });
       } catch (e) {
         stats.errors.push(`${c.name}: ${(e as Error).message}`);
+        emit({ type: "board", state: "done", id: c.id, name: c.name, fetched: 0, created: 0, updated: 0, staled: 0, ms: Date.now() - t0, error: (e as Error).message });
         // a board whose fetch throws still takes its turn: left unmarked it would sort first
         // on every run and hold a slot of the per-run budget forever
         await repo.touchPolled(c.id).catch(() => {});
       }
     },
   );
+  emit({ type: "phase", phase: "boards", state: "done" });
   log(`poll: ${stats.companiesPolled} boards, ${stats.fetched} postings, ${stats.staled} staled${stats.boardsDeferred ? ` · ${stats.boardsDeferred} due boards left for the next run` : ""}`);
-  if (opts.companyId) return stats;
+  if (opts.companyId) {
+    skip("feeds", "resolve", "expire");
+    return stats;
+  }
+  if (signal?.aborted) {
+    stats.cancelled = true;
+    skip("feeds", "resolve", "expire");
+    return stats;
+  }
 
-  // 2. discovery feeds (tier 1-2 only)
-  const feeds = opts.feeds ?? plan?.feeds ?? [];
-  for (const feed of feeds.filter((f) => !(opts.skipSlowFeeds && f.slow))) {
+  // 2. discovery feeds (tier 1-2 only), custom sources, saved searches, community channels
+  const feeds = (opts.feeds ?? plan?.feeds ?? []).filter((f) => !(opts.skipSlowFeeds && f.slow));
+  const customTargets = plan && opts.customSources !== false ? [...plan.rssTargets, ...plan.jsonTargets, ...plan.threads] : [];
+  const searchTargets = plan && opts.searches !== false ? plan.searchTargets : [];
+  const envChannels = process.env.JOBFLOW_TELEGRAM_CHANNELS;
+  const channels = opts.telegramChannels ?? (envChannels != null ? csv(envChannels) : (plan?.telegramChannels ?? []));
+  emit({ type: "feeds", total: feeds.length + customTargets.length + searchTargets.length + channels.length });
+  emit({ type: "phase", phase: "feeds", state: "start" });
+
+  for (const feed of feeds) {
+    if (signal?.aborted) break;
+    const key = `feed:${feed.source}`;
+    const t0 = Date.now();
+    emit({ type: "source", state: "start", key, label: feed.source, kind: "feed" });
     const adapter = getAdapter(feed.source);
     if (!adapter || (adapter.tier !== "tier1" && adapter.tier !== "tier2")) {
       stats.errors.push(`feed ${feed.source}: not a registered cloud adapter`);
+      emit({ type: "source", state: "done", key, fetched: 0, created: 0, ms: 0, error: "not available on this machine" });
       continue;
     }
     let n = 0;
+    let created = 0;
+    let firstError: string | null = null;
     for (const target of feed.targets) {
+      if (signal?.aborted) break;
       const r = await ingestFromAdapter(repo, adapter, target, { embedder });
       n += r.fetched;
+      created += r.created ?? 0;
       stats.errors.push(...r.errors);
+      firstError ??= r.errors[0] ?? null;
     }
     stats.feeds[feed.source] = (stats.feeds[feed.source] ?? 0) + n;
     stats.fetched += n;
+    emit({ type: "source", state: "done", key, fetched: n, created, ms: Date.now() - t0, error: firstError });
     log(`  ${feed.source}: +${n}`);
   }
 
   // 2a. custom sources (RSS / JSON feeds / HN threads) — each run recorded on its rows
-  if (plan && opts.customSources !== false) {
+  if (customTargets.length && !signal?.aborted) {
     stats.custom = {};
-    for (const t of [...plan.rssTargets, ...plan.jsonTargets, ...plan.threads]) {
-      const n = await runCustomSource(repo, t, embedder, stats);
-      stats.custom[t.configKey] = n;
-      stats.fetched += n;
+    for (const t of customTargets) {
+      if (signal?.aborted) break;
+      const key = `custom:${t.configKey}`;
+      const t0 = Date.now();
+      emit({ type: "source", state: "start", key, label: customLabel(t), kind: "custom", ...(t.tenantIds ? { tenantIds: t.tenantIds } : {}) });
+      const r = await runCustomSource(repo, t, embedder, stats);
+      stats.custom[t.configKey] = r.fetched;
+      stats.fetched += r.fetched;
+      emit({ type: "source", state: "done", key, fetched: r.fetched, created: r.created, ms: Date.now() - t0, error: r.error });
     }
-    if (plan.rssTargets.length + plan.jsonTargets.length + plan.threads.length) {
-      log(`  custom sources: +${Object.values(stats.custom).reduce((a, b) => a + b, 0)}`);
-    }
+    log(`  custom sources: +${Object.values(stats.custom).reduce((a, b) => a + b, 0)}`);
   }
 
   // 2b. due saved searches → search-capable sources (ingested like any feed — idempotent)
-  if (plan && opts.searches !== false && plan.searchTargets.length) {
-    stats.searches = await runSearchTargets(repo, plan.searchTargets, embedder, stats);
+  if (plan && searchTargets.length && !signal?.aborted) {
+    stats.searches = await runSearchTargets(repo, searchTargets, embedder, stats, { emit, signal });
     log(`  saved searches: ${Object.keys(stats.searches).length} run`);
   }
 
   // 2c. community channels → company boards (the posting itself comes from the board)
-  const envChannels = process.env.JOBFLOW_TELEGRAM_CHANNELS;
-  const channels = opts.telegramChannels ?? (envChannels != null ? csv(envChannels) : (plan?.telegramChannels ?? []));
   for (const channel of channels) {
+    if (signal?.aborted) break;
+    const key = `channel:${channel}`;
+    const t0 = Date.now();
+    emit({ type: "source", state: "start", key, label: `t.me/${channel}`, kind: "channel" });
     const msgs = await fetchTelegramChannel(channel, { pages: 2 });
     const h = await harvestLinks(repo, msgs, { origin: `telegram:${channel}` });
     stats.resolved.push(...h.boards);
+    if (h.boards.length) emit({ type: "resolved", count: h.boards.length });
+    emit({ type: "source", state: "done", key, fetched: msgs.length, created: 0, ms: Date.now() - t0, error: msgs.length ? null : "no messages came back" });
     log(`  telegram/${channel}: ${msgs.length} msgs → ${h.boards.length} boards (${h.skippedSuspicious} suspicious skipped)`);
+  }
+  emit({ type: "phase", phase: "feeds", state: "done" });
+  if (signal?.aborted) {
+    stats.cancelled = true;
+    skip("resolve", "expire");
+    return stats;
   }
 
   // 3. upgrade market-relevant company shells to their ATS boards (next poll hits them)
+  emit({ type: "phase", phase: "resolve", state: "start" });
   const res = await resolveDiscoveredCompanies(repo, { max: opts.resolveMax, markets: countries.length ? countries : undefined });
   stats.resolved.push(...res.resolved);
+  if (res.resolved.length) emit({ type: "resolved", count: res.resolved.length });
   if (res.tried) log(`  resolved ${res.resolved.length}/${res.tried} discovered companies`);
+  emit({ type: "phase", phase: "resolve", state: "done" });
+  if (signal?.aborted) {
+    stats.cancelled = true;
+    skip("expire");
+    return stats;
+  }
 
   // 4. expire non-board postings their source stopped returning
+  emit({ type: "phase", phase: "expire", state: "start" });
   stats.expired = await repo.purgeOldPostings({ olderThanDays: FEED_TTL_DAYS, field: "lastSeen", sources: NON_BOARD_SOURCES });
   stats.expired += await expireUnseenBoardPostings(repo);
   if (stats.expired) log(`  expired ${stats.expired} postings unseen for ${FEED_TTL_DAYS}d (feeds) / ${BOARD_TTL_DAYS}d (boards)`);
+  emit({ type: "expired", count: stats.expired });
+  emit({ type: "phase", phase: "expire", state: "done" });
 
   return stats;
+}
+
+/** a custom source's label for progress: its host, never its full (private) URL */
+function customLabel(t: CustomSourceTarget): string {
+  const url = t.target.params?.url;
+  if (typeof url === "string") {
+    try {
+      return new URL(url).host;
+    } catch {
+      /* fall through */
+    }
+  }
+  return t.source === "hn_whoishiring" ? "HN thread" : t.source;
 }
 
 /**
@@ -462,9 +605,15 @@ function roundRobinByAts<C extends Pick<Company, "atsType">>(boards: C[]): C[] {
 }
 
 /** one custom source: ingest (SSRF-guarded fetch inside the adapter), record the run, harvest ATS links. */
-async function runCustomSource(repo: Repository, t: CustomSourceTarget, embedder: Embedder, stats: PollStats): Promise<number> {
+async function runCustomSource(
+  repo: Repository,
+  t: CustomSourceTarget,
+  embedder: Embedder,
+  stats: PollStats,
+): Promise<{ fetched: number; created: number; error: string | null }> {
   const adapter = getAdapter(t.source);
   let fetched = 0;
+  let created = 0;
   let error: string | null = null;
   if (!adapter || (adapter.tier !== "tier1" && adapter.tier !== "tier2")) {
     error = `${t.source}: not a registered cloud adapter`;
@@ -477,6 +626,7 @@ async function runCustomSource(repo: Repository, t: CustomSourceTarget, embedder
       },
     });
     fetched = r.fetched;
+    created = r.created ?? 0;
     stats.errors.push(...r.errors);
     const feedKey = String(t.target.params?.feedKey ?? "");
     error = (feedKey ? takeFeedError(feedKey) : null) ?? r.errors[0] ?? null;
@@ -495,7 +645,7 @@ async function runCustomSource(repo: Repository, t: CustomSourceTarget, embedder
   for (const id of t.sourceIds) {
     await repo.recordDiscoverySourceRun(id, { status, count: fetched, error }).catch(() => {});
   }
-  return fetched;
+  return { fetched, created, error };
 }
 
 /** run the plan's search targets; returns fetched counts per saved-search id (and records each run). */
@@ -504,14 +654,22 @@ export async function runSearchTargets(
   targets: SearchTarget[],
   embedder: Embedder,
   stats?: Pick<PollStats, "fetched" | "errors">,
+  progress: { emit?: PollListener; signal?: AbortSignal } = {},
 ): Promise<Record<string, number>> {
+  const emit = progress.emit ?? (() => {});
   const perSearch: Record<string, number> = {};
   const owners = new Map<string, string>();
   const sourcesBySearch = new Map<string, Record<string, number>>();
-  for (const st of targets) {
+  for (const [i, st] of targets.entries()) {
+    if (progress.signal?.aborted) break;
     const adapter = getAdapter(st.source);
     if (!adapter || (adapter.tier !== "tier1" && adapter.tier !== "tier2")) continue; // invariant #1
+    const key = `search:${st.source}:${i}`;
+    const t0 = Date.now();
+    const tenantIds = [...new Set(st.searches.map((s) => s.tenantId))];
+    emit({ type: "source", state: "start", key, label: `saved search · ${st.source}`, kind: "search", tenantIds });
     const r = await ingestFromAdapter(repo, adapter, st.target, { embedder });
+    emit({ type: "source", state: "done", key, fetched: r.fetched, created: r.created ?? 0, ms: Date.now() - t0, error: r.errors[0] ?? null });
     if (stats) {
       stats.fetched += r.fetched;
       stats.errors.push(...r.errors);

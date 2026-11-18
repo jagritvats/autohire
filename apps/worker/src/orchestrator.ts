@@ -13,13 +13,14 @@ import {
   backtestSalaryEstimates,
   calibrateSalaryConfidence,
   type BacktestReport,
+  type PollStats,
   DEFAULT_TENANT,
   SEED_COMPANIES,
 } from "@jobflow/pipeline";
 import { createProvider, providerEmbedder } from "@jobflow/llm";
 import { loadRootEnv } from "@jobflow/db";
 import { makeRepository } from "./repo.js";
-import { runCloudJob } from "@jobflow/service";
+import { runCloudJob, startCorpusSync } from "@jobflow/service";
 import { runLoop } from "./jobs.js";
 import type { Job } from "@jobflow/core";
 
@@ -43,8 +44,16 @@ async function discover(): Promise<void> {
 
 async function poll(): Promise<void> {
   const repo = await makeRepository();
-  const s = await pollAll(repo, { embedder: providerEmbedder(createProvider()), log });
-  if (s.errors.length) log(`poll: ${s.errors.length} errors (first: ${s.errors[0]})`);
+  // tracked like every other sync, so the web app's Sources history shows the cron's runs
+  let s: PollStats | null = null;
+  await startCorpusSync(
+    repo,
+    undefined,
+    async (r, hooks) => (s = await pollAll(r, { embedder: providerEmbedder(createProvider()), log, ...hooks })),
+    { trigger: "scheduled", origin: "worker" },
+  );
+  const stats = s as PollStats | null;
+  if (stats?.errors.length) log(`poll: ${stats.errors.length} errors (first: ${stats.errors[0]})`);
 }
 
 async function rank(): Promise<void> {

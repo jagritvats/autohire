@@ -134,7 +134,7 @@ Errors come back as tool errors with a hint, never as a crash.
 | `list_applications` | Everything you're tracking, with due follow-ups first. | read-only |
 | `prepare_application` | The apply plan as a **dry run**: the form URL, which of your stored values would go into which field, the résumé file it would attach, saved answers, and what's missing with the fix. Also returns the command **you** run to pre-fill: `jobflow apply <id> --fill`. Nothing is opened, filled or sent. | writes only when it saves a search result |
 | `draft_document` | JobFlow's own grounded generators with your configured model. `kind`: `resume` (3 bullet variants + ATS keyword coverage), `resume_md`, `resume_latex`, `cover_letter`, `why_here`, `interesting_problem`, `about_blurb`, `answer` (+ `question`). Without a model, résumés come back as labelled `builtin` templates, and prose kinds return an error saying a model is needed. | writes, model API |
-| `sync_sources` | Discovers + polls your discovery plan, expires what's gone, and re-ranks. It is bounded like `jobflow sync`; `full: true` runs the slow sweep. Sends progress notifications. | writes, network |
+| `sync_sources` | Discovers + polls your discovery plan, expires what's gone, and re-ranks. It is bounded like `jobflow sync`; `full: true` runs the slow sweep. Sends progress notifications (percent done out of 100, with the step, boards `n/N`, jobs fetched/new and time left); cancelling the request cancels the sync cleanly. Reports `status`, `newPostings` and `newMatches` (score 60+). | writes, network |
 
 ### Prompts
 

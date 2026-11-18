@@ -24,6 +24,7 @@ import type {
   Profile,
   SalaryBand,
   SalaryEstimate,
+  SyncRunRecord,
   TenantConfig,
 } from "@jobflow/core";
 import type {
@@ -35,6 +36,7 @@ import type {
   SalaryCacheEntry,
   UpsertCompany,
 } from "./repository.js";
+import { SYNC_RUNS_KEPT } from "./repository.js";
 
 /**
  * In-memory repository — powers the CLI demo and unit tests with zero infra.
@@ -53,6 +55,7 @@ export class InMemoryRepository implements Repository {
   private applications = new Map<string, Application[]>();
   private jobs: Job[] = [];
   private heartbeats = new Map<string, AgentHeartbeat>();
+  private syncRuns: SyncRunRecord[] = [];
   private salaryCache = new Map<string, SalaryCacheEntry & { fetchedAt: number }>();
   private storeMeta = new Map<string, string>();
   private generations: Generation[] = [];
@@ -813,6 +816,17 @@ export class InMemoryRepository implements Repository {
   }
   async listFollowedCompanyIds(tenantId: string): Promise<string[]> {
     return [...(this.follows.get(tenantId) ?? [])];
+  }
+
+  // ── sync runs ──
+  async saveSyncRun(run: SyncRunRecord): Promise<void> {
+    const copy = structuredClone(run);
+    this.syncRuns = [copy, ...this.syncRuns.filter((r) => r.id !== run.id)]
+      .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
+      .slice(0, SYNC_RUNS_KEPT);
+  }
+  async listSyncRuns(limit = 20): Promise<SyncRunRecord[]> {
+    return this.syncRuns.slice(0, limit).map((r) => structuredClone(r));
   }
 }
 

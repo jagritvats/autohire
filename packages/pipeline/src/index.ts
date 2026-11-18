@@ -16,3 +16,4 @@ export * from "./profile.js";
 export * from "./discovery.js";
 export * from "./search.js";
 export * from "./presets/index.js";
+export * from "./progress.js";

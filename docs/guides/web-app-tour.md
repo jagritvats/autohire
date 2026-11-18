@@ -12,7 +12,8 @@ It also keeps your jobs fresh: while it's open, it syncs every 6 hours (`JOBFLOW
 
 The header has six pages, in the order you use them: **Jobs → Search → Applications →
 Profile → Sources → Settings**. Every job also has a **Job page**, and from there a
-**Tailor** page.
+**Tailor** page. On the right of the header, the [sync indicator](#the-sync-indicator) says
+when your jobs were last refreshed and shows a sync while it runs.
 
 | Page | Address | What it answers | CLI equivalent |
 |---|---|---|---|
@@ -25,6 +26,36 @@ Profile → Sources → Settings**. Every job also has a **Job page**, and from 
 | [Sources](#sources) | `/sources` | Where does it look? | `jobflow discovery`, `jobflow sync` |
 | [Settings](#settings) | `/settings` | Model, applying, data, tokens | `jobflow config` |
 | [Onboarding](#onboarding) | `/onboarding` | First-time setup | `jobflow init` |
+
+## The sync indicator
+
+Every page shows the sync state in the header:
+
+- **Idle**: "Synced 12 min ago · next in 48 min" (the next scheduled sync shows on wide
+  screens; hover for the exact time). A warning icon means some sources had a problem last time.
+- **Running**: a progress ring, the step it's on and the count, for example
+  "Check job boards · 38/232".
+
+Click it to open the **sync panel**:
+
+- **While a sync runs**: the overall bar; a bar for job boards (checked / total, how many didn't
+  answer, how many are left for later or not due yet) and one for feeds, your own sources and
+  saved searches; the boards being fetched right now; the jobs fetched, new, updated and closed
+  so far; the time elapsed and roughly how long is left; each step (re-check stored jobs, find
+  new companies, check job boards, read feeds and searches, match companies to boards, retire
+  closed jobs, refresh exchange rates, re-read pay, tidy and estimate pay, rank for you) as
+  pending, running, done or skipped (a step with nothing to do this time is skipped); and
+  any source that failed, in plain words ("didn't answer in time", "asked us to slow down").
+  **Cancel sync** stops starting new boards. The boards already being fetched finish, every job
+  fetched so far is kept and ranked, and nothing is marked closed from a cut-short sync.
+- **When idle**: the last sync's result (what it fetched, what's new, how many new matches
+  score 60 or more for you), its steps and problems, when the next one runs, and **Sync now**.
+
+The panel updates live (server-sent events). If a proxy blocks that, it checks every few
+seconds instead and says so. Phase changes and the finish are read out by screen readers;
+the moving counts are not. On a shared (multi-user) instance only an admin can start or
+cancel a sync; everyone sees its progress, and your own sources' names and errors are only
+shown to you.
 
 ## Jobs
 
@@ -126,7 +157,11 @@ next one acts. The details are in [Keyboard shortcuts](keyboard-shortcuts.md).
 
 ### Sync status
 
-- **While a sync runs**, a banner says so and the page swaps in the new jobs by itself.
+- **While the first sync runs** (your list is empty), a banner shows its progress and the
+  page swaps in the jobs by itself.
+- **When a later sync finishes**, your list stays where it is. A banner offers what's new:
+  "**12 new matches** · show" (or "N new jobs" when none clear your match line). **show**
+  reloads the list. Syncs started anywhere count: the header, Sources, the schedule.
 - **If a sync brings back nothing**, the banner says so plainly ("The job boards may be
   unreachable from here"), with **try again**, a link to Sources and a link to Search.
 - **If the last sync was more than a day ago**, a banner warns that some jobs may have closed.
@@ -275,7 +310,16 @@ Where JobFlow looks:
   to pause or resume it.
 - **Your own sources**: add an RSS/Atom feed, a JSON feed, a Telegram channel or an HN "Who is
   hiring" thread. Each one shows its last run.
-- **Sync**: **Sync now**, the last sync time, and **Maintenance and background jobs**:
+- **Sync**: **Sync now** (or **Cancel sync** while one runs, with its progress), the last
+  sync's result, and two tables:
+  - **by source**: company job boards (checked, failed, time per board) and every feed, your
+    own source, saved search and channel from the last (or current) sync: its status, jobs
+    fetched, new jobs, time, and the error in plain words when it failed;
+  - **Recent syncs**: when, why (you started it, scheduled, catching up, first sync), where
+    from (web app, terminal, assistant, worker), the result, boards, fetched / new / closed
+    and how long it took. The last 50 are kept in your data.
+
+  Below them, **Maintenance and background jobs**:
   - **recheck all jobs** and **retire old jobs**;
   - the background job queue (Discover, Poll all, Re-rank, Enrich comp, Recheck all);
   - the local agent's status.
