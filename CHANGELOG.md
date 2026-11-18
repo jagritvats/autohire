@@ -54,6 +54,17 @@ All notable changes to JobFlow are documented here. The format follows
   requirements ignore employer-age sentences; better title, location (+35 countries) and
   monthly salary parsing; a role's stack note says "direct match" only when you own its
   primary language. See `docs/internal/DISCOVERY_AUDIT.md`.
+- **Locations with several places** ("Hybrid - Austin, TX; London, United Kingdom",
+  Workday's joined locations) count in every country they name, for preset tags, market
+  matching, search place filters and the visa discount. The impossible-location rule fires
+  only when none of them is workable.
+- **European places in local spellings** (München, Köln, Deutschland, Wien, Zürich, Genève,
+  Bruxelles, Warszawa, Praha, Lisboa, København…) are recognised, ignoring accents.
+- **Country-only remote**: "Remote - Canada" / "Remote (Brazil)" are a new `country_only`
+  remote region, open when the country is your home or a market and down-weighted
+  otherwise. New "one country only" filter chip; cards say "Remote · Canada only".
+- Every source's postings get the staffing-agency flag at ingest (Naukri's own flag still
+  wins); employers mentioning "our clients" or "manpower" are no longer misread as agencies.
 - **New design system** ("calm ledger"): neutral Radix-based palette with one action colour
   and fixed semantic colours, Inter type, light/dark/system themes at WCAG AA, a shared
   navigation shell, responsive down to 375px with a filter drawer, and accessibility passes
