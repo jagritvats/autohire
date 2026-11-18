@@ -41,7 +41,10 @@ each rule, is in [CLAUDE.md](CLAUDE.md#invariants-do-not-break-these).
   [Presets and discovery](docs/contributing/presets-and-discovery.md).
 - **Parsing and normalization.** Titles, skills, locations, salaries, experience
   (`packages/core/src/normalize/`) and résumé import (`packages/core/src/resume/`). This is
-  where match quality is won. Add tests with every change.
+  where match quality is won. Add tests with every change. When you change what the location
+  parser or the agency rule returns, bump `NORMALIZE_VERSION`
+  (`packages/core/src/normalize/version.ts`): every store re-derives its stored postings once
+  on its next sync.
 - **UI and UX.** The web app follows a small design system and a set of UX rules. See
   [Working on the web UI](docs/contributing/web-ui.md).
 - **The CLI.** See [Working on the CLI](docs/contributing/cli.md).

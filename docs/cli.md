@@ -261,10 +261,14 @@ pnpm jobflow sync           # every due board within ~5 minutes (the first sync:
 pnpm jobflow sync --max-boards 40   # cap this run (or JOBFLOW_SYNC_MAX_BOARDS)
 pnpm jobflow sync --full    # every due board and slow feed, no time limit — takes a while
 pnpm jobflow rank           # re-score only (after a profile change)
+pnpm jobflow renormalize    # re-parse stored postings' locations + agency flags (no polling), then rank
 ```
 
 Re-polling is idempotent; postings that disappeared from their board are retired, and
-aggregator postings expire when nobody re-confirms them.
+aggregator postings expire when nobody re-confirms them. After an upgrade that improves the
+location parser, the next `sync` re-parses the postings you already hold once (from their
+stored location text) before polling; `renormalize` does the same on demand and prints what
+changed.
 
 ### `jobflow feed` / `jobflow show`
 
