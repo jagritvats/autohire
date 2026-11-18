@@ -30,6 +30,8 @@ const FIX: Record<string, string> = {
   name: 'jobflow profile set name "First Last"',
   resume: "jobflow profile import ./resume.pdf   (or: jobflow profile set resume-path ./resume.pdf)",
   applyUrl: "this posting has no apply link — open the listing and apply there",
+  resumeFormat:
+    "forms want a PDF/Word file, not your .md/.tex/.txt source — `jobflow tailor <ref> --kind resume-md --pdf`, or `jobflow profile set resume-path ./resume.pdf`",
 };
 
 export function register(program: Command, ctx: Ctx): void {

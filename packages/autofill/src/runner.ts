@@ -42,6 +42,7 @@ export async function runFill(plan: FillPlan, opts: RunnerOptions = {}): Promise
   const context = await pw.chromium.launchPersistentContext(resolveProfileDir(opts.userDataDir), {
     headless: opts.headless ?? false,
     viewport: null,
+    ...chromiumExecutable(),
   });
   const page = context.pages()[0] ?? (await context.newPage());
   return fillPlanOnPage(page, plan, { flags, dryRun: opts.dryRun });
@@ -174,6 +175,7 @@ export function resolveProfileDir(dir: string | undefined, env: NodeJS.ProcessEn
 export async function launchUserContext(opts: { userDataDir?: string; headless?: boolean } = {}): Promise<PwContext> {
   const pw = await importPlaywright();
   return pw.chromium.launchPersistentContext(resolveProfileDir(opts.userDataDir), {
+    ...chromiumExecutable(),
     headless: opts.headless ?? false,
     viewport: null,
   });
@@ -223,4 +225,10 @@ async function importPlaywright(): Promise<PwModule> {
       "playwright is not installed. The form-filler runs only on the local agent: `pnpm add playwright && npx playwright install chromium`.",
     );
   }
+}
+
+/** JOBFLOW_CHROMIUM: use an installed Chrome/Chromium instead of Playwright's own download. */
+function chromiumExecutable(): { executablePath?: string } {
+  const p = process.env.JOBFLOW_CHROMIUM?.trim();
+  return p ? { executablePath: p } : {};
 }

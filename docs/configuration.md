@@ -52,6 +52,7 @@ Grouped by what they unlock. Storage and accounts are covered above.
 | `JOBFLOW_RATE` | `human` | `human` (jittered 0.5–2s) \| `fast`. Keep `human`. |
 | `JOBFLOW_TIER3_SOURCES` | _(empty)_ | Optional env allow-list (csv: `naukri,linkedin,peerlist,wellfound,darwinbox,glassdoor,ambitionbox`). If set, restricts which sources the web can enable. |
 | `JOBFLOW_BROWSER_PROFILE` | `.jobflow/browser-profile` | Path to the Chromium user-data dir the agent drives — point it at a profile **logged into** LinkedIn/Naukri/etc. |
+| `JOBFLOW_CHROMIUM` | _(blank)_ | Path to an installed Chrome/Chromium for `apply --fill` and the local agent, instead of `npx playwright install chromium`. |
 | `JOBFLOW_LOCAL_POLL_EVERY_HOURS` | `12` | Unattended schedule: when the last run of an opted-in source is older than this, the agent enqueues it itself (`tier3_poll` for naukri/linkedin/peerlist/wellfound, `local_board_poll` for darwinbox), then drains them one at a time, human-paced. Only while the browser gates are on (both `JOBFLOW_BROWSER=on` and the web master switch), so it's off by default. `0` = off (click-to-run only). |
 
 #### Tier-3 poll targeting — the "good-paying software/engineering in India" sweep
