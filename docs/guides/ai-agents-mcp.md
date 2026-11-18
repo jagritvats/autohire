@@ -34,27 +34,37 @@ Without a profile everything still works, but jobs come back unscored.
 ### Claude Code
 
 ```bash
-claude mcp add jobflow -- node /path/to/jobflow/apps/cli/bin/jobflow.mjs mcp
+claude mcp add --transport stdio jobflow -- node /path/to/jobflow/apps/cli/bin/jobflow.mjs mcp
 ```
 
-or, if `pnpm` works from any directory on your machine:
+Claude Code's own options go **before** the server name; everything after `--` is the server
+command, passed through unchanged. For example, to make it available in every project and use
+a different data directory:
 
 ```bash
-claude mcp add jobflow -- pnpm -s --dir /path/to/jobflow jobflow mcp
+claude mcp add --transport stdio --scope user --env JOBFLOW_DATA_DIR=/path/to/data jobflow \
+  -- node /path/to/jobflow/apps/cli/bin/jobflow.mjs mcp
 ```
 
-Add `--scope user` to make it available in every project, and `-e JOBFLOW_DATA_DIR=/path` to
-use a data directory other than `~/.jobflow`. Check it with `claude mcp list`, or with `/mcp`
-inside Claude Code.
+(`--scope` is `local` by default, `user` for all your projects, or `project` to share it through
+a checked-in `.mcp.json`. Keep another option between `--env` and the name — the CLI otherwise
+reads the name as a second `KEY=value`.) If `pnpm` works from any directory on your machine,
+`-- pnpm -s --dir /path/to/jobflow jobflow mcp` works too, but the `node …/jobflow.mjs` form is
+the most robust: it doesn't depend on the directory the client starts it from, and under
+Corepack `pnpm` can refuse to run outside the repo (`ERR_PNPM_BAD_PM_VERSION`) because the repo
+pins its pnpm version.
 
-The `node …/jobflow.mjs` form is the most robust. It doesn't depend on which directory the
-client starts it from. Under Corepack, `pnpm` can refuse to run outside the repo
-(`ERR_PNPM_BAD_PM_VERSION`) because the repo pins its pnpm version.
+Check it with `claude mcp list`, or `/mcp` inside Claude Code. To share it with a project
+instead, add it to `.mcp.json` at the project root (same shape as the Desktop config below).
 
 ### Claude Desktop and other MCP clients
 
 Add a server entry to the client's MCP config. For Claude Desktop that is
-`claude_desktop_config.json` (Settings → Developer → Edit Config):
+`claude_desktop_config.json` — open it from **Settings → Developer → Edit Config** (it's
+created if missing), or edit it directly:
+
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
 
 ```json
 {
@@ -68,10 +78,16 @@ Add a server entry to the client's MCP config. For Claude Desktop that is
 }
 ```
 
-Use absolute paths, because clients often start servers from `/`. The global flags work too:
-`"args": [".../jobflow.mjs", "--data-dir", "/path", "mcp"]`, and `--store memory` gives you a
-throwaway session. Your model key is read from the usual places: `jobflow config set llm.*`,
-the repo's `.env`, or the data directory's `.env`. It is never returned by any tool.
+Then quit Claude Desktop completely and reopen it. Use absolute paths — clients often start
+servers from `/` and don't inherit your shell's `PATH`, so if `node` isn't found, use its full
+path (`which node`; nvm installs are a common cause). On Windows, escape backslashes
+(`"C:\\Users\\you\\…"`). Server logs: macOS `~/Library/Logs/Claude/mcp-server-jobflow.log`,
+Windows `%APPDATA%\Claude\logs\`.
+
+The global flags work in `args` too: `[".../jobflow.mjs", "--data-dir", "/path", "mcp"]`, and
+`--store memory` gives you a throwaway session. Your model key is read from the usual places:
+`jobflow config set llm.*`, the repo's `.env`, or the data directory's `.env`. It is never
+returned by any tool.
 
 ### Options
 

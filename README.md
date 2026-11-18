@@ -165,7 +165,7 @@ your ranked feed with honest flags, one job in full, the tracker, a dry-run appl
 drafts grounded in your own material.
 
 ```bash
-claude mcp add jobflow -- node /path/to/jobflow/apps/cli/bin/jobflow.mjs mcp
+claude mcp add --transport stdio jobflow -- node /path/to/jobflow/apps/cli/bin/jobflow.mjs mcp
 ```
 
 It works on your local data, doesn't hold the database while the agent sits idle, and never
