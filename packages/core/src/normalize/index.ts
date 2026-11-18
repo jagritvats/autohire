@@ -132,13 +132,19 @@ export function parseStatedSalary(salaryRaw: string | null, jdText: string, loca
   );
 }
 
+const DOLLAR_COUNTRIES: ReadonlySet<string> = new Set(["CA", "AU", "NZ", "SG", "HK", "MX"]);
+
 /**
  * The country whose currency a bare "$" / "kr" / "¥" in this posting is read in: its
  * primary place, else the country a remote restriction names (US-only remote → US).
  * null = unknown, so a "$" stays USD but at reduced confidence.
  */
 function salaryCountryOf(location: ParsedLocation): string | null {
-  const primary = locationCountryCodes(location)[0];
+  const codes = locationCountryCodes(location);
+  // a multi-office role with a US office and no other dollar country: its "$" is the US one
+  // (Cisco's "Bengaluru; San Jose" posts a US range for US applicants)
+  if (codes.includes("US") && !codes.some((c) => c !== "US" && DOLLAR_COUNTRIES.has(c))) return "US";
+  const primary = codes[0];
   if (primary) return primary;
   if (location.mode === "remote" && (location.remoteGeo === "us_only" || location.remoteGeo === "us_eu")) return "US";
   if (location.mode === "remote" && location.remoteGeo === "india_ok") return "IN";

@@ -109,12 +109,21 @@ describe("stated salary: units, periods, currencies (table)", () => {
     ["Salary: kr 45 000 per month", at(null), null], // a krona nobody can name is never priced
     // ── base / OTE / total, and equity (never pay) ──
     ["OTE: $180k – $220k", US, { basis: "ote", min: 180_000, max: 220_000, confidence: "high" }],
+    [
+      "The typical starting salary range for this role is: $129,000 – $204,000 USD The typical starting Target Variable range for this role is: $55,200 – $87,400 USD The typical starting On-Target Earnings (OTE) range for this role is: $184,200 – $291,400 USD",
+      US,
+      { min: 129_000, max: 204_000, confidence: "high" }, // variable pay is not salary; OTE isn't unioned in
+    ],
+    ["Commission: $40,000 – $60,000 at target. Base salary: $90,000 – $110,000.", US, { min: 90_000, max: 110_000, basis: "base" }],
     ["Base salary $140,000 - $160,000; OTE $280,000 - $320,000", US, { basis: "base", min: 140_000, max: 160_000 }],
     ["Total compensation: $250k – $350k (base + equity)", US, { basis: "total", equity: true }],
     ["Salary: $150k–$190k + equity", US, { min: 150_000, max: 190_000, equity: true, confidence: "high" }],
     ["Salary: $150,000 - $190,000 plus stock options", US, { equity: true }],
     ["$150k – $190k • 0.5% – 1.0%", { ...US, structured: true }, { max: 190_000, equity: true, confidence: "high" }],
     ["Compensation includes $20,000 in RSUs.", US, null],
+    ["Estimated annual salary of $117,000 - $161,000 Equity This role is eligible for our equity plan.", US, { min: 117_000, max: 161_000, confidence: "high" }],
+    ["Salary: $150,000 - $180,000. Equity grants vest over four years.", US, { max: 180_000, confidence: "high" }],
+    ["You'll get $40,000 equity grants yearly.", US, null],
     ["Equity: 0.1% – 0.5%", US, null],
     // ── not pay ──
     ["Salary: $1.2M - $1.5M", US, null],
@@ -139,6 +148,8 @@ describe("the posting's location prices its salary", () => {
     expect(parseStatedSalary(null, text, parseLocation("Austin, TX"))).toMatchObject({ currency: "USD", confidence: "high" });
     expect(parseStatedSalary(null, text, parseLocation("Remote", "Remote — US only"))).toMatchObject({ currency: "USD", confidence: "high" });
     expect(parseStatedSalary(null, text, parseLocation("Remote"))).toMatchObject({ currency: "USD", confidence: "medium_high" });
+    // a multi-office role with a US office (and no other dollar country) posts US dollars
+    expect(parseStatedSalary(null, text, parseLocation("Bengaluru, India; San Jose, CA"))).toMatchObject({ currency: "USD", confidence: "high" });
   });
 });
 

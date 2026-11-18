@@ -76,12 +76,12 @@ const PEGGED: Readonly<Record<string, number>> = { AED: 3.6725, SAR: 3.75 };
 let active: FxTable = STATIC_FX;
 
 /**
- * Use a refreshed table for every later conversion in this process — only when it is NEWER
+ * Use a refreshed table for every later conversion in this process — only when it is NOT OLDER
  * than what's installed and sane (USD = 1, positive finite rates). Currencies it lacks keep
  * their shipped rate. Returns the table now in use.
  */
 export function installFxRates(table: FxTable | null | undefined): FxTable {
-  if (!table || !isValidFxTable(table) || table.asOf <= active.asOf) return active;
+  if (!table || !isValidFxTable(table) || table.asOf < active.asOf) return active;
   active = { asOf: table.asOf, source: table.source, perUsd: { ...FX_PER_USD, ...PEGGED, ...table.perUsd, USD: 1 } };
   return active;
 }

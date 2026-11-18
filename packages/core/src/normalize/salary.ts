@@ -137,7 +137,10 @@ const PAY_WORD = /\b(salary|salaries|compensation|pay|pays|paid|ctc|stipend|remu
 /** Words that make a nearby figure a company metric or a one-off, not pay. */
 const NOT_PAY = /\b(raised|raising|funding|funded|valuation|valued|revenue|arr|gmv|tpv|turnover|market cap\w*|series [a-f]|seed|invest\w*|customers?|users|merchants|transactions?|volume|donat\w*|prize|award)\b/i;
 /** The amount directly modifies a perk / one-off / an equity grant ("$15,000 signing bonus", "$20k in RSUs"). */
-const PERK_AFTER = /^\s*(?:(?:annual|yearly|one[- ]time|signing|sign[- ]on|joining|referral|relocation|learning|education|wellness|home[- ]office|wfh|internet|phone|equipment|travel|meal|health)\s+)?(?:bonus|budget|allowance|reimbursement|credits?|grant|fund)\b|^\s*(?:learning|education|wellness|home[- ]office|wfh|internet|phone|equipment)\s+stipend\b|^\s*(?:in|of|worth of)?\s*(?:rsus?|equity|stock(?:\s+options)?|esops?|share options|options)\b/i;
+const PERK_AFTER = /^\s*(?:(?:annual|yearly|one[- ]time|signing|sign[- ]on|joining|referral|relocation|learning|education|wellness|home[- ]office|wfh|internet|phone|equipment|travel|meal|health)\s+)?(?:bonus|budget|allowance|reimbursement|credits?|grant|fund)\b|^\s*(?:learning|education|wellness|home[- ]office|wfh|internet|phone|equipment)\s+stipend\b|^\s*(?:in|of|worth of)\s+(?:rsus?|equity|stock(?:\s+options)?|esops?|share options|options)\b|^\s*(?:in\s+)?(?:rsus?|equity|stock|esops?|options?)\s+(?:grants?|awards?|refresh\w*|vesting)\b/i;
+
+/** labels for variable pay only (commission / bonus / incentive targets) */
+const VARIABLE_ONLY = /\b(?:target variable|variable (?:pay|comp\w*|range)|commissions?|bonus(?:es)?|incentives?)\b/i;
 
 const CAP_BEFORE = /\b(?:up ?to|max(?:imum)?|as high as|not more than|no more than|bis zu|jusqu'à|hasta)\s*$/i;
 const FLOOR_BEFORE = /\b(?:from|starting (?:at|from)|min(?:imum)?|at least|over|above|more than|ab|à partir de|desde)\s*$/i;
@@ -354,6 +357,10 @@ function buildCandidate(text: string, a: Token, b: Token | null, opts: SalaryPar
   //    alongside ("raised $500k", "TPV of INR …") means it isn't ──
   const near = text.slice(Math.max(0, start - 60), start);
   if (NOT_PAY.test(near) && !PAY_WORD.test(near)) return null;
+  // the label right before this figure (since the previous one) names variable pay alone —
+  // "Target Variable range: $55,200 – $87,400" is commission, not salary
+  const label = near.replace(/^[\s\S]*[$€£₹\d]/u, "");
+  if (VARIABLE_ONLY.test(label) && !/\b(?:salary|base|ote|on[- ]target|total|compensation|ctc)\b/i.test(label)) return null;
   const kwNear =
     structured ||
     PAY_WORD.test(text.slice(Math.max(0, start - 160), start)) ||
