@@ -13,11 +13,14 @@ const GEO: Record<string, string> = {
   us_eu: "US or EU",
   india_ok: "India OK",
   apac_ok: "APAC",
+  country_only: "one country only",
   unknown: "region not stated",
 };
 
 export function locationText(c: Pick<FeedCard, "location">): string {
   const l = c.location;
+  // remote for residents of one country: say which ("Remote · Canada only")
+  if (l.mode === "remote" && l.remoteGeo === "country_only" && l.country) return `Remote · ${l.country} only`;
   if (l.mode === "remote") return `Remote · ${GEO[l.remoteGeo] ?? l.remoteGeo.replace(/_/g, " ")}`;
   const mode = l.mode === "unknown" ? "" : l.mode.charAt(0).toUpperCase() + l.mode.slice(1);
   return [mode, l.label].filter(Boolean).join(" · ") || "Location not stated";

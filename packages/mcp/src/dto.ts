@@ -24,7 +24,7 @@ export const JobSummaryOut = z.object({
   company: z.string(),
   location: z.string().describe('human label, e.g. "Remote (worldwide)" or "Hybrid · Bengaluru, IN"'),
   workMode: z.string().describe("remote | hybrid | onsite | unknown"),
-  remoteGeo: z.string().describe("where a remote role may be done from (worldwide, us_only, eu_only, india_ok, …)"),
+  remoteGeo: z.string().describe("where a remote role may be done from (worldwide, us_only, eu_only, india_ok, country_only = residents of `country` only, …)"),
   score: z.number().nullable().describe("0–100 fit against the user's profile; null when unscored (no profile yet)"),
   fitNote: z.string().nullable().describe("the stack-fit note (what overlaps / what's missing)"),
   levelNote: z.string().nullable().describe("seniority / experience note"),
@@ -44,7 +44,10 @@ export type JobSummary = z.infer<typeof JobSummaryOut>;
 export function locationLabel(c: Pick<FeedCard, "location">): string {
   const l = c.location;
   if (l.mode === "remote") {
-    const geo = l.remoteGeo && l.remoteGeo !== "unknown" ? ` (${l.remoteGeo.replace(/_/g, " ")})` : "";
+    const geo =
+      l.remoteGeo === "country_only" && l.country
+        ? ` (${l.country} only)`
+        : l.remoteGeo && l.remoteGeo !== "unknown" ? ` (${l.remoteGeo.replace(/_/g, " ")})` : "";
     return `Remote${geo}${l.label ? ` · ${l.label}` : ""}`;
   }
   const mode = l.mode === "unknown" ? "" : l.mode.charAt(0).toUpperCase() + l.mode.slice(1);

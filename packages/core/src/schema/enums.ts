@@ -155,6 +155,12 @@ export const RemoteGeo = z.enum([
   "us_only",
   "eu_only",
   "us_eu",
+  /**
+   * remote for residents of the posting's own countries only ("Remote - Canada", "Remote
+   * (Brazil)"): `location.countries` (or `location.country`) names them. Open when one is
+   * your home or a market; never a region you can put in `remoteGeoOk`.
+   */
+  "country_only",
   "unknown",
 ]);
 export type RemoteGeo = z.infer<typeof RemoteGeo>;

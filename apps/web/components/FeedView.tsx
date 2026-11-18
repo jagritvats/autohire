@@ -17,6 +17,7 @@ const GEOS: Array<{ id: string; label: string }> = [
   { id: "apac_ok", label: "APAC" },
   { id: "us_only", label: "US only" },
   { id: "eu_only", label: "EU only" },
+  { id: "country_only", label: "one country only" },
 ];
 
 /** a tab: the whole ranked list, one of your saved searches, or a collection */

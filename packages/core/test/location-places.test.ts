@@ -12,7 +12,7 @@ import {
   parseLocation,
   parsedCountryMatches,
 } from "../src/normalize/location.js";
-import { RawPosting, type ParsedLocation, type Posting, type Profile } from "../src/schema/index.js";
+import { ParsedLocation as ParsedLocationSchema, RawPosting, type ParsedLocation, type Posting, type Profile } from "../src/schema/index.js";
 
 /**
  * Multi-place locations, European place names and the agency flag (SOURCE_HEALTH.md
@@ -268,5 +268,54 @@ describe("country lists in one segment", () => {
     expect(parseLocation("Remote Europe, USA, Canada, Australia, Singapore, Mexico").countries).toEqual(["US", "CA", "SG", "AU", "MX"]);
     expect(parseLocation("Santa Fe, New Mexico, USA").countries).toEqual(["US"]);
     expect(parseLocation("Albuquerque, New Mexico").countries).toEqual(["US"]);
+  });
+});
+
+describe("country_only remote geo (remote for residents of named countries)", () => {
+  const prof = (homeCountry: string, markets: string[] = []) =>
+    profile({ homeCountry, markets, currency: homeCountry === "IN" ? "INR" : "USD", locationWeights: [], remoteGeoOk: ["worldwide"] });
+
+  it("the parser emits it for a remote-anchored single country (or several), with the countries", () => {
+    expect(parseLocation("Remote - Canada")).toMatchObject({ mode: "remote", remoteGeo: "country_only", country: "Canada", countries: ["CA"] });
+    expect(parseLocation("Remote (Brazil)")).toMatchObject({ remoteGeo: "country_only", countries: ["BR"] });
+    expect(parseLocation("Remote - Canada; Brazil")).toMatchObject({ remoteGeo: "country_only", countries: ["CA", "BR"] });
+    // region-level geos are unchanged
+    expect(parseLocation("Remote - US").remoteGeo).toBe("us_only");
+    expect(parseLocation("Remote - Germany").remoteGeo).toBe("eu_only");
+    expect(parseLocation("Remote - India").remoteGeo).toBe("india_ok");
+  });
+
+  it("is workable when one of its countries is home or a market, a soft down-weight + flag otherwise", () => {
+    const canada = posting(parseLocation("Remote - Canada"));
+    const ca = scorePosting(canada, prof("CA"));
+    const inMarket = scorePosting(canada, prof("IN", ["IN", "CA"]));
+    const abroad = scorePosting(canada, prof("IN"));
+    expect(ca.breakdown.location).toBeGreaterThan(abroad.breakdown.location);
+    expect(inMarket.breakdown.location).toBe(ca.breakdown.location);
+    expect(ca.flags.redFlags.join(" ")).not.toMatch(/requires living there/);
+    expect(abroad.flags.redFlags.join(" ")).toMatch(/"Remote" within Canada — usually requires living there/);
+    // soft: at the parser's 0.8 confidence it is never a hard exclusion
+    expect(abroad.rulePass).toBe(true);
+    expect(isWorkableIn(canada.location, ["CA"])).toBe(true);
+    expect(isWorkableIn(canada.location, ["US"])).toBe(false);
+    expect(isWorkableIn(parseLocation("Remote - Canada; Brazil"), ["BR"])).toBe(true);
+  });
+
+  it("the hard rule: only at confidence >= 0.85 and only when no country is home or a market", () => {
+    const sure = posting({ ...parseLocation("Remote - Canada"), confidence: 0.9 });
+    expect(scorePosting(sure, prof("IN")).flags.hardExclusionReason).toMatch(/residents of Canada/);
+    expect(scorePosting(sure, prof("CA")).flags.hardExclusionReason).toBeNull();
+    expect(scorePosting(sure, prof("IN", ["CA"])).flags.hardExclusionReason).toBeNull();
+    expect(scorePosting(sure, prof("")).flags.hardExclusionReason).toBeNull(); // home unknown: nothing is abroad
+    // a European home vs a European country-only role is the same region, never "definitely elsewhere"
+    const de = posting({ mode: "remote", city: null, country: "Europe", countries: ["DE"], timezone: null, remoteGeo: "country_only", sponsorship: null, confidence: 0.9 });
+    expect(scorePosting(de, prof("FR")).flags.hardExclusionReason).toBeNull();
+  });
+
+  it("old rows read fine: 'unknown' + a country still scores as country-scoped; unknown values parse as 'unknown'", () => {
+    const legacy = posting({ mode: "remote", city: null, country: "Canada", timezone: null, remoteGeo: "unknown", sponsorship: null, confidence: 0.8 });
+    expect(scorePosting(legacy, prof("IN")).flags.redFlags.join(" ")).toMatch(/within Canada/);
+    expect(ParsedLocationSchema.parse({ mode: "remote", remoteGeo: "mars_only" }).remoteGeo).toBe("unknown");
+    expect(ParsedLocationSchema.parse({ mode: "remote", remoteGeo: "country_only", country: "Canada" }).remoteGeo).toBe("country_only");
   });
 });

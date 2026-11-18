@@ -52,7 +52,8 @@ export const ParsedLocation = z.object({
    */
   countries: z.array(z.string()).optional(),
   timezone: z.string().nullable().default(null),
-  remoteGeo: RemoteGeo.default("unknown"),
+  // a value this build doesn't know (a newer writer) reads as "unknown", never a parse error
+  remoteGeo: RemoteGeo.default("unknown").catch("unknown"),
   sponsorship: z.boolean().nullable().default(null),
   /**
    * 0..1 confidence in the parsed geo (§11.3). High = explicit city+country or an

@@ -336,9 +336,10 @@ export function parseLocation(locationRaw: string | null, jdText = ""): ParsedLo
       remoteGeo = fromLoc;
       geoSource = "loc";
     } else if (country && (country === "Canada" || otherCountry(loc))) {
-      // "Remote - Brazil": remote WITHIN one named country. No RemoteGeo names it, so the geo
-      // stays unknown, but the country is a structured claim — JD boilerplate ("customers
-      // worldwide", a stray "US") must not reinterpret it.
+      // "Remote - Brazil": remote WITHIN the named country (or countries: "Remote - Canada;
+      // Brazil" — `countries`). A structured claim — JD boilerplate ("customers worldwide", a
+      // stray "US") must not reinterpret it.
+      remoteGeo = "country_only";
       geoSource = "loc_country";
     }
     // an explicit JD restriction beats a generic "worldwide" label, never a named India option
@@ -403,7 +404,9 @@ function scoreConfidence(
   if (mode === "remote") {
     // the location field is a structured claim; JD prose disagreeing with it lowers trust
     if (geoSource === "loc") return conflicting && remoteGeo !== "india_ok" ? 0.6 : 0.9;
-    if (geoSource === "loc_country") return 0.8; // the country is stated; no RemoteGeo names it
+    // the country is stated, but "Remote - Canada" can mean "Canada-based team" as well as
+    // "residents only": below the 0.85 the hard rule needs, so it stays a soft down-weight
+    if (geoSource === "loc_country") return 0.8;
     if (conflicting) return 0.4; // multiple, competing geo hints — unsure which binds
     if (geoSource === "jd_explicit") return remoteGeo === "worldwide" || remoteGeo === "india_ok" ? 0.9 : 0.85;
     if (remoteGeo === "unknown") return 0.35; // "remote" with zero geo info
@@ -566,6 +569,8 @@ export function isWorkableIn(
     });
   }
   if (loc.mode === "remote") {
+    // remote for residents of named countries: open when one of them is a market
+    if (loc.remoteGeo === "country_only") return markets.some((m) => locationInCountry(loc, m) === true);
     const open = new Set<RemoteGeo>(remoteGeoOk);
     for (const m of markets) for (const g of remoteGeosForCountry(m)) open.add(g);
     return open.has(loc.remoteGeo);

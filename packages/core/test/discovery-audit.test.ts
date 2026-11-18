@@ -238,14 +238,14 @@ describe("location: places the parser didn't know, and boilerplate 'worldwide'",
   });
 
   it("'Remote - Canada' is one country, not the US-or-Americas bucket; 'US or Canada' still is", () => {
-    expect(parseLocation("Remote - Canada", "")).toMatchObject({ country: "Canada", remoteGeo: "unknown", confidence: 0.8 });
+    expect(parseLocation("Remote - Canada", "")).toMatchObject({ country: "Canada", remoteGeo: "country_only", confidence: 0.8 });
     expect(parseLocation("Remote - US; Remote - Canada", "").remoteGeo).toBe("us_only");
     expect(parseLocation("Remote - North America", "").remoteGeo).toBe("us_only");
   });
 
   it("'Remote Singapore' is remote within Singapore, not US-only from a stray 'US' in the JD", () => {
     const l = parseLocation("Remote Singapore", "Work with teams in the US and Europe.");
-    expect(l).toMatchObject({ mode: "remote", country: "Singapore", remoteGeo: "unknown" });
+    expect(l).toMatchObject({ mode: "remote", country: "Singapore", remoteGeo: "country_only" });
     expect(l.confidence).toBe(0.8);
   });
 });
