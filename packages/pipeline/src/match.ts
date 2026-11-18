@@ -74,8 +74,7 @@ export async function rebuildMatches(
     const want = pid === cid ? null : cid;
     // a posting that is its own canonical again (its old cluster split, or the winner went
     // stale) must drop the pointer — the browse feed hides anything that still has one.
-    // The repo stores null as "no canonical"; its signature predates clearing (string).
-    if (stored !== want) await repo.setCanonical(pid, want as string);
+    if (stored !== want) await repo.setCanonical(pid, want);
   }
   const canonicalIds = new Set(canonicalByPostingId.values());
   const canonical: Posting[] = active.filter((p) => canonicalIds.has(p.id));

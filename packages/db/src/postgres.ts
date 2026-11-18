@@ -185,6 +185,10 @@ export class PgRepository implements Repository {
          apply_url, jd_embedding, dedup_key, posted_at, posted_by_agency, embed_key, salary_raw)
        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34)
        on conflict (ats_type, ats_job_id) do update set
+         -- identity (id, company_id, source, tier, first_seen) stays with the first write;
+         -- everything derived from the fetched posting is refreshed, the dedup key included:
+         -- it moves with the title, location and company spelling (and with a key change)
+         company_name = excluded.company_name, dedup_key = excluded.dedup_key,
          title = excluded.title, title_norm = excluded.title_norm,
          role_archetype = excluded.role_archetype, level_band = excluded.level_band,
          jd_text = excluded.jd_text, jd_skills = excluded.jd_skills, requirements = excluded.requirements,
@@ -240,7 +244,7 @@ export class PgRepository implements Repository {
     );
     return rows.map(rowToPosting);
   }
-  async setCanonical(postingId: string, canonicalId: string): Promise<void> {
+  async setCanonical(postingId: string, canonicalId: string | null): Promise<void> {
     await this.q("update posting set canonical_id = $2 where id = $1", [postingId, canonicalId]);
   }
   async updatePostingSalary(id: string, band: SalaryBand, salaryRaw?: string | null): Promise<void> {
