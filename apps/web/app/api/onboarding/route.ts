@@ -50,6 +50,6 @@ export async function POST(req: Request) {
   // rank now if there's a corpus; otherwise sync first (in the background, single-user only)
   const corpus = await repo.listActivePostings();
   if (corpus.length) await rankTenant(repo, auth.tenantId);
-  else if (process.env.JOBFLOW_AUTH !== "password") void startCorpusSync(repo, async () => void (await rankTenant(repo, auth.tenantId)));
+  else if (process.env.JOBFLOW_AUTH !== "password") void startCorpusSync(repo, async () => void (await rankTenant(repo, auth.tenantId)), undefined, { trigger: "first_run" });
   return NextResponse.json(r);
 }

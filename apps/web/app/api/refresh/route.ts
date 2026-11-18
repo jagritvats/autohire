@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   if (new URL(req.url).searchParams.get("background") === "1") {
     if (auth.role !== "admin") return NextResponse.json({ started: false, syncing: corpusSyncing(), error: "Syncing the shared job list is an admin action here; your Jobs re-rank after each scheduled sync." }, { status: 403 });
     const repo = await getRepo();
-    void startCorpusSync(repo, async () => void (await rankTenant(repo, auth.tenantId)));
+    void startCorpusSync(repo, async () => void (await rankTenant(repo, auth.tenantId)), undefined, { trigger: "manual", origin: "web" });
     return NextResponse.json({ started: true, syncing: true });
   }
   // re-polling the shared corpus is an admin action on a multi-user instance; members re-rank
