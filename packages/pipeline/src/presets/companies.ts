@@ -76,7 +76,7 @@ export const US_COMPANIES: SeedCompany[] = [
   { name: "Okta", careersUrl: gh("okta"), tags: ["saas", "us"] }, // 126 / 38
   { name: "Zscaler", careersUrl: gh("zscaler"), tags: ["infra", "us", "security"] }, // 165 / 82
   { name: "MongoDB", careersUrl: gh("mongodb"), tags: ["infra", "us"] }, // 126 / 40
-  { name: "Cloudflare", careersUrl: gh("cloudflare"), tags: ["infra", "us"] }, // 0 / 0 — board lists work modes ("Hybrid") in place of cities until the Greenhouse adapter reads offices[]
+  { name: "Cloudflare", careersUrl: gh("cloudflare"), tags: ["infra", "us"] }, // 278 / 139 (offices[] read since 2026-11-18; was 0 while the board gave work modes as locations)
   { name: "Discord", careersUrl: gh("discord"), tags: ["consumer", "us"] }, // 22 / 9
   { name: "Figma", careersUrl: gh("figma"), tags: ["product", "us"] }, // 93 / 33
   { name: "Dropbox", careersUrl: gh("dropbox"), tags: ["saas", "us"] }, // 27 / 12
@@ -195,7 +195,7 @@ export const EU_UK_COMPANIES: SeedCompany[] = [
   { name: "Wise", careersUrl: "https://careers.smartrecruiters.com/wise", tags: ["fintech", "eu"], pollCadence: "daily" }, // 207 / 68
   { name: "Stripe", careersUrl: gh("stripe"), tags: ["fintech", "eu"] }, // 159 / 32
   { name: "Datadog", careersUrl: gh("datadog"), tags: ["infra", "eu"] }, // 63 / 19
-  { name: "Cloudflare", careersUrl: gh("cloudflare"), tags: ["infra", "eu"] }, // 1 / 1 — board lists work modes ("Hybrid") in place of cities until the Greenhouse adapter reads offices[]
+  { name: "Cloudflare", careersUrl: gh("cloudflare"), tags: ["infra", "eu"] }, // 88 / 42 (was 1 / 1 before the Greenhouse adapter read offices[])
   { name: "GitLab", careersUrl: gh("gitlab"), tags: ["devtools", "remote"] }, // 55 / 24
   { name: "MongoDB", careersUrl: gh("mongodb"), tags: ["infra", "eu"] }, // 92 / 33
   { name: "Databricks", careersUrl: gh("databricks"), tags: ["infra", "eu"] }, // 128 / 43
@@ -373,4 +373,5 @@ export const CANADA_COMPANIES: SeedCompany[] = [
   { name: "Amazon", careersUrl: "https://www.amazon.jobs/en/", tags: ["bigtech", "canada"] }, // 213 / 154
   { name: "Salesforce", careersUrl: wd("salesforce.wd12", "External_Career_Site"), tags: ["saas", "canada"] }, // 47 / 7
   { name: "Nvidia", careersUrl: wd("nvidia.wd5", "NVIDIAExternalCareerSite"), tags: ["bigtech", "canada"] }, // 16 / 10
+  { name: "Cloudflare", careersUrl: gh("cloudflare"), tags: ["infra", "canada"] }, // 35 / 14 — Toronto, Canada-remote (added 2026-11-18 once offices[] were read)
 ];

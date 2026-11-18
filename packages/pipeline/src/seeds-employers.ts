@@ -165,6 +165,7 @@ export const INDIA_EMPLOYER_BOARDS: SeedCompany[] = [
   { name: "Zoom", careersUrl: "https://zoom.wd5.myworkdayjobs.com/Zoom", tags: ["global", "india", "saas"] }, // 4 / 2
   { name: "Fivetran", careersUrl: "https://boards.greenhouse.io/fivetran", tags: ["global", "india", "data"] }, // 18 / 13
   { name: "Bitwarden", careersUrl: "https://boards.greenhouse.io/bitwarden", tags: ["global", "india", "security", "oss"] }, // 17 / 17 (Noida)
+  { name: "Cloudflare", careersUrl: "https://boards.greenhouse.io/cloudflare", tags: ["global", "india", "infra", "remote"] }, // 17 / 8 ("Remote India", read from offices[])
   { name: "Elastic", careersUrl: "https://boards.greenhouse.io/elastic", tags: ["global", "india", "infra", "remote"] }, // 17 / 4
   { name: "IMC Trading", careersUrl: "https://boards.greenhouse.io/imc", tags: ["global", "india", "fintech"] }, // 15 / 8 (Mumbai)
   { name: "Commvault", careersUrl: "https://boards.greenhouse.io/commvault", tags: ["global", "india", "infra"] }, // 8 / 5
