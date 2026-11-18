@@ -6,6 +6,7 @@ body:
     attributes:
       value: |
         Thanks for reporting! **Never paste API keys, tokens, session cookies, résumés or other personal data.**
+        Security problems (an application getting submitted, a server running a logged-in site, one user seeing another's data) go to a private [security advisory](https://github.com/jagritvats/autohire/security/advisories/new), not here.
   - type: textarea
     id: what
     attributes:
@@ -13,15 +14,26 @@ body:
       description: What you did, what you expected, and what happened instead.
     validations:
       required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Commands you ran or pages you visited. If you can, reproduce it on the fictional sample (`jobflow init --yes --sample`) or in demo mode (`JOBFLOW_DEMO_DATA=1`).
+      placeholder: |
+        1. pnpm jobflow search "backend" --remote
+        2. pnpm jobflow show 2
   - type: dropdown
     id: mode
     attributes:
-      label: How are you running JobFlow?
+      label: Where does it happen?
       options:
         - CLI (jobflow …)
+        - Web app (pnpm web / jobflow serve)
+        - Web app, hosted multi-user mode (JOBFLOW_AUTH=password)
         - Docker Compose
-        - pnpm dev / web
-        - Local agent / extension
+        - Worker (scheduled sync)
+        - Local agent / form-filler
+        - Browser extension
         - Other
     validations:
       required: true
@@ -29,15 +41,20 @@ body:
     id: version
     attributes:
       label: Version / commit
-      placeholder: e.g. 0.2.0 or a commit SHA
+      placeholder: e.g. 0.1.0 (jobflow --version) or a commit SHA
   - type: textarea
     id: env
     attributes:
       label: Environment
-      description: OS, Node version, store (memory / pglite / postgres), LLM provider. Redact secrets.
+      description: OS, Node version, store (pglite / memory / postgres), LLM provider. Redact secrets.
   - type: textarea
     id: logs
     attributes:
       label: Logs
-      description: Relevant log output (redacted). `jobflow doctor --json` output is very helpful.
+      description: Relevant output (redacted). `jobflow doctor --json` is very helpful; `JOBFLOW_DEBUG=1` adds stack traces to CLI errors.
       render: shell
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: For UI problems. Please crop out anything personal, or use demo mode.
