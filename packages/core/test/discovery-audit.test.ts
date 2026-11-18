@@ -281,7 +281,7 @@ describe("ranking: abroad and country-bound remote are soft signals with honest 
   it("onsite Tokyo for a user in India is discounted and flagged (was neutral: no country)", () => {
     const r = scorePosting(posting({ locationRaw: "Tokyo, Japan" }), profile("IN", ["IN"]));
     expect(r.rulePass).toBe(true);
-    expect(r.flags.redFlags.join(" ")).toMatch(/Onsite Japan/);
+    expect(r.flags.redFlags.join(" ")).toMatch(/Onsite in Japan/);
   });
 
   it("'Remote - Brazil' is closed to a US user but open to one searching Brazil — never excluded", () => {

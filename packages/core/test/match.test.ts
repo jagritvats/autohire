@@ -66,23 +66,25 @@ describe("stack adjacency (§11.1 — don't gate on language)", () => {
     const res = stackAdjacency(["java", "kafka", "postgres", "distributed_systems"], ["go", "kafka", "postgres", "distributed_systems"]);
     expect(res.score).toBeGreaterThan(0.6);
     expect(res.languageStretch).toBe(true);
-    expect(res.note).toMatch(/transferable/i);
+    expect(res.note).toMatch(/Main language Go is new to you — close to Java, which you know/);
+    expect(res.note).toMatch(/Kafka, Postgres and distributed systems/);
   });
 
-  it("a direct language match is noted as such", () => {
+  it("a direct language match is noted as such, with what else it asks", () => {
     const res = stackAdjacency(["java"], ["java", "kafka"]);
-    expect(res.note).toMatch(/direct match/i);
+    expect(res.note).toMatch(/Main language Java — you have it/);
+    expect(res.note).toMatch(/also names Kafka — not on your list/);
   });
 
   it("never calls it a direct match when only a SECONDARY JD language is yours", () => {
     // a Scala-first role that also lists Go, for a Go developer
     const scala = stackAdjacency(["go", "kafka", "postgres"], ["scala", "go", "kafka"]);
-    expect(scala.note).not.toMatch(/direct match/i);
-    expect(scala.note).toMatch(/scala is new to you/i);
-    expect(scala.note).toMatch(/also lists go/i);
+    expect(scala.note).not.toMatch(/you have it/i);
+    expect(scala.note).toMatch(/Scala is new to you/);
+    expect(scala.note).toMatch(/also lists Go, which you have/);
     // a C#-first web role that also lists JavaScript, for a Java/JS developer
     const cs = stackAdjacency(["java", "javascript"], ["csharp", "javascript"]);
-    expect(cs.note).not.toMatch(/direct match/i);
+    expect(cs.note).not.toMatch(/you have it/i);
     expect(cs.languageStretch).toBe(false);
   });
 });
@@ -96,7 +98,7 @@ describe("soft-weighted scoring", () => {
       profile,
     );
     expect(eng.score).toBeGreaterThan(sales.score);
-    expect(sales.flags.redFlags.join(" ")).toMatch(/non-engineering/i);
+    expect(sales.flags.redFlags.join(" ")).toMatch(/Not an engineering role/);
   });
 
   it("down-weights a us-only 'remote' and flags it (§11.3)", () => {
@@ -113,7 +115,7 @@ describe("soft-weighted scoring", () => {
   it("notes a senior stretch-up without excluding it", () => {
     const res = scorePosting(makePosting({ levelBand: "senior" }), makeProfile());
     expect(res.rulePass).toBe(true);
-    expect(res.flags.levelNote).toMatch(/stretch/i);
+    expect(res.flags.levelNote).toMatch(/Senior role; you're mid-level — a common step up/);
   });
 });
 
