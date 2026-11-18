@@ -918,7 +918,8 @@ a.chip {
   letter-spacing: 0.01em;
   text-transform: none;
   vertical-align: middle;
-  font-variant-numeric: tabular-nums;
+  /* proportional on purpose: Schibsted's tabular set includes the comma ("Bengaluru , India") */
+  font-variant-numeric: proportional-nums;
 }
 .badge--accent {
   background: var(--accent-soft);
@@ -2056,12 +2057,24 @@ input[type="range"] {
   gap: 6px;
   max-width: 78ch;
 }
+/* "+N more at Acme further down" — set like a newspaper's "continued on" line */
 .match__more {
-  margin: 0;
-  font-size: var(--fs-sm);
+  margin: var(--s-3) 0 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: var(--fs-base);
+  font-variation-settings: "SOFT" 100, "opsz" 18;
 }
 .match__more a {
   color: var(--text-2);
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.match__more a:hover {
+  color: var(--accent-text);
+  text-decoration-color: currentColor;
 }
 .match__flag {
   display: flex;
@@ -2101,10 +2114,11 @@ input[type="range"] {
   border-radius: 0;
   padding: 0;
 }
-.match__skill + .match__skill::before {
+/* the separator hangs off the word before it, so a wrapped line never starts with a dot */
+.match__skill:not(:last-child)::after {
   content: "·";
   margin: 0 8px;
-  color: var(--border-strong);
+  color: var(--text-3);
 }
 .match__foot {
   grid-column: 2;
@@ -4521,5 +4535,26 @@ input[type="file"]::file-selector-button {
   }
   .ux-job-summary .score-num {
     font-size: 56px;
+  }
+}
+
+/* card rhythm: one step between the dateline facts, the notes, the skills and the actions */
+.match__tags,
+.match__notes,
+.match__flags,
+.match__skills {
+  margin-top: 14px;
+}
+.match__foot {
+  margin-top: var(--s-4);
+}
+@media (max-width: 640px) {
+  /* notes stack: the small-caps label sits over its sentence on a phone */
+  .match__notes {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+  .match__notes dd + dt {
+    margin-top: var(--s-2);
   }
 }
