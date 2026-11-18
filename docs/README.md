@@ -32,6 +32,7 @@ your first sync and search, and the web app.
 ## Project
 
 - [Legal & ethics](legal-and-ethics.md): scraping tiers, terms of service, data
+- [Contributor guides](contributing/): adding a job source, presets & discovery, the web UI and design system, CLI conventions, data & migrations, testing, releasing
 - [Contributing](../CONTRIBUTING.md) · [Security](../SECURITY.md) · [Code of conduct](../CODE_OF_CONDUCT.md) · [Changelog](../CHANGELOG.md)
 - [Internal notes](internal/): product plan, original vision and roadmap, UX audit, publishing checklist
 - Screenshots: [`screenshots/`](screenshots/). Regenerate them with `pnpm screenshots` (an offline, fictional demo corpus).
