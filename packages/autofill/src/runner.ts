@@ -42,6 +42,7 @@ export async function runFill(plan: FillPlan, opts: RunnerOptions = {}): Promise
   const context = await pw.chromium.launchPersistentContext(resolveProfileDir(opts.userDataDir), {
     headless: opts.headless ?? false,
     viewport: null,
+    ...chromiumExecutable(),
   });
   const page = context.pages()[0] ?? (await context.newPage());
   return fillPlanOnPage(page, plan, { flags, dryRun: opts.dryRun });
@@ -171,9 +172,12 @@ export function resolveProfileDir(dir: string | undefined, env: NodeJS.ProcessEn
  * agent owns ONE of these and drives all browser jobs through it sequentially, so
  * Tier-3 fetch and form-fill never fight over the same Chromium profile (§7.1).
  */
-export async function launchUserContext(opts: { userDataDir?: string; headless?: boolean } = {}): Promise<PwContext> {
+export async function launchUserContext(
+  opts: { userDataDir?: string; headless?: boolean; env?: NodeJS.ProcessEnv } = {},
+): Promise<PwContext> {
   const pw = await importPlaywright();
-  return pw.chromium.launchPersistentContext(resolveProfileDir(opts.userDataDir), {
+  return pw.chromium.launchPersistentContext(resolveProfileDir(opts.userDataDir, opts.env), {
+    ...chromiumExecutable(opts.env),
     headless: opts.headless ?? false,
     viewport: null,
   });
@@ -207,7 +211,7 @@ interface PwModule {
   chromium: {
     launchPersistentContext(
       dir: string,
-      opts: { headless?: boolean; viewport?: null },
+      opts: { headless?: boolean; viewport?: null; executablePath?: string },
     ): Promise<PwContext>;
   };
 }
@@ -223,4 +227,19 @@ async function importPlaywright(): Promise<PwModule> {
       "playwright is not installed. The form-filler runs only on the local agent: `pnpm add playwright && npx playwright install chromium`.",
     );
   }
+}
+
+/**
+ * JOBFLOW_CHROMIUM: an installed Chrome/Chromium to use instead of Playwright's own
+ * download (`~` expanded; blank = unset). The CLI's readiness checks use the same rule.
+ */
+export function chromiumExecutablePath(env: NodeJS.ProcessEnv = process.env): string | null {
+  const p = env.JOBFLOW_CHROMIUM?.trim();
+  if (!p) return null;
+  return p === "~" || p.startsWith("~/") ? join(homedir(), p.slice(1)) : p;
+}
+
+function chromiumExecutable(env: NodeJS.ProcessEnv = process.env): { executablePath?: string } {
+  const p = chromiumExecutablePath(env);
+  return p ? { executablePath: p } : {};
 }

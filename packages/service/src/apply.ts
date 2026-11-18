@@ -43,7 +43,7 @@ export interface ApplyPlan {
   resume: ApplyResume;
   /** a saved cover letter is mapped to the form's cover-letter field */
   coverLetter: boolean;
-  /** what the user should fix before filling: "email", "name", "resume", "applyUrl" */
+  /** what the user should fix before filling: "email", "name", "resume", "resumeFormat", "applyUrl" */
   missing: string[];
   /** the dry-run text (what would be typed where) */
   dryRun: string;
@@ -113,6 +113,8 @@ export async function buildApplyPlan(
   if (!applicant.email.trim()) missing.push("email");
   if (!`${applicant.firstName}${applicant.lastName}`.trim()) missing.push("name");
   if (!resume.exists) missing.push("resume");
+  // application forms take PDF / Word; a .md/.tex/.txt base résumé would upload as-is
+  else if (resume.path && !/\.(pdf|docx?)$/i.test(resume.path)) missing.push("resumeFormat");
   if (!applyUrl) missing.push("applyUrl");
 
   // unknown / aggregator sources get the conservative generic field map (fieldMapFor)

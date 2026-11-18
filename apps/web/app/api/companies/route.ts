@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { normCompany } from "@jobflow/core";
 import { atsAdapter, detect } from "@jobflow/adapters";
-import { getRepo } from "@/lib/repo";
+import { getRepo, wakeJobRunner } from "@/lib/repo";
 import { guard } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -54,6 +54,7 @@ export async function POST(req: Request) {
     job = atsAdapter(company.atsType)
       ? await repo.enqueueJob({ tenantId: auth.tenantId, type: "poll", runtime: "cloud", payload: { companyId: company.id } })
       : await repo.enqueueJob({ tenantId: auth.tenantId, type: "local_board_poll", runtime: "local", payload: { companyId: company.id } });
+    if (job.runtime === "cloud") wakeJobRunner();
   }
   return NextResponse.json({ company, detection: det, job });
 }

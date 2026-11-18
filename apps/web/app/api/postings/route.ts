@@ -27,6 +27,8 @@ export async function GET(req: Request) {
     return NextResponse.json({ cards: data.cards, search, hidden: data.stats.hidden ?? null, hiddenTotal: data.stats.hiddenTotal ?? 0 });
   }
   const view = params.get("view") ?? "bookmarks";
+  // `?view=feed` — the whole Jobs feed again (the Jobs page reloads it after a sync)
+  if (view === "feed") return NextResponse.json(await getFeed(auth.tenantId, { bootstrap: false }));
   if (!VIEWS.includes(view as PostingView)) {
     return NextResponse.json({ error: `view must be one of ${VIEWS.join(", ")}` }, { status: 400 });
   }

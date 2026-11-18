@@ -1,13 +1,13 @@
 import type { Command } from "commander";
 import { isOnboarded, loadProfile } from "@jobflow/pipeline";
-import { findSearch, getFeed, listTailored, toCards } from "@jobflow/service";
+import { findSearch, getFeed, getJob, listTailored, toCards } from "@jobflow/service";
 import type { Ctx } from "../context.js";
 import { notFound, usage } from "../errors.js";
 import { ago } from "../output.js";
 import { compLabel, locationLabel, printCards, renderCard } from "../render/card.js";
 import { resolvePosting } from "../refs.js";
 import { presetIds } from "./shared.js";
-import type { SearchQueryInput } from "@jobflow/core";
+import { diversifyByCompany, diversifyKey, type SearchQueryInput } from "@jobflow/core";
 
 export function register(program: Command, ctx: Ctx): void {
   program
@@ -19,7 +19,8 @@ export function register(program: Command, ctx: Ctx): void {
     .option("--preset <presets>", "only roles tagged with these discovery presets, e.g. india or us,eu-uk")
     .option("--tag <presets>", "same as --preset")
     .option("--format <fmt>", "cards (default) | table")
-    .action(async (o: { limit: string; minScore?: string; search?: string; preset?: string; tag?: string; format?: string }) => {
+    .option("--no-diversify", "pure score order (by default no company fills the page: at most 3 per 20 cards, the rest follow)")
+    .action(async (o: { limit: string; minScore?: string; search?: string; preset?: string; tag?: string; format?: string; diversify: boolean }) => {
       const repo = await ctx.repo();
       const limit = Math.max(1, Math.min(500, Number(o.limit) || 20));
       const min = o.minScore != null ? Number(o.minScore) : null;
@@ -31,9 +32,13 @@ export function register(program: Command, ctx: Ctx): void {
         if (!s) throw notFound(`No saved search "${o.search}".`, "See them with `jobflow searches`.");
         view = presets.length ? { ...s.query, presets } : s.id;
       } else if (presets.length) view = { presets };
-      const data = await getFeed(repo, ctx.tenantId, { limit: Math.max(limit * 4, 100), view, bootstrap: false });
+      // score order from the service; the company spread runs on what this page SHOWS (after
+      // --min-score), so its "≤3 per company in any 20" holds for the cards printed
+      const data = await getFeed(repo, ctx.tenantId, { limit: Math.max(limit * 4, 100), view, bootstrap: false, diversify: false });
       const scored = data.stats.mode === "ranked";
-      const cards = data.cards.filter((c) => !c.archived && (min == null || c.score >= min)).slice(0, limit);
+      const visible = data.cards.filter((c) => !c.archived && (min == null || c.score >= min));
+      const cards = (o.diversify ? diversifyByCompany(visible, (c) => diversifyKey(c.company)) : visible).slice(0, limit);
+      const spreadMoved = o.diversify && cards.some((c, i) => visible[i]?.id !== c.id);
       ctx.rememberListing("feed", cards.map((c) => c.id));
       ctx.out.emit({ cards, stats: data.stats }, () => {
         const out = ctx.out;
@@ -57,6 +62,7 @@ export function register(program: Command, ctx: Ctx): void {
           const what = [o.search ? `"${o.search}"` : null, presets.length ? presets.map((p) => `#${p}`).join(" ") : null].filter(Boolean).join(" + ");
           out.hint(`${what} hid ${data.stats.hiddenTotal}: ${h.map(([k, n]) => `${k} ${n}`).join(", ")}`);
         }
+        if (spreadMoved) out.hint("spread across companies (at most 3 per 20, scores unchanged) — --no-diversify for pure score order");
         out.hint("next: jobflow show 1 · jobflow tailor 1 · jobflow apply 1");
       });
     });
@@ -75,8 +81,17 @@ export function register(program: Command, ctx: Ctx): void {
       const [card] = await toCards(repo, ctx.tenantId, [{ posting, match }]);
       const app = await repo.getApplicationByPosting(ctx.tenantId, posting.id);
       const drafts = await listTailored(repo, ctx.tenantId, posting.id).catch(() => []);
+      const job = await getJob(repo, ctx.files(), ctx.tenantId, posting.id);
+      const r = ref.replace(/^#/, "");
       ctx.out.emit(
-        { card, posting: { ...posting, jdEmbedding: undefined }, match, application: app, drafts: drafts.map((d) => ({ kind: d.kind, source: d.source, stale: d.stale, createdAt: d.createdAt })) },
+        {
+          card,
+          posting: { ...posting, jdEmbedding: undefined },
+          match,
+          application: app,
+          drafts: drafts.map((d) => ({ kind: d.kind, source: d.source, stale: d.stale, createdAt: d.createdAt })),
+          apply: job.apply,
+        },
         () => {
           const out = ctx.out;
           if (kept) out.hint("(saved this search result to your corpus)");
@@ -94,10 +109,20 @@ export function register(program: Command, ctx: Ctx): void {
           kv("tracker", app ? `${app.status}${app.nextAction ? ` · next: ${app.nextAction}` : ""}` : "not tracked");
           if (drafts.length) kv("drafts", drafts.map((d) => `${d.kind}${d.source === "builtin" ? " (builtin)" : ""}${d.stale ? " (stale)" : ""}`).join(", "));
           kv("apply", posting.applyUrl ?? "(no apply link)");
+          const gaps = job.apply.missing.filter((m) => m !== "applyUrl");
+          kv("ready?", gaps.length ? out.yellow(`not yet — missing ${gaps.join(", ")} (jobflow apply ${r} shows how to fix)`) : out.green("yes — name, email and a résumé file are set"));
+          if (match?.whyFit) kv("why", match.whyFit);
+          if (match?.gap) kv("gap", match.gap);
           if (o.jd) {
             out.line();
             out.line(posting.jdText || out.dim("(no description)"));
           } else if (posting.jdText) out.hint("full description: add --jd");
+          const next = !app
+            ? [`jobflow track add ${r}`, `jobflow tailor ${r}`, `jobflow apply ${r}`]
+            : ["saved", "drafting", "ready"].includes(app.status)
+              ? [`jobflow tailor ${r}`, `jobflow apply ${r} --fill`, `jobflow track status ${r} applied`]
+              : [`jobflow track next ${r} "follow up" --due <date>`, `jobflow track status ${r} interviewing`];
+          out.hint(`next: ${next.join(" · ")}`);
         },
       );
     });

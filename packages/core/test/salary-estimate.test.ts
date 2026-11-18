@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   calibrateByMarket,
+  calibrateSalaryScores,
+  calibrationKey,
+  type BacktestRow,
   compSampleOf,
   convertCurrency,
   estimateSalary,
@@ -211,6 +214,60 @@ describe("per-market confidence calibration", () => {
     const cal = estimateSalary(target({ level: 2, levelKnown: false }), weak, [], new Date(), { factor: 0.35, n: 100 });
     expect(cal).not.toBeNull();
     expect(cal!.confidenceScore).toBeLessThan(raw.confidenceScore);
+  });
+});
+
+describe("per market × role family calibration (audit 2026-11 follow-up)", () => {
+  const BANDS: Array<[number, number]> = [[0, 0.3], [0.3, 0.5], [0.5, 0.7], [0.7, 1.01]];
+  const med = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)]!;
+  /** median error per confidence band, after applying a calibration */
+  function curve(rows: BacktestRow[], cal: Map<string, { factor: number }>): number[] {
+    const c = rows.map((r) => ({ err: r.err, conf: r.confidence * (cal.get(calibrationKey(r.market, r.family ?? "eng"))?.factor ?? 1) }));
+    return BANDS.map(([lo, hi]) => c.filter((r) => r.conf >= lo && r.conf < hi).map((r) => r.err)).filter((e) => e.length).map(med);
+  }
+  const rows = (market: string, family: "eng" | "other", n: number, confidence: number, err: number): BacktestRow[] =>
+    Array.from({ length: n }, (_, i) => ({ market, family, confidence, err: err * (0.9 + (i % 3) * 0.1) }));
+
+  // the shape the live corpora showed: engineering estimates are well ordered (0.35 → 19%,
+  // 0.6 → 15%, 0.8 → 9%), but non-engineering ones sit at ~0.5 whatever their evidence
+  // and miss by ~21% — so the 0.5–0.7 band read worse than the 0.3–0.5 one
+  const corpus = [
+    ...rows("US", "eng", 300, 0.38, 0.19),
+    ...rows("US", "eng", 150, 0.6, 0.15),
+    ...rows("US", "eng", 400, 0.8, 0.09),
+    ...rows("US", "other", 900, 0.52, 0.21),
+    ...rows("US", "other", 100, 0.2, 0.4),
+    ...rows("IN", "eng", 80, 0.45, 0.41),
+  ];
+
+  it("restores error-by-confidence monotonicity by scaling down the over-confident family", () => {
+    const before = curve(corpus, new Map());
+    expect(before[1]!).toBeLessThan(before[2]!); // the inversion
+    const cal = calibrateSalaryScores(corpus);
+    const after = curve(corpus, cal);
+    for (let i = 1; i < after.length; i++) expect(after[i]!).toBeLessThanOrEqual(after[i - 1]!);
+    expect(cal.get("US:other")!.factor).toBeLessThan(0.97);
+    expect(cal.get("US:eng")!.factor).toBe(1); // the well-ordered family keeps its scores
+  });
+
+  it("keeps the market step: a market missing by more than its scores promise is scaled as before", () => {
+    const cal = calibrateSalaryScores(corpus);
+    expect(cal.get("IN:eng")!.factor).toBe(calibrateByMarket(corpus).get("IN")!.factor);
+    expect(cal.get("IN:eng")!.factor).toBeLessThan(0.8);
+    expect(cal.has("IN:other")).toBe(false); // no rows → no calibration (factor 1)
+  });
+
+  it("never inflates and leaves a small family alone", () => {
+    const better = [...rows("US", "eng", 300, 0.38, 0.19), ...rows("US", "other", 300, 0.3, 0.05)];
+    expect(calibrateSalaryScores(better).get("US:other")!.factor).toBe(1);
+    const few = [...rows("US", "eng", 300, 0.6, 0.1), ...rows("US", "other", 3, 0.6, 0.4)];
+    expect(calibrateSalaryScores(few).get("US:other")!.factor).toBe(1);
+  });
+
+  it("names the family in the estimate's basis", () => {
+    const comps = spread(12, 38 * L, 42 * L);
+    const est = estimateSalary(target({ archetype: "other", titleNorm: "account-executive" }), comps.map((c) => ({ ...c, archetype: "other" as const, titleNorm: "account-executive" })), [], new Date(), { factor: 0.8, n: 900 })!;
+    expect(est.basis).toMatch(/confidence ×0\.8 from 900 backtested non-engineering India postings/);
   });
 });
 

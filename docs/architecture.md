@@ -82,6 +82,7 @@ builders labelled `builtin` and prose refuses.
 | `@jobflow/resume-io` | file bytes → résumé text (PDF, DOCX, LinkedIn export) |
 | `@jobflow/service` | application services shared by the CLI, web app and worker: feed, search, discovery, onboarding, tailoring, apply plan |
 | `@jobflow/autofill` | Playwright form-filler with a review gate (never submits) |
+| `@jobflow/mcp` | the MCP server for AI agents (`jobflow mcp`): tools, prompts and resources over `@jobflow/service`; opens the store per call and releases it when idle; no form filling |
 | `apps/cli` | the `jobflow` command |
 | `apps/web` | Next.js UI and API |
 | `apps/worker` | scheduled discover → poll → rank (Tier 1–2 only) |

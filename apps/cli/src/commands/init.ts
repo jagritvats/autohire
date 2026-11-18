@@ -197,6 +197,14 @@ async function initNonInteractive(ctx: Ctx, opts: InitOpts): Promise<InitResult>
     return { evidenceAdded: (await repo.listEvidence(ctx.tenantId)).length, readiness: r.readiness, presets };
   }
   const imported = await importFrom(ctx, opts);
+  // nothing to go on: saving would mark an EMPTY profile as set up, and every score after
+  // that would be invented — refuse and say which flags to pass instead
+  if (!imported && !patch.stackProfile?.length && !isOnboarded(await loadProfile(repo, ctx.tenantId))) {
+    throw usage(
+      "init --yes needs something to build your profile from: --resume <file> or --skills <list>.",
+      'e.g. jobflow init --yes --resume ./cv.pdf --home US   ·   jobflow init --yes --skills "go,postgres" --yoe 5   ·   jobflow init --yes --sample (fictional)',
+    );
+  }
   if (imported && !ctx.out.json) printDraft(ctx, imported.draft);
   const draftContact = imported?.draft.contact ?? {};
   const home = patch.prefs.homeCountry ?? homeFromDraft(imported?.draft ?? null);
@@ -282,7 +290,12 @@ async function initInteractive(ctx: Ctx, opts: InitOpts): Promise<InitResult> {
     github: await ctx.ask("GitHub URL (optional):", patch.contact.github ?? dc.github),
   };
   const skillDefault = (patch.stackProfile ?? (d?.skills.canonical.length ? d.skills.canonical : current.prefs.stackProfile)).join(", ");
-  const sk = parseSkills(await ctx.ask("Skills (comma-separated):", skillDefault));
+  // without a résumé, skills are the only thing to score against — don't accept an empty list
+  const sk = await askValid(ctx, imported ? "Skills (comma-separated):" : "Skills (comma-separated) — needed without a résumé:", skillDefault, (v) => {
+    const r = parseSkills(v);
+    if (!imported && !r.skills.length && !current.masterResume.trim()) throw usage("list at least one skill (or go back and give a résumé) — there's nothing to rank jobs against otherwise");
+    return r;
+  });
   if (sk.unknown.length) out.note(out.dim(`  kept as typed: ${sk.unknown.join(", ")}`));
   const yoe = await askValid(ctx, "Years of experience:", String(patch.yoe ?? d?.yoe.value ?? current.yoe), yoeValue);
   const level = await askValid(ctx, `Level (${LevelBand.options.join("/")}):`, patch.levelBand ?? d?.levelBand.value ?? current.levelBand, levelBand);

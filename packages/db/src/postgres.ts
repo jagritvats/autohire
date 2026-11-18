@@ -182,15 +182,21 @@ export class PgRepository implements Repository {
          loc_mode, loc_city, loc_country, loc_tz, remote_geo, sponsorship, location_confidence,
          salary_min, salary_max, currency, salary_source, salary_confidence,
          experience_min, experience_max,
-         apply_url, jd_embedding, dedup_key, posted_at, posted_by_agency, embed_key, salary_raw)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34)
+         apply_url, jd_embedding, dedup_key, posted_at, posted_by_agency, embed_key, salary_raw,
+         loc_countries, location_raw)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36)
        on conflict (ats_type, ats_job_id) do update set
+         -- identity (id, company_id, source, tier, first_seen) stays with the first write;
+         -- everything derived from the fetched posting is refreshed, the dedup key included:
+         -- it moves with the title, location and company spelling (and with a key change)
+         company_name = excluded.company_name, dedup_key = excluded.dedup_key,
          title = excluded.title, title_norm = excluded.title_norm,
          role_archetype = excluded.role_archetype, level_band = excluded.level_band,
          jd_text = excluded.jd_text, jd_skills = excluded.jd_skills, requirements = excluded.requirements,
          loc_mode = excluded.loc_mode, loc_city = excluded.loc_city, loc_country = excluded.loc_country,
          loc_tz = excluded.loc_tz, remote_geo = excluded.remote_geo, sponsorship = excluded.sponsorship,
          location_confidence = excluded.location_confidence,
+         loc_countries = excluded.loc_countries, location_raw = excluded.location_raw,
          salary_min = excluded.salary_min, salary_max = excluded.salary_max, currency = excluded.currency,
          salary_source = excluded.salary_source, salary_confidence = excluded.salary_confidence,
          salary_raw = excluded.salary_raw,
@@ -220,6 +226,7 @@ export class PgRepository implements Repository {
         p.experience.min, p.experience.max,
         p.applyUrl, p.jdEmbedding ? JSON.stringify(p.jdEmbedding) : null, p.dedupKey,
         p.postedAt ?? null, p.postedByAgency ?? false, p.embedKey ?? null, p.salaryRaw ?? null,
+        p.location.countries ?? null, p.locationRaw ?? null,
       ],
     );
     return rowToPosting(rows[0]!);
@@ -240,7 +247,7 @@ export class PgRepository implements Repository {
     );
     return rows.map(rowToPosting);
   }
-  async setCanonical(postingId: string, canonicalId: string): Promise<void> {
+  async setCanonical(postingId: string, canonicalId: string | null): Promise<void> {
     await this.q("update posting set canonical_id = $2 where id = $1", [postingId, canonicalId]);
   }
   async updatePostingSalary(id: string, band: SalaryBand, salaryRaw?: string | null): Promise<void> {
@@ -249,6 +256,15 @@ export class PgRepository implements Repository {
          salary_raw = case when $7::boolean then $8 else salary_raw end
        where id = $1`,
       [id, band.min, band.max, band.currency, band.source, band.confidence, salaryRaw !== undefined, salaryRaw ?? null],
+    );
+  }
+  async updatePostingNormalized(id: string, patch: { location: ParsedLocation; postedByAgency: boolean }): Promise<void> {
+    const l = patch.location;
+    await this.q(
+      `update posting set loc_mode = $2, loc_city = $3, loc_country = $4, loc_tz = $5, remote_geo = $6, sponsorship = $7,
+         location_confidence = $8, loc_countries = $9, posted_by_agency = $10
+       where id = $1`,
+      [id, l.mode, l.city, l.country, l.timezone, l.remoteGeo, l.sponsorship, l.confidence, l.countries ?? null, patch.postedByAgency],
     );
   }
   async saveSalaryEstimates(updates: Array<{ id: string; estimate: SalaryEstimate | null }>): Promise<number> {
@@ -1040,6 +1056,7 @@ function rowToPosting(r: SqlRow): Posting {
     mode: r.loc_mode, city: r.loc_city, country: r.loc_country, timezone: r.loc_tz,
     remoteGeo: r.remote_geo, sponsorship: r.sponsorship,
     confidence: num(r.location_confidence) ?? 0.5, // pre-migration rows → neutral
+    ...(r.loc_countries?.length ? { countries: r.loc_countries as string[] } : {}), // older rows → `country`
   };
   const salary: SalaryBand = {
     min: num(r.salary_min), max: num(r.salary_max), currency: r.currency,
@@ -1051,7 +1068,7 @@ function rowToPosting(r: SqlRow): Posting {
     source: r.source, tier: r.tier, title: r.title, titleNorm: r.title_norm, roleArchetype: r.role_archetype,
     levelBand: r.level_band, jdText: r.jd_text, jdSkills: r.jd_skills ?? [], requirements: parseJson(r.requirements, []),
     location, salary, experience, applyUrl: r.apply_url, jdEmbedding: parseJson(r.jd_embedding, null),
-    salaryRaw: r.salary_raw ?? null, salaryEstimate: parseJson<SalaryEstimate | null>(r.salary_estimate, null),
+    salaryRaw: r.salary_raw ?? null, locationRaw: r.location_raw ?? null, salaryEstimate: parseJson<SalaryEstimate | null>(r.salary_estimate, null),
     postedByAgency: r.posted_by_agency ?? false, embedKey: r.embed_key ?? null,
     postedAt: r.posted_at ?? null, // pre-migration rows → fall back to firstSeen downstream
     firstSeen: r.first_seen, lastSeen: r.last_seen, isActive: r.is_active, repostCount: r.repost_count,

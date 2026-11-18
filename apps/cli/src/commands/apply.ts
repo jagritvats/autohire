@@ -30,7 +30,11 @@ const FIX: Record<string, string> = {
   name: 'jobflow profile set name "First Last"',
   resume: "jobflow profile import ./resume.pdf   (or: jobflow profile set resume-path ./resume.pdf)",
   applyUrl: "this posting has no apply link — open the listing and apply there",
+  resumeFormat:
+    "forms want a PDF/Word file, not your .md/.tex/.txt source — `jobflow tailor <ref> --kind resume-md --pdf`, or `jobflow profile set resume-path ./resume.pdf`",
 };
+
+const LABEL: Record<string, string> = { resumeFormat: "résumé file", applyUrl: "apply link" };
 
 export function register(program: Command, ctx: Ctx): void {
   program
@@ -52,11 +56,20 @@ every field and press submit yourself. Then record it: jobflow track status <ref
       if (kept) ctx.out.hint("(saved this search result to your corpus)");
       const ap = await buildApplyPlan(repo, ctx.files(), ctx.tenantId, posting.id);
 
-      // the tracker: preparing an application makes it "ready" — never "applied"
+      // the tracker: preparing an application moves it forward — "ready" only when nothing
+      // is missing (else "drafting", with the fix as the next step), never "applied"
       const status = ap.application?.status;
+      const blockers = ap.missing.filter((m) => m !== "applyUrl");
       const app =
-        !status || status === "saved" || status === "drafting"
-          ? await trackApplication(repo, ctx.tenantId, posting.id, { status: "ready", nextAction: ap.application?.nextAction ?? "review & submit" })
+        !status || status === "saved" || status === "drafting" || (status === "ready" && blockers.length)
+          ? await trackApplication(
+              repo,
+              ctx.tenantId,
+              posting.id,
+              blockers.length
+                ? { status: "drafting", nextAction: `fix: ${blockers.map((m) => LABEL[m] ?? m).join(", ")}` }
+                : { status: "ready", nextAction: !ap.application?.nextAction || ap.application.nextAction.startsWith("fix:") ? "review & submit" : ap.application.nextAction },
+            )
           : ap.application!;
 
       ref = ref.replace(/^#/, ""); // hints must be copy-pasteable (an unquoted #3 is a shell comment)
@@ -110,11 +123,12 @@ function printPlan(ctx: Ctx, ap: ApplyPlan, ref: string, status: string, opened:
   } else out.line(`  ${ap.dryRun}`);
   if (ap.missing.length) {
     out.line();
-    out.line(out.yellow("Fix before filling:"));
-    for (const m of ap.missing) out.line(`  ${m.padEnd(9)} → ${FIX[m] ?? m}`);
+    out.line(out.yellow(`Fix before filling (${ap.missing.length}):`));
+    for (const m of ap.missing) out.line(`  ${(LABEL[m] ?? m).padEnd(11)} → ${FIX[m] ?? m}`);
   }
   out.line();
   if (opened) out.ok("Opened the form in your browser.");
+  else out.line(out.green("Nothing was filled or sent — this was a dry run. JobFlow never submits; you always press submit."));
   out.hint(`next: jobflow apply ${ref} --open (apply yourself) · jobflow apply ${ref} --fill (pre-fill, you review + submit)`);
   out.hint(`after you submit: jobflow track status ${ref} applied`);
 }
@@ -150,14 +164,25 @@ async function fill(ctx: Ctx, ap: ApplyPlan, ref: string, browserProfile?: strin
   }
   assertNeverSubmits(flags); // gate 4 — immovable
 
-  const pw = await playwrightStatus();
+  const pw = await playwrightStatus(ctx.io.env);
   if (!pw.installed) throw needsSetup("--fill needs Playwright, which isn't installed.", `Install it: ${PLAYWRIGHT_INSTALL_HINT}`);
-  if (!pw.chromium) throw needsSetup("Playwright is installed but its Chromium isn't.", "Install it: npx playwright install chromium");
+  if (pw.customMissing) {
+    throw needsSetup(
+      `JOBFLOW_CHROMIUM is set to ${pw.customMissing}, which doesn't exist.`,
+      "Point it at your Chrome/Chromium binary, or unset it and run: npx playwright install chromium",
+    );
+  }
+  if (!pw.chromium) {
+    throw needsSetup(
+      "Playwright is installed but its Chromium isn't.",
+      "Install it: npx playwright install chromium   (or set JOBFLOW_CHROMIUM to a Chrome/Chromium you already have)",
+    );
+  }
 
   const userDataDir = browserProfile ? ctx.userPath(browserProfile) : ctx.io.env.JOBFLOW_BROWSER_PROFILE?.trim() || join(ctx.dataDir, "browser-profile");
   for (const m of ap.missing.filter((x) => x !== "email")) out.warn(`missing ${m} — ${FIX[m]}`);
   const spin = out.spinner(`Opening ${ap.applyUrl} in a local browser and filling it (human-paced)`);
-  const context = await launchUserContext({ userDataDir, headless: false }).catch((e: Error) => {
+  const context = await launchUserContext({ userDataDir, headless: false, env: ctx.io.env }).catch((e: Error) => {
     spin.stop();
     throw new CliError(`Couldn't start the browser: ${e.message}`, EXIT.error, "Is a display available? Try `jobflow apply --open` instead.");
   });

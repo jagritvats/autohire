@@ -155,8 +155,15 @@ export function stackAdjacency(
   let note: string;
   if (jdLangs.length === 0) {
     note = "No hard language requirement; systems/domain fit is what matters.";
-  } else if (haveLang) {
+  } else if (jdPrimaryLanguage && owned.has(jdPrimaryLanguage)) {
     note = `Primary language ${jdPrimaryLanguage} — direct match.`;
+  } else if (haveLang && jdPrimaryLanguage) {
+    // you have ANOTHER language the JD lists, not its primary one — say exactly that, never
+    // "direct match" (honest card: the main language is still new to you)
+    const yours = jdLangs.filter((l) => owned.has(l));
+    const t = bestTransfer(jdPrimaryLanguage);
+    const ramp = t >= 0.7 ? "~1-2wk ramp" : t >= 0.5 ? "~3-4wk ramp" : "a real ramp";
+    note = `Primary language ${jdPrimaryLanguage} is new to you (${ramp}); the role also lists ${yours.join(", ")}, which you have.`;
   } else if (languageStretch) {
     const ramp = langScore >= 0.7 ? "~1-2wk ramp" : "~3-4wk ramp";
     const coreNote = coreOverlap.length

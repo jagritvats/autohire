@@ -6,3 +6,6 @@ contact_links:
   - name: Security issue
     url: https://github.com/jagritvats/autohire/security/advisories/new
     about: Report vulnerabilities privately — never in a public issue.
+  - name: Contributing guide
+    url: https://github.com/jagritvats/autohire/blob/main/CONTRIBUTING.md
+    about: How to set up, what to work on, and what reviewers check.

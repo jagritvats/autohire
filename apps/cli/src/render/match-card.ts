@@ -25,7 +25,7 @@ export function renderMatchCard(m: Match & { posting: Posting }, idx: number): s
 
 function locationLine(p: Posting): string {
   const l = p.location;
-  if (l.mode === "remote") return `Remote (${l.remoteGeo})`;
+  if (l.mode === "remote") return `Remote (${l.remoteGeo === "country_only" && l.country ? `${l.country} only` : l.remoteGeo})`;
   const where = [l.city, l.country].filter(Boolean).join(", ");
   return `${cap(l.mode)}${where ? ` · ${where}` : ""}`;
 }

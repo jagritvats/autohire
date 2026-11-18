@@ -41,7 +41,7 @@ section names the decision taken where the passes disagreed.
 | Region | `prefs.homeCountry` + `prefs.markets` replace hard-coded India in scoring, polling country and Tier-3 hubs. Existing installs default to the `india` preset. | Same behaviour for the existing user; correct for everyone else. |
 | Views vs ranking | `applyView()` hides only on confidently-known values, never changes `Match.score`, always reports hidden counts. | Invariant #4. |
 | Custom feeds | Generic RSS/JSON adapters are Tier 1 with `safeUrl()` SSRF guard, trust 0.45, in `REDATED_SOURCES`. | User-supplied URLs are fetched by the server. |
-| Licence | MIT (owner may switch to AGPL-3.0 before first public release). | Maximises adoption; reversible while the owner holds all copyright. |
+| Licence | AGPL-3.0-only, contributions under DCO (inbound = outbound). | Keeps hosted forks open (§13 network clause); self-hosting and private use stay unrestricted. |
 
 ## Migrations
 

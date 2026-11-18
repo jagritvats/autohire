@@ -73,6 +73,18 @@ describe("stack adjacency (§11.1 — don't gate on language)", () => {
     const res = stackAdjacency(["java"], ["java", "kafka"]);
     expect(res.note).toMatch(/direct match/i);
   });
+
+  it("never calls it a direct match when only a SECONDARY JD language is yours", () => {
+    // a Scala-first role that also lists Go, for a Go developer
+    const scala = stackAdjacency(["go", "kafka", "postgres"], ["scala", "go", "kafka"]);
+    expect(scala.note).not.toMatch(/direct match/i);
+    expect(scala.note).toMatch(/scala is new to you/i);
+    expect(scala.note).toMatch(/also lists go/i);
+    // a C#-first web role that also lists JavaScript, for a Java/JS developer
+    const cs = stackAdjacency(["java", "javascript"], ["csharp", "javascript"]);
+    expect(cs.note).not.toMatch(/direct match/i);
+    expect(cs.languageStretch).toBe(false);
+  });
 });
 
 describe("soft-weighted scoring", () => {

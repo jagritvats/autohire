@@ -1,5 +1,6 @@
-import { normCompany, type Posting } from "@jobflow/core";
-import type { NewPosting, Repository } from "@jobflow/db";
+import type { Posting } from "@jobflow/core";
+import type { Repository } from "@jobflow/db";
+import { keepPosting, scoreKept } from "@jobflow/service";
 import type { Ctx } from "./context.js";
 import { CliError, EXIT, notFound, usage } from "./errors.js";
 
@@ -46,6 +47,7 @@ export async function resolvePosting(ctx: Ctx, ref: string): Promise<ResolvedPos
   const t = transient[id];
   if (t) {
     const posting = await keepPosting(repo, t);
+    await scoreKept(repo, ctx.tenantId, posting);
     // later refs to the same row resolve to the stored copy
     ctx.writeState({
       listing: state.listing ? { ...state.listing, ids: state.listing.ids.map((x) => (x === id ? posting.id : x)) } : state.listing,
@@ -63,31 +65,4 @@ async function resolvePrefix(repo: Repository, tenantId: string, prefix: string,
   if (ids.size === 1) return [...ids][0]!;
   if (ids.size === 0) throw notFound(`No posting id starts with "${prefix}".`);
   throw new CliError(`"${prefix}" matches ${ids.size} postings — use more characters.`, EXIT.usage);
-}
-
-/**
- * Save a transient search result into the corpus, exactly as ingest would (idempotent upsert
- * on (atsType, atsJobId), invariant #5). The company joins the registry as a discovered shell.
- */
-async function keepPosting(repo: Repository, p: Posting): Promise<Posting> {
-  const company = await repo.upsertCompany({
-    name: p.companyName,
-    nameNorm: normCompany(p.companyName),
-    atsType: p.atsType,
-    tags: ["discovered", p.source],
-  });
-  const {
-    id: _id,
-    firstSeen: _f,
-    lastSeen: _l,
-    isActive: _a,
-    repostCount: _r,
-    canonicalId: _c,
-    status: _s,
-    invalidReason: _ir,
-    invalidatedAt: _ia,
-    ...rest
-  } = p;
-  const np: NewPosting = { ...rest, companyId: company.id, companyName: company.name };
-  return repo.upsertPosting(np);
 }

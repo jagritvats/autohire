@@ -1,5 +1,5 @@
 import type { RawPosting } from "@jobflow/core";
-import { COUNTRY_NAMES, DETAIL_CAP, pickForDetail, htmlToText, httpJson, mapPool, type FetchTarget, type SourceAdapter } from "../types.js";
+import { COUNTRY_NAMES, DETAIL_CAP, markPartial, pickForDetail, htmlToText, httpJson, mapPool, type FetchTarget, type SourceAdapter } from "../types.js";
 
 /**
  * Oracle HCM Cloud "Candidate Experience" (Tier 2: the public REST the careers site
@@ -69,6 +69,9 @@ export class OracleHcmAdapter implements SourceAdapter {
       reqs.push(...batch);
       if (batch.length === 0) break;
     }
+    // a req posted mid-poll shifts the date-sorted pages, so a row can repeat
+    const unique = [...new Map(reqs.map((r) => [r.Id, r])).values()];
+    reqs.splice(0, reqs.length, ...unique);
 
     const needDetail = pickForDetail(reqs.filter((r) => !target.known?.has(r.Id)), (r) => r.Title, target.limit ?? DETAIL_CAP);
     const details = new Map<string, string>();
@@ -83,7 +86,7 @@ export class OracleHcmAdapter implements SourceAdapter {
       }
     });
 
-    return reqs.map((r) => {
+    const out = reqs.map((r) => {
       const locs = [r.PrimaryLocation, ...(r.secondaryLocations ?? []).map((l) => l.Name)].filter(Boolean);
       const mode = /remote/i.test(r.WorkplaceTypeCode ?? "") ? "Remote - " : /hybrid/i.test(r.WorkplaceTypeCode ?? "") ? "Hybrid - " : "";
       return {
@@ -104,5 +107,7 @@ export class OracleHcmAdapter implements SourceAdapter {
         raw: { Id: r.Id } as Record<string, unknown>,
       } satisfies RawPosting;
     });
+    // cut at MAX_LIST with more on the site: never a markStale diff (invariant #5)
+    return Number.isFinite(total) && out.length < total ? markPartial(out) : out;
   }
 }

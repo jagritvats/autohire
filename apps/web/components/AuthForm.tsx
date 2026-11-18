@@ -32,9 +32,7 @@ export function AuthForm({ mode, next, firstUser }: { mode: "login" | "signup"; 
 
   return (
     <form className="auth-card" onSubmit={submit}>
-      <h1 className="wordmark">
-        Job<span className="flow">Flow</span>
-      </h1>
+      <h1 className="auth-title">{mode === "login" ? "Sign in" : "Create account"}</h1>
       <p className="auth-sub">
         {mode === "login" ? "Sign in to your feed." : firstUser ? "Create the admin account for this instance." : "Create your account."}
       </p>
