@@ -76,7 +76,7 @@ describe("discovery presets", () => {
       }
       expect(p.seedCompanies.length).toBeGreaterThan(0);
     }
-    expect(listPresets().map((p) => p.id)).toEqual(["india", "global-remote", "us", "eu-uk"]);
+    expect(listPresets().map((p) => p.id)).toEqual(["india", "global-remote", "us", "eu-uk", "canada"]);
     expect(getPreset("nope")).toBeNull();
     // arbeitnow (a German-market board) only in the EU preset
     expect(listPresets().filter((p) => p.feeds.some((f) => f.source === "arbeitnow")).map((p) => p.id)).toEqual(["eu-uk"]);
@@ -87,7 +87,39 @@ describe("discovery presets", () => {
     expect(suggestPreset({ currency: "USD", homeCountry: "US", locationWeights: [] }).id).toBe("us");
     expect(suggestPreset({ currency: "EUR", homeCountry: "DE", locationWeights: [] }).id).toBe("eu-uk");
     expect(suggestPreset({ currency: "GBP", locationWeights: [] }).id).toBe("eu-uk");
+    expect(suggestPreset({ currency: "CAD", homeCountry: "CA", locationWeights: [] }).id).toBe("canada");
     expect(suggestPreset({ currency: "USD", locationWeights: [{ label: "remote", weight: 1 }] }).id).toBe("global-remote");
+  });
+
+  it("non-India presets name every board explicitly, once", () => {
+    // name-only slug guesses pick the wrong company too often (Ashby "lightspeed" is not
+    // Lightspeed Commerce) — curated preset lists carry the board URL
+    for (const p of listPresets().filter((x) => x.id !== "india")) {
+      const names = new Set<string>();
+      const urls = new Set<string>();
+      for (const s of p.seedCompanies) {
+        expect(s.careersUrl, `${p.id}: ${s.name}`).toMatch(/^https:\/\//);
+        expect(names.has(s.name.toLowerCase()), `${p.id}: duplicate ${s.name}`).toBe(false);
+        expect(urls.has(s.careersUrl!.toLowerCase()), `${p.id}: duplicate board ${s.careersUrl}`).toBe(false);
+        names.add(s.name.toLowerCase());
+        urls.add(s.careersUrl!.toLowerCase());
+      }
+    }
+  });
+
+  it("the same company carries the same board across presets", () => {
+    // the plan dedupes seeds by name OR url: two presets naming one company with different
+    // boards would make which board gets polled depend on preset order
+    const board = new Map<string, string>();
+    for (const p of listPresets()) {
+      for (const s of p.seedCompanies) {
+        if (!s.careersUrl) continue;
+        const key = s.name.toLowerCase();
+        const seen = board.get(key);
+        if (seen) expect(s.careersUrl.toLowerCase(), `${p.id}: ${s.name}`).toBe(seen);
+        else board.set(key, s.careersUrl.toLowerCase());
+      }
+    }
   });
 });
 

@@ -13,7 +13,7 @@ fetched role is still ranked by the soft scorer (invariant #4).
 | What | Where |
 |---|---|
 | Preset shape (`DiscoveryPreset`, `PresetFeed`) | `packages/pipeline/src/presets/types.ts` |
-| The presets, as data | `packages/pipeline/src/presets/india.ts`, `global-remote.ts`, `us.ts`, `eu-uk.ts` |
+| The presets, as data | `packages/pipeline/src/presets/india.ts`, `global-remote.ts`, `us.ts`, `eu-uk.ts`, `canada.ts` |
 | Curated employer lists for the non-India presets | `packages/pipeline/src/presets/companies.ts` |
 | Registry, suggestion, preset tags | `packages/pipeline/src/presets/index.ts` |
 | The discovery plan | `packages/pipeline/src/discovery.ts` (`resolveDiscoveryPlan`) |
@@ -51,8 +51,11 @@ it. To change what it fetches, edit its `targets` and keep the id.
 ## Changing a preset
 
 - **Add a seed employer.** Add an entry to the preset's `seedCompanies` (or to
-  `presets/companies.ts`). Prefer a `careersUrl` on a public ATS board you have checked.
-  Use only well-known public employers.
+  `presets/companies.ts`). Use only well-known public employers. In the non-India presets
+  every entry needs a `careersUrl` on a public board you checked has at least one role in
+  the preset's markets (a test enforces the URL); name-only guesses find the wrong company
+  too often. Give a company the same board in every preset that lists it. The last audit,
+  and how to re-run it, is in `docs/internal/PRESET_COVERAGE.md`.
 - **Add a feed.** The `source` must be a Tier 1–2 adapter registered in `ADAPTERS`. Give it
   a new stable id. If the source is new, write the adapter first
   ([adding-a-job-source.md](adding-a-job-source.md)).

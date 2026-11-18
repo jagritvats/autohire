@@ -81,10 +81,11 @@ JobFlow polls the union:
 
 | Preset | What it covers |
 |---|---|
-| `india` | Indian product companies, India offices of global firms, India job boards, community channels |
-| `global-remote` | remote-first companies and remote boards, any country |
-| `us` | US companies on Greenhouse / Lever / Ashby plus US aggregators |
-| `eu-uk` | EU/UK companies and boards |
+| `india` | ~240 employers: Indian product companies, India engineering centres of global firms (Workday, Eightfold, Oracle…), India job boards, community channels |
+| `global-remote` | ~30 remote-first employers with roles open worldwide, plus remote boards (Himalayas, Remotive) and HN — any country |
+| `us` | ~130 US employers (product, AI, fintech, infra, big tech) plus US-eligible remote roles and US aggregators |
+| `eu-uk` | ~100 employers hiring in the UK, Ireland, Germany, the Netherlands, France, Spain and the Nordics, plus Arbeitnow and UK/DE/NL aggregators |
+| `canada` | ~40 employers hiring in Toronto, Vancouver, Montréal and Canada-remote, plus Canada-eligible remote roles and Canadian aggregators |
 
 ```bash
 pnpm jobflow discovery presets              # all presets, on/off
