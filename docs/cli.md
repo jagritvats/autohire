@@ -278,8 +278,9 @@ pnpm jobflow show 3 [--jd]                 # details, fit, tracker status, draft
 ```
 
 By default no single company fills the page: at most 3 of its jobs in any 20 cards, the rest
-following further down. That only changes the order; every card keeps its real score and
-nothing is hidden. `--no-diversify` lists strictly by score (the web app's **score order
+following further down — but a held-back job never lands below jobs scoring more than 12
+points less, and the company's last card on the page says "+N more at <company> further
+down". That only changes the order; every card keeps its real score and nothing is hidden. `--no-diversify` lists strictly by score (the web app's **score order
 only** chip under Filters → order; MCP `list_jobs` takes `diversify: false`).
 
 ![jobflow feed](screenshots/cli-feed.png)
