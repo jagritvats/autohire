@@ -54,6 +54,8 @@ export function renderCard(out: Out, c: CardLike, idx: number, opts: { scored: b
   else if (c.skills.length) lines.push(`${indent}${out.cyan("stack")} ${c.skills.slice(0, 8).join(", ")}`);
   if (c.levelNote) lines.push(`${indent}${out.cyan("level")} ${c.levelNote}`);
   if (c.redFlags.length) lines.push(`${indent}${out.yellow("watch")} ${c.redFlags.join(" · ")}`);
+  // the same role posted for other countries, folded under this card: each is `jobflow show <id>`
+  if (c.alsoPosted) lines.push(indent + out.dim(`${c.alsoPosted} — ${(c.siblings ?? []).slice(0, 4).map((s) => `${s.place} ${s.id.slice(0, 8)}`).join(", ")}`));
   const tags = [(c.presets ?? []).length ? out.cyan((c.presets ?? []).map((p) => `#${p}`).join(" ")) : null, c.applied ? out.green("applied") : null, c.bookmarked ? "bookmarked" : null, c.inFeed === false ? out.dim("not in your feed yet") : null].filter(Boolean);
   if (tags.length) lines.push(indent + tags.join(" · "));
   if (c.applyUrl) lines.push(indent + out.dim(c.applyUrl));
