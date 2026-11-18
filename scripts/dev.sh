@@ -18,7 +18,7 @@ case "$DB_CODE" in
     pnpm --filter @jobflow/db migrate || echo "⚠ migrate failed — check DATABASE_URL; continuing"
     ;;
   1)
-    echo "• no DATABASE_URL — using the default local store (set JOBFLOW_STORE / DATABASE_URL in .env for durability)"
+    echo "• no DATABASE_URL — using your local store (~/.jobflow, shared with the jobflow CLI; saved across restarts)"
     ;;
   *)
     echo "⚠ DATABASE_URL is set but ${DB_STATE}."
@@ -27,6 +27,11 @@ case "$DB_CODE" in
     ;;
 esac
 
+if [ "$DB_CODE" = "1" ]; then
+  # the local store takes one writer at a time — the web app runs the sync schedule itself
+  echo "▶ starting web (it keeps your feed synced every ${JOBFLOW_POLL_EVERY_HOURS:-6}h while open)…"
+  exec pnpm --filter @jobflow/web dev
+fi
 echo "▶ starting worker + web (Ctrl-C to stop both)…"
 pnpm --filter @jobflow/worker runner &
 WORKER=$!

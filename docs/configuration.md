@@ -11,7 +11,7 @@ not keep in a file (your LLM key, preferences, sources) are set with `jobflow co
 | Var | Default | What it does |
 |---|---|---|
 | `JOBFLOW_DATA_DIR` | `~/.jobflow` | Where your data lives: the local PGlite database, uploaded résumés, tailored PDFs, the agent's browser profile. Never inside the source tree. |
-| `JOBFLOW_STORE` | `pglite` for the CLI, `memory` for the web app | `pglite` (durable, zero-setup Postgres-in-WASM under the data dir) · `memory` (nothing persists) · `postgres` (use `DATABASE_URL`). |
+| `JOBFLOW_STORE` | `pglite` | `pglite` (durable, zero-setup Postgres-in-WASM under the data dir — the CLI and web app share it; one process writes at a time, so the web app runs the sync schedule itself instead of a separate worker) · `memory` (nothing persists — demos and tests) · `postgres` (use `DATABASE_URL`; needed to run the worker alongside the web app). |
 | `DATABASE_URL` | _(blank)_ | Your own Postgres. Wins over `JOBFLOW_STORE`. For hosted Postgres append `?sslmode=require`. |
 | `JOBFLOW_SAMPLE_PROFILE` | _(off)_ | `1` starts new profiles as the fictional sample candidate instead of blank. |
 | `JOBFLOW_DEMO_DATA` | _(off)_ | `1` seeds an offline, fully fictional corpus (screenshots, UI work). |

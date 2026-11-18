@@ -431,10 +431,16 @@ export function FeedView({
             </div>
           </div>
           <div className="feed-toolbar__end">
-            {!data.stats.durable && (
-              <Badge tone="warn" title="This instance keeps data in memory — nothing is saved when it stops">
-                in-memory: nothing is saved
+            {data.stats.demo ? (
+              <Badge tone="info" title="Fictional demo data (JOBFLOW_DEMO_DATA=1) — not real postings">
+                demo data
               </Badge>
+            ) : (
+              !data.stats.durable && (
+                <Badge tone="warn" title="JOBFLOW_STORE=memory — nothing is saved when the app stops">
+                  in-memory: nothing is saved
+                </Badge>
+              )
             )}
             <span className="hint">{lastSync ? `last sync ${relTime(lastSync)}` : "never synced"}</span>
             <Button icon="refresh" onClick={syncNow} disabled={syncing} title="Fetch new jobs from your sources, then re-rank">

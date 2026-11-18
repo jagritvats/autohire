@@ -1,4 +1,4 @@
-import type { PurgeOptions, Repository } from "@jobflow/db";
+import { InMemoryRepository, type PurgeOptions, type Repository } from "@jobflow/db";
 import {
   blankProfile,
   isOnboarded,
@@ -76,6 +76,8 @@ export interface FeedData {
     ranked: number;
     excluded: number;
     durable: boolean;
+    /** offline fictional demo corpus (JOBFLOW_DEMO_DATA=1) */
+    demo?: boolean;
     generatedAt: string;
     /** most recent board poll (ISO) — the UI warns when the corpus has gone unverified. */
     lastPolledAt: string | null;
@@ -340,7 +342,9 @@ async function shape(repo: Repository, tenantId: string, matches: Awaited<Return
       postings: allActive.length,
       ranked: cards.length,
       excluded: 0,
-      durable: !!process.env.DATABASE_URL || !!process.env.JOBFLOW_DATA_DIR,
+      // what the store actually is, not a guess from env vars (the web defaults to PGlite)
+      durable: !(repo instanceof InMemoryRepository),
+      demo: process.env.JOBFLOW_DEMO_DATA === "1",
       generatedAt: new Date().toISOString(),
       lastPolledAt: lastPolled ? new Date(lastPolled).toISOString() : null,
       mode: "ranked",
