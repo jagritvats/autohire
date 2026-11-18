@@ -83,7 +83,7 @@ export function PhaseStepper({ run }: { run: SyncProgress }) {
             </span>
             <span className="sync-step__label">{SYNC_PHASE_LABEL[p.id]}</span>
             <span className="sync-step__meta">
-              <span className="sr-only">{state}</span>
+              {p.status !== "skipped" && <span className="sr-only">{state}</span>}
               {p.status === "done" && ms != null && ms >= 1000 ? duration(ms) : p.status === "skipped" ? "skipped" : null}
             </span>
           </li>
