@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { InMemoryRepository } from "@jobflow/db";
 import type { SyncRunner } from "@jobflow/service";
-import { bar, etaWords } from "../src/render/sync-progress.js";
+import { bar, clipTo, etaWords } from "../src/render/sync-progress.js";
 import { fakeFetch, run, tempDir } from "./helpers.js";
 
 /**
@@ -85,5 +85,13 @@ describe("jobflow sync progress", () => {
     expect(etaWords(null)).toBeNull();
     expect(etaWords(5_000)).toBe("almost done");
     expect(etaWords(150_000)).toBe("~3 min left");
+  });
+
+  it("clips the live lines so they never wrap (a wrapped line leaves copies behind on redraw)", () => {
+    const status = "Tidy and estimate pay · boards 16/16 (1 failed) · 19 fetched, 19 new · almost done";
+    expect(clipTo(status, 200)).toBe(status);
+    const cut = clipTo(status, 104 - 1 - 23);
+    expect(cut.length).toBe(80);
+    expect(cut.endsWith("…")).toBe(true);
   });
 });
