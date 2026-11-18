@@ -5,8 +5,8 @@
 //
 //   pnpm --filter @jobflow/web build && node scripts/screenshots.mjs [--only jobs,settings] [--style editorial]
 //
-// Writes docs/screenshots/*.png: every page in the dark theme, the key pages again in the
-// light theme (*-light.png), 375px-wide mobile views (*-mobile*.png), and the guide captures
+// Writes docs/screenshots/*.png: every page in the light theme (Editorial's default), the key pages again in the
+// dark theme (*-dark.png), 375px-wide mobile views (*-mobile*.png), and the guide captures
 // (jobs-checklist, jobs-keyboard, jobs-saved-search, onboarding-review), all in one visual
 // style — `--style` (default: Editorial, the app's default). Plus the style set
 // (styles-<style>-light/dark.png: the Jobs page in each style; `--only styles` for just those).
@@ -130,9 +130,9 @@ try {
     await p.fill(".search-bar input", '"backend engineer" --remote --posted 14d');
   };
 
-  // ── desktop, dark ──
-  const dark = await (await context("dark", { width: 1440, height: 900 })).newPage();
-  let shot = shooter(dark);
+  // ── desktop, light (Editorial's default) ──
+  const main = await (await context("light", { width: 1440, height: 900 })).newPage();
+  let shot = shooter(main);
   await shot("jobs", "/", { wait: CARD });
   await shot("match-card", "/", { wait: CARD, element: CARD });
   // a card carrying caveats: red flags and/or a modeled (estimated) salary
@@ -146,8 +146,8 @@ try {
   await shot("settings", "/settings");
   // the Job page (fit, description, the apply checklist) for the top job not yet in
   // Applications (so the checklist shows), and Tailor for the top card
-  await settle(dark, `${BASE}/`);
-  const job = await dark
+  await settle(main, `${BASE}/`);
+  const job = await main
     .locator(CARD)
     .filter({ hasNotText: "in Applications" })
     .first()
@@ -155,7 +155,7 @@ try {
     .first()
     .getAttribute("href")
     .catch(() => null);
-  const href = await dark
+  const href = await main
     .locator(`${CARD} a[href^="/tailor/"]`)
     .first()
     .getAttribute("href")
@@ -166,21 +166,21 @@ try {
   }
   if (href) await shot("tailor", href);
 
-  // ── desktop, light ──
-  const light = await (await context("light", { width: 1440, height: 900 })).newPage();
-  shot = shooter(light);
-  await shot("jobs-light", "/", { wait: CARD });
-  await shot("match-card-light", "/", { wait: CARD, element: CARD });
-  if (job) await shot("job-light", job);
-  await shot("profile-light", "/profile");
-  await shot("settings-light", "/settings");
-  await shot("sources-light", "/sources", { wait: ".onb-preset" });
-  await shot("search-light", "/search", { before: search });
-  if (href) await shot("tailor-light", href);
+  // ── desktop, dark ──
+  const dark = await (await context("dark", { width: 1440, height: 900 })).newPage();
+  shot = shooter(dark);
+  await shot("jobs-dark", "/", { wait: CARD });
+  await shot("match-card-dark", "/", { wait: CARD, element: CARD });
+  if (job) await shot("job-dark", job);
+  await shot("profile-dark", "/profile");
+  await shot("settings-dark", "/settings");
+  await shot("sources-dark", "/sources", { wait: ".onb-preset" });
+  await shot("search-dark", "/search", { before: search });
+  if (href) await shot("tailor-dark", href);
 
   // ── mobile, 375px ──
   const mobileOpts = { isMobile: true, hasTouch: true };
-  const m = await (await context("dark", { width: 375, height: 812 }, mobileOpts)).newPage();
+  const m = await (await context("light", { width: 375, height: 812 }, mobileOpts)).newPage();
   shot = shooter(m);
   await shot("jobs-mobile", "/", { wait: CARD });
   await shot("jobs-mobile-filters", "/", {
@@ -198,11 +198,11 @@ try {
       await p.click(".app-header__menu");
     },
   });
-  const ml = await (await context("light", { width: 375, height: 812 }, mobileOpts)).newPage();
+  const ml = await (await context("dark", { width: 375, height: 812 }, mobileOpts)).newPage();
   shot = shooter(ml);
-  await shot("jobs-mobile-light", "/", { wait: CARD });
-  await shot("applications-mobile-light", "/applications", { wait: ".crm-row, .empty" });
-  await shot("sources-mobile-light", "/sources", { wait: ".onb-preset" });
+  await shot("jobs-mobile-dark", "/", { wait: CARD });
+  await shot("applications-mobile-dark", "/applications", { wait: ".crm-row, .empty" });
+  await shot("sources-mobile-dark", "/sources", { wait: ".onb-preset" });
 
   // ── the style set: the Jobs page in each style, light and dark (docs/screenshots/styles-*.png) ──
   for (const style of STYLES) {
@@ -224,7 +224,7 @@ try {
 
   // ── guide captures (dark, desktop) — last, because they add a saved search and read a
   // résumé into the in-memory store, which would otherwise show up in the shots above ──
-  const g = await (await context("dark", { width: 1440, height: 900 })).newPage();
+  const g = await (await context("light", { width: 1440, height: 900 })).newPage();
   shot = shooter(g);
   const hideChecklist = async (p) => {
     await p.locator("#get-started button", { hasText: "later" }).click().catch(() => undefined);

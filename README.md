@@ -75,7 +75,7 @@ walkthrough is in **[Getting started](docs/getting-started.md)**.
   </tr>
   <tr>
     <td valign="top">
-      <a href="docs/screenshots/jobs-light.png"><img src="docs/screenshots/jobs-light.png" alt="Jobs in the light theme"></a>
+      <a href="docs/screenshots/jobs-dark.png"><img src="docs/screenshots/jobs-dark.png" alt="Jobs in the dark theme"></a>
       <br><b>Light or dark</b>: the theme follows your system, or pick one with the toggle in the header.
     </td>
     <td valign="top">
@@ -89,7 +89,7 @@ walkthrough is in **[Getting started](docs/getting-started.md)**.
   <img src="docs/screenshots/jobs-mobile.png" width="200" alt="Jobs on a phone">
   <img src="docs/screenshots/jobs-mobile-filters.png" width="200" alt="Filters on a phone">
   <img src="docs/screenshots/job-mobile.png" width="200" alt="A Job page on a phone">
-  <img src="docs/screenshots/applications-mobile-light.png" width="200" alt="Applications on a phone, light theme">
+  <img src="docs/screenshots/applications-mobile-dark.png" width="200" alt="Applications on a phone, dark theme">
   <br><em>Every page works on a phone. The filters open as a sheet.</em>
 </p>
 

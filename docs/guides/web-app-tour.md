@@ -383,13 +383,13 @@ The theme follows your system. The button at the right of the header cycles **sy
 dark**, and your browser remembers the choice.
 
 <p>
-  <img src="../screenshots/jobs-light.png" width="49%" alt="Jobs, light theme">
-  <img src="../screenshots/job-light.png" width="49%" alt="A Job page, light theme">
+  <img src="../screenshots/jobs-dark.png" width="49%" alt="Jobs, dark theme">
+  <img src="../screenshots/job-dark.png" width="49%" alt="A Job page, dark theme">
 </p>
 
-Other light captures: [Profile](../screenshots/profile-light.png) ·
-[Search](../screenshots/search-light.png) · [Sources](../screenshots/sources-light.png) ·
-[Settings](../screenshots/settings-light.png) · [Tailor](../screenshots/tailor-light.png).
+Other dark captures: [Profile](../screenshots/profile-dark.png) ·
+[Search](../screenshots/search-dark.png) · [Sources](../screenshots/sources-dark.png) ·
+[Settings](../screenshots/settings-dark.png) · [Tailor](../screenshots/tailor-dark.png).
 
 ## On a phone
 
@@ -400,11 +400,11 @@ the Jobs filters open as a sheet.
   <img src="../screenshots/jobs-mobile.png" width="24%" alt="Jobs on a phone">
   <img src="../screenshots/nav-mobile.png" width="24%" alt="The menu on a phone">
   <img src="../screenshots/job-mobile.png" width="24%" alt="A Job page on a phone">
-  <img src="../screenshots/sources-mobile-light.png" width="24%" alt="Sources on a phone, light theme">
+  <img src="../screenshots/sources-mobile-dark.png" width="24%" alt="Sources on a phone, dark theme">
 </p>
 
 More: [Profile](../screenshots/profile-mobile.png) · [Settings](../screenshots/settings-mobile.png) ·
-[Applications (light)](../screenshots/applications-mobile-light.png) · [Jobs (light)](../screenshots/jobs-mobile-light.png).
+[Applications (dark)](../screenshots/applications-mobile-dark.png) · [Jobs (dark)](../screenshots/jobs-mobile-dark.png).
 
 ---
 

@@ -179,7 +179,7 @@ node scripts/screenshots.mjs --only jobs,job --style spark         # the docs pa
 ```
 
 `scripts/screenshots.mjs` starts the app with `JOBFLOW_DEMO_DATA=1` and the echo model, then
-writes `docs/screenshots/*.png`: every page in dark, key pages in light (`*-light.png`), and
+writes `docs/screenshots/*.png`: every page in light (Editorial's default), key pages in dark (`*-dark.png`), and
 375px mobile views (`*-mobile*.png`), all in one style (`--style`, default Editorial). It
 also writes the style set: `styles-<style>-light.png` / `-dark.png`, the Jobs page in each
 style. It warns when a page overflows horizontally. It needs
