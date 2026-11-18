@@ -6,6 +6,7 @@ export * from "./score.js";
 export * from "./trust.js";
 export * from "./region.js";
 export * from "./view.js";
+export * from "./display.js";
 
 /**
  * Rank a set of postings for a profile. Returns rule-passing matches sorted by

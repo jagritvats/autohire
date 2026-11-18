@@ -4,7 +4,8 @@ import {
   enrichTopMatches,
   estimatePostingSalaries,
   refreshSalaryBenchmarks,
-  renormalizePostings,
+  renormalizeIfStale,
+  renormalizeSummary,
   reparseStatedSalaries,
   backtestSalaryEstimates,
   calibrateSalaryConfidence,
@@ -91,11 +92,9 @@ async function salary(): Promise<void> {
  */
 async function renormalize(): Promise<void> {
   const repo = await makeRepository();
-  const r = await renormalizePostings(repo);
-  log(
-    `renormalize: ${r.scanned} scanned → ${r.changed} changed (${r.locations} locations: ${r.multiCountry} now multi-country, ` +
-      `${r.placed} newly placed; agency +${r.agencyFlagged} −${r.agencyCleared}; ${r.noRaw} stored without location text)`,
-  );
+  // force + record the version, so the next sync doesn't rescan for nothing
+  const r = (await renormalizeIfStale(repo, { force: true }))!;
+  log(`renormalize: ${renormalizeSummary(r)}`);
   if (r.changed) await rank();
 }
 

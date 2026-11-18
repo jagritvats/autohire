@@ -77,10 +77,11 @@ describe("feed company spread (an order, never a score — invariant #4)", () =>
     await loadSampleProfile(repo, t.id);
     const scores = new Map<string, number>();
     const matches: Match[] = [];
-    // one employer holds the 12 best scores, then 18 other companies
+    // one employer holds the 12 best scores, then 18 other companies — all near-equal
+    // (95…86): the spread trades places only within DIVERSIFY_MAX_SCORE_GAP (feed-cards.test)
     for (let i = 0; i < 30; i++) {
       const p = await seedAt(repo, i < 12 ? "Example Corp" : `Other Co ${i}`, `job-${i}`);
-      const score = 95 - i;
+      const score = 95 - Math.floor(i / 3);
       scores.set(p.id, score);
       matches.push({
         id: `m-${i}`, tenantId: t.id, postingId: p.id, score, rulePass: true, whyFit: null, gap: null, stackNote: null, levelNote: null, redFlags: [],

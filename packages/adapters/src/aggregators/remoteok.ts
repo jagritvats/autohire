@@ -1,5 +1,5 @@
 import type { RawPosting, SearchQuery } from "@jobflow/core";
-import { htmlToText, httpJson, type FetchTarget, type SearchCaps, type SearchTargetContext, type SourceAdapter } from "../types.js";
+import { cleanTitle, htmlToText, httpJson, type FetchTarget, type SearchCaps, type SearchTargetContext, type SourceAdapter } from "../types.js";
 import { queryTerms, slugifyTerm } from "../search.js";
 
 /**
@@ -74,9 +74,9 @@ export function parseRemoteOk(rows: RemoteOkJob[], query?: string): RawPosting[]
       tier: "tier1",
       atsType: "unknown",
       atsJobId: id,
-      companyName: j.company.trim(),
+      companyName: cleanTitle(j.company),
       companySlug: null,
-      title: j.position.trim(),
+      title: cleanTitle(j.position),
       jdText: htmlToText(j.description),
       jdHtml: j.description ?? null,
       locationRaw: j.location?.trim() && !/^remote$/i.test(j.location.trim()) ? `Remote - ${j.location.trim()}` : "Remote",

@@ -2,9 +2,10 @@ import type { Posting, Profile, ScoreBreakdown } from "../schema/entities.js";
 import { LevelBandOrder, type LevelBand, type RemoteGeo, type RoleArchetype } from "../schema/enums.js";
 import { cosine, clamp } from "../util/vector.js";
 import { convertCurrency, formatSalary } from "../salary/fx.js";
-import { stackAdjacency, type StackAdjacencyResult } from "./stack.js";
-import { countryDisplayName, locationInCountry, primaryRemoteGeo, remoteGeosForCountry } from "../normalize/location.js";
+import { skillText, stackAdjacency, transfer, type StackAdjacencyResult } from "./stack.js";
+import { countryDisplayName, inEurope, locationInCountry, primaryRemoteGeo, remoteGeosForCountry } from "../normalize/location.js";
 import { effectiveHomeCountry, effectiveMarkets, effectiveRemoteGeos } from "./region.js";
+import { placeCountries } from "./display.js";
 import { EVERGREEN_TITLE_RE, REDATED_SOURCES, TALENT_POOL_JD_RE, scoreSourceTrust } from "./trust.js";
 
 /**
@@ -63,12 +64,13 @@ export function scorePosting(
       : 0.5; // neutral when not yet embedded
 
   // ── component: stack adjacency ──
-  const stack = stackAdjacency(profile.prefs.stackProfile, posting.jdSkills);
+  const stack = stackAdjacency(profile.prefs.stackProfile, posting.jdSkills, { title: posting.title, jdText: posting.jdText });
 
   // ── component: role archetype fit — keeps non-eng roles (sales, ops) out of top ──
   const { score: archetype, flag: archetypeFlag } = scoreArchetype(
     posting.roleArchetype,
     profile.prefs.targetArchetypes,
+    posting.title,
   );
   if (archetypeFlag) redFlags.push(archetypeFlag);
 
@@ -89,15 +91,20 @@ export function scorePosting(
   if (salaryFlag) redFlags.push(salaryFlag);
 
   // ── component: source trust (§3) — real, open, and likely to get a reply ──
+  // who is actually hiring (an agency, an unnamed employer, an AI-training gig) is never
+  // crowded out by the flag cap: a reader must see it before they apply
   const trust = scoreSourceTrust(posting);
-  for (const f of trust.flags) if (redFlags.length < 5) redFlags.push(f);
+  for (const f of trust.flags) if (redFlags.length < 5 || TRUST_MUST_SHOW.test(f)) redFlags.push(f);
 
   // ── stretch flag for "X required" must-haves you don't have (never an exclusion) ──
-  for (const req of posting.requirements) {
-    if (req.strength === "must_have" && !profile.prefs.stackProfile.includes(req.skill)) {
-      // only surface a couple, and only if stack transfer is weak for it
-      if (redFlags.length < 4) redFlags.push(`JD requires ${req.skill} (you don't list it — stretch)`);
-    }
+  // only where nothing you know transfers to it (a Java dev isn't "missing" Kotlin)
+  const missingMust = posting.requirements
+    .filter((r) => r.strength === "must_have" && !profile.prefs.stackProfile.includes(r.skill))
+    .filter((r) => !profile.prefs.stackProfile.some((o) => transfer(o, r.skill) >= 0.7))
+    .map((r) => skillText(r.skill));
+  if (missingMust.length && redFlags.length < 4) {
+    const shown = missingMust.slice(0, 3);
+    redFlags.push(`Asks for ${shown.join(", ")}${missingMust.length > 3 ? " …" : ""} — not in your skills`);
   }
 
   const breakdown: ScoreBreakdown = {
@@ -128,9 +135,13 @@ export function scorePosting(
   // hides (invariant #4).
   // An AI-training gig ("Software Engineer | $50/hr", rating model output) is a non-target
   // role wearing an engineering title — dampened like one, and flagged, never hidden.
-  const feasibility = Math.min(seniority, locResult.score, archetype, trust.aiTrainingGig ? 0.2 : 1);
+  // An unpaid / volunteer "role" is damped the same way.
+  const feasibility = Math.min(seniority, locResult.score, archetype, trust.aiTrainingGig ? 0.2 : 1, trust.unpaid ? 0.2 : 1);
   const damp = feasibility >= 0.5 ? 1 : 0.6 + 0.8 * feasibility;
-  const score = Math.round(raw * damp * 100);
+  // A req open for months is usually filled, evergreen or a talent pool, yet freshness is
+  // one small component, so a 300-day-old role sat among this week's (2026-11 feed review:
+  // 9 of a top 50 were 140–300 days old). A soft re-order, never a filter.
+  const score = Math.round(raw * damp * staleDamp(postingAgeDays(posting)) * 100);
 
   // ── HARD EXCLUSIONS — the only two (§11.3) ──
   const hardExclusionReason = hardExclude(posting, profile);
@@ -151,7 +162,15 @@ export function scorePosting(
   };
 }
 
+/** ≤60 days: none; then 0.95 → 0.9 → 0.85 past 180 days (the flag says how old it is) */
+export function staleDamp(ageDays: number): number {
+  return ageDays <= 60 ? 1 : ageDays <= 120 ? 0.95 : ageDays <= 180 ? 0.9 : 0.85;
+}
+
 // ── role archetype fit (§11.1 — surface adjacency, down-weight off-target) ──
+/** trust flags about WHO is hiring — always shown, whatever else is flagged */
+const TRUST_MUST_SHOW = /staffing agency|freelance marketplace|Employer not named|AI-training gig|Unpaid/;
+
 const ENG_ARCHETYPES = new Set<RoleArchetype>([
   "backend",
   "platform",
@@ -163,19 +182,49 @@ const ENG_ARCHETYPES = new Set<RoleArchetype>([
   "mobile",
 ]);
 
+/**
+ * How well a role of one engineering archetype suits someone targeting another, [0,1].
+ * Directional and per target (2026-11 feed review): one flat 0.65 let a frontend
+ * developer's top 50 fill with data-engineering, ML and SRE roles, and a backend-centric
+ * "frontend/mobile are far" rule never applied the other way round.
+ */
+const ARCHETYPE_ADJACENCY: Readonly<Partial<Record<RoleArchetype, Partial<Record<RoleArchetype, number>>>>> = {
+  backend: { platform: 0.75, fullstack: 0.7, infra_devops: 0.6, sre: 0.6, data_ml: 0.5, frontend: 0.4, mobile: 0.35 },
+  platform: { infra_devops: 0.8, sre: 0.8, backend: 0.75, fullstack: 0.5, data_ml: 0.45, frontend: 0.3, mobile: 0.3 },
+  infra_devops: { sre: 0.85, platform: 0.8, backend: 0.55, data_ml: 0.4, fullstack: 0.4, frontend: 0.25, mobile: 0.25 },
+  sre: { infra_devops: 0.85, platform: 0.8, backend: 0.55, fullstack: 0.4, data_ml: 0.35, frontend: 0.25, mobile: 0.25 },
+  fullstack: { frontend: 0.8, backend: 0.5, mobile: 0.35, platform: 0.45, data_ml: 0.35, infra_devops: 0.35, sre: 0.35 },
+  frontend: { fullstack: 0.8, mobile: 0.4, backend: 0.35, platform: 0.25, data_ml: 0.2, infra_devops: 0.2, sre: 0.2 },
+  mobile: { frontend: 0.6, fullstack: 0.55, backend: 0.35, platform: 0.25, data_ml: 0.2, infra_devops: 0.2, sre: 0.2 },
+  data_ml: { backend: 0.45, platform: 0.4, infra_devops: 0.35, fullstack: 0.3, sre: 0.3, frontend: 0.15, mobile: 0.15 },
+};
+
+/**
+ * Data / analytics titles the title normalizer files under "other" ("Data Analyst",
+ * "Analytics Engineer", "Senior Data Scientist, People Analytics"): for someone targeting
+ * data roles they ARE the target, not a non-engineering role at 0.08 (2026-11: 76 of 82
+ * analyst-titled roles in a US corpus were "other", so a data analyst's feed held none).
+ */
+const DATA_TITLE_RE = /\b(data|analytics|bi|business intelligence|reporting|insights?|product|marketing|growth)\s+(analyst|scientist)s?\b|\b(data|analytics|bi)\s+(engineer|developer)s?\b|\bdata science\b|\bmachine learning (engineer|scientist)s?\b/i;
+/** "Data Center Operations Engineer" is facilities work, not a data role */
+const NOT_DATA_TITLE_RE = /\bdata\s*cent(er|re)s?\b/i;
+
 function scoreArchetype(
   jd: RoleArchetype,
   targets: RoleArchetype[],
+  title = "",
 ): { score: number; flag: string | null } {
   if (targets.includes(jd)) return { score: 1, flag: null };
+  const effective: RoleArchetype =
+    jd === "other" && targets.includes("data_ml") && DATA_TITLE_RE.test(title) && !NOT_DATA_TITLE_RE.test(title) ? "data_ml" : jd;
+  if (targets.includes(effective)) return { score: 1, flag: null };
   // adjacent engineering archetypes still transfer (a backend dev can do platform/sre)
-  if (ENG_ARCHETYPES.has(jd)) {
-    // frontend/mobile are the far edge for a backend target (java→frontend 0.2, §11.1)
-    const far = jd === "frontend" || jd === "mobile";
-    return { score: far ? 0.4 : 0.65, flag: null };
+  if (ENG_ARCHETYPES.has(effective)) {
+    const fits = targets.map((t) => ARCHETYPE_ADJACENCY[t]?.[effective] ?? (ENG_ARCHETYPES.has(t) ? 0.4 : 0.65));
+    return { score: fits.length ? Math.max(...fits) : 0.65, flag: null };
   }
   // "other" = non-engineering (sales, ops, design, AE) — a JD picked up by boilerplate
-  return { score: 0.08, flag: "Non-engineering role (off-target archetype)" };
+  return { score: 0.08, flag: "Not an engineering role (sales, ops, support or similar)" };
 }
 
 // ── seniority ─────────────────────────────────────────────────────────────
@@ -228,36 +277,34 @@ function scoreBand(
   if (!jd) return { score: 0.7, note: null, flag: null };
   // internships are for students — not a level-down you can apply to with real YoE
   if (jd === "intern" && yours !== "intern") {
-    return { score: 0.15, note: `Internship — not aimed at ~${yours} engineers.`, flag: "Internship role" };
+    return { score: 0.15, note: `Internship — meant for students, not ${levelText(yours)} engineers.`, flag: "Internship role" };
   }
   const delta = LevelBandOrder[jd] - LevelBandOrder[yours];
+  const them = cap(levelText(jd));
   // delta 0 = perfect; +1 = mild stretch up (often aspirational, fine); +2 = real stretch
   if (delta <= 0) {
     return {
       score: delta < -1 ? 0.7 : 0.95, // level-down at a dream co is fine, slight down-weight
-      note: delta < 0 ? `Posting is ${jd}; you're ${yours} — comfortable.` : null,
+      note: delta < -1 ? `${them} role; you're ${levelText(yours)} — well below your level.` : delta < 0 ? `${them} role; you're ${levelText(yours)} — a step down.` : null,
       flag: null,
     };
   }
   if (delta === 1) {
-    return {
-      score: 0.7,
-      note: `Asks ${jd}, you're ${yours} — a common stretch-up when the asked YoE is within reach.`,
-      flag: null,
-    };
+    return { score: 0.7, note: `${them} role; you're ${levelText(yours)} — a common step up.`, flag: null };
   }
   if (delta === 2) {
     return {
       score: 0.3,
-      note: `Asks ${jd}, you're ${yours} — real stretch; project depth has to argue up.`,
-      flag: `Seniority gap: role targets ${jd}`,
+      note: `${them} role; you're ${levelText(yours)} — a big step up; your projects would have to make the case.`,
+      flag: `Seniority gap: ${levelText(jd)} role`,
     };
   }
-  return {
-    score: 0.1,
-    note: `Posting is ${jd} — likely not your role yet.`,
-    flag: `Large seniority gap (${jd})`,
-  };
+  return { score: 0.1, note: `${them} role — well above your level for now.`, flag: `Large seniority gap: ${levelText(jd)} role` };
+}
+
+/** "mid" → "mid-level"; the rest read as they are */
+function levelText(band: LevelBand): string {
+  return band === "mid" ? "mid-level" : band;
 }
 
 // ── location ──────────────────────────────────────────────────────────────
@@ -375,10 +422,10 @@ function scoreLocation(
     if (loc.country && where === false) {
       if (loc.sponsorship === false) {
         score *= 0.3;
-        flags.push(`Onsite ${loc.country}, no sponsorship offered`);
+        flags.push(`Onsite in ${placeCountries(loc)}, no visa sponsorship offered`);
       } else if (loc.sponsorship == null) {
         score *= 0.6;
-        flags.push(`Onsite ${loc.country} — visa sponsorship not mentioned`);
+        flags.push(`Onsite in ${placeCountries(loc)} — visa sponsorship not mentioned`);
       }
     }
     note = `${cap(loc.mode)}${loc.city ? ` · ${loc.city}` : ""}${atHome ? ` · ${countryDisplayName(home)}-workable` : ""}.`;
@@ -404,7 +451,8 @@ function matchLocationLabel(
 ): number {
   if (weights.length === 0) return 0.7;
   const max = Math.max(...weights.map((w) => w.weight), 1);
-  const hay = `${loc.mode} ${loc.city ?? ""} ${loc.country ?? ""} ${loc.remoteGeo}`.toLowerCase();
+  // the region word too: an onsite Berlin role now names "Germany", and a "europe" preference must still match it
+  const hay = `${loc.mode} ${loc.city ?? ""} ${loc.country ?? ""}${inEurope(loc) ? " europe" : ""} ${loc.remoteGeo}`.toLowerCase();
   let best = 0.3; // default for "anywhere else"
   for (const w of weights) {
     const frag = w.label.toLowerCase();

@@ -4,6 +4,7 @@ import { scoreSourceTrust } from "../src/match/trust.js";
 import { normalizePosting } from "../src/normalize/index.js";
 import {
   countryCodeFromText,
+  countryDisplayName,
   foldPlace,
   isWorkableIn,
   locationCountries,
@@ -196,7 +197,7 @@ describe("European place names (local spellings, diacritic-insensitive)", () => 
       ["Stockholm", "SE"], ["Göteborg", "SE"], ["Milano", "IT"], ["España", "ES"],
     ] as const) {
       const loc = parseLocation(raw);
-      expect(loc.country, raw).toBe("Europe");
+      expect(loc.country, raw).toBe(countryDisplayName(code)); // the country, not the region "Europe"
       expect(loc.countries, raw).toEqual([code]);
       expect(countryCodeFromText(raw), raw).toBe(code);
     }
@@ -204,7 +205,7 @@ describe("European place names (local spellings, diacritic-insensitive)", () => 
 
   it("a 'München; Köln' role (9 at one employer counted nowhere) is a German onsite role", () => {
     const loc = parseLocation("München; Köln");
-    expect(loc).toMatchObject({ mode: "onsite", city: "München", country: "Europe", countries: ["DE"] });
+    expect(loc).toMatchObject({ mode: "onsite", city: "München", country: "Germany", countries: ["DE"] });
     expect(loc.confidence).toBeGreaterThanOrEqual(0.85);
     expect(isWorkableIn(loc, ["DE"])).toBe(true);
     expect(isWorkableIn(loc, EU_UK)).toBe(true);
@@ -265,7 +266,7 @@ describe("normalizePosting keeps the source's location text", () => {
 
 describe("country lists in one segment", () => {
   it("keep every named country, without 'New Mexico' reading as Mexico", () => {
-    expect(parseLocation("Remote Europe, USA, Canada, Australia, Singapore, Mexico").countries).toEqual(["US", "CA", "SG", "AU", "MX"]);
+    expect(parseLocation("Remote Europe, USA, Canada, Australia, Singapore, Mexico").countries).toEqual(["US", "CA", "AU", "SG", "MX"]); // in the order listed
     expect(parseLocation("Santa Fe, New Mexico, USA").countries).toEqual(["US"]);
     expect(parseLocation("Albuquerque, New Mexico").countries).toEqual(["US"]);
   });

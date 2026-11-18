@@ -261,10 +261,14 @@ pnpm jobflow sync           # every due board within ~5 minutes (the first sync:
 pnpm jobflow sync --max-boards 40   # cap this run (or JOBFLOW_SYNC_MAX_BOARDS)
 pnpm jobflow sync --full    # every due board and slow feed, no time limit — takes a while
 pnpm jobflow rank           # re-score only (after a profile change)
+pnpm jobflow renormalize    # re-parse stored postings' locations + agency flags (no polling), then rank
 ```
 
 Re-polling is idempotent; postings that disappeared from their board are retired, and
-aggregator postings expire when nobody re-confirms them.
+aggregator postings expire when nobody re-confirms them. After an upgrade that improves the
+location parser, the next `sync` re-parses the postings you already hold once (from their
+stored location text) before polling; `renormalize` does the same on demand and prints what
+changed.
 
 ### `jobflow feed` / `jobflow show`
 
@@ -278,8 +282,9 @@ pnpm jobflow show 3 [--jd]                 # details, fit, tracker status, draft
 ```
 
 By default no single company fills the page: at most 3 of its jobs in any 20 cards, the rest
-following further down. That only changes the order; every card keeps its real score and
-nothing is hidden. `--no-diversify` lists strictly by score (the web app's **score order
+following further down — but a held-back job never lands below jobs scoring more than 12
+points less, and the company's last card on the page says "+N more at <company> further
+down". That only changes the order; every card keeps its real score and nothing is hidden. `--no-diversify` lists strictly by score (the web app's **score order
 only** chip under Filters → order; MCP `list_jobs` takes `diversify: false`).
 
 ![jobflow feed](screenshots/cli-feed.png)

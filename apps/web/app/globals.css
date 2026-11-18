@@ -2056,6 +2056,13 @@ input[type="range"] {
   gap: 6px;
   max-width: 78ch;
 }
+.match__more {
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+.match__more a {
+  color: var(--text-2);
+}
 .match__flag {
   display: flex;
   gap: var(--s-2);
