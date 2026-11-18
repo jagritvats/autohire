@@ -3,7 +3,7 @@ import { LevelBandOrder, type RemoteGeo } from "../schema/enums.js";
 import { SearchQuery, type SearchQueryInput, type ViewHiddenReason } from "../schema/search.js";
 import { extractSkills } from "../normalize/skills.js";
 import { normCompany } from "../normalize/titles.js";
-import { isWorkableIn, parsedCountryMatches } from "../normalize/location.js";
+import { isWorkableIn, locationInCountry } from "../normalize/location.js";
 import { postingAgeDays } from "./score.js";
 
 /**
@@ -218,7 +218,7 @@ function normCity(c: string): string {
 /** onsite place vs one query location; anything the posting doesn't state passes. */
 function placeMatches(posting: Posting, q: { city: string | null; country: string | null }): boolean {
   const loc = posting.location;
-  if (q.country && parsedCountryMatches(loc.country, q.country) === false) return false;
+  if (q.country && locationInCountry(loc, q.country) === false) return false; // any of its countries
   if (q.city && loc.city) {
     const a = normCity(loc.city);
     const b = normCity(q.city);

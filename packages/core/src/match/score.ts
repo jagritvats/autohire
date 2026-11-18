@@ -3,7 +3,7 @@ import { LevelBandOrder, type LevelBand, type RemoteGeo, type RoleArchetype } fr
 import { cosine, clamp } from "../util/vector.js";
 import { convertCurrency, formatSalary } from "../salary/fx.js";
 import { stackAdjacency, type StackAdjacencyResult } from "./stack.js";
-import { countryDisplayName, parsedCountryMatches, primaryRemoteGeo, remoteGeosForCountry } from "../normalize/location.js";
+import { countryDisplayName, locationInCountry, primaryRemoteGeo, remoteGeosForCountry } from "../normalize/location.js";
 import { effectiveHomeCountry, effectiveMarkets, effectiveRemoteGeos } from "./region.js";
 import { EVERGREEN_TITLE_RE, REDATED_SOURCES, TALENT_POOL_JD_RE, scoreSourceTrust } from "./trust.js";
 
@@ -337,7 +337,7 @@ function scoreLocation(
     const countryOnly = loc.remoteGeo === "unknown" && loc.country != null && loc.country !== "Europe" && home !== "";
     if (countryOnly) {
       const places = [home, ...effectiveMarkets(profile.prefs)];
-      if (places.some((c) => parsedCountryMatches(loc.country, c) === true)) geo = 1;
+      if (places.some((c) => locationInCountry(loc, c) === true)) geo = 1;
       else {
         geo = GEO_PENALTY_ELSEWHERE.india_ok;
         flags.push(`"Remote" within ${loc.country} — usually requires living there`);
@@ -359,8 +359,9 @@ function scoreLocation(
     }
   } else if (loc.mode === "hybrid" || loc.mode === "onsite") {
     // onsite/hybrid in your own country is workable — a small honest boost, not a filter.
-    // true = in your country, false = definitely elsewhere, null = can't tell / home unknown
-    const where = home ? parsedCountryMatches(loc.country, home) : null;
+    // true = an office in your country, false = every office definitely elsewhere,
+    // null = can't tell / home unknown
+    const where = home ? locationInCountry(loc, home) : null;
     const atHome = where === true;
     score = clamp(atHome ? labelScore + HOME_ONSITE_BOOST : labelScore);
     // onsite abroad needs a work visa. Explicit sponsorship keeps it viable; silence is
@@ -533,7 +534,7 @@ function hardExclude(posting: Posting, profile: Profile): string | null {
     (posting.location.mode === "onsite" || posting.location.mode === "hybrid") &&
     posting.location.country != null &&
     home !== "" &&
-    parsedCountryMatches(posting.location.country, home) === false &&
+    locationInCountry(posting.location, home) === false && // abroad = NO office is home
     posting.location.sponsorship === false &&
     !profile.prefs.relocate
   ) {

@@ -13,6 +13,7 @@ import { parseLocation } from "./location.js";
 import { parseExperience } from "./experience.js";
 import { extractSalaryFromText } from "./salary.js";
 import { currencyHintFor } from "../salary/market.js";
+import { looksLikeAgency } from "../match/trust.js";
 
 export * from "./titles.js";
 export * from "./skills.js";
@@ -46,6 +47,8 @@ export interface NormalizedPosting {
   jdSkills: string[];
   requirements: Requirement[];
   location: ParsedLocation;
+  /** the source's own location text, kept for exact re-parsing (`renormalizePostings`) */
+  locationRaw: string | null;
   salary: SalaryBand;
   /** the source's own salary text, kept for exact re-parsing */
   salaryRaw: string | null;
@@ -53,7 +56,11 @@ export interface NormalizedPosting {
   applyUrl: string | null;
   /** source publish date (ISO), sanity-checked; null when absent/untrustworthy (§3). */
   postedAt: string | null;
-  /** the source flagged the poster as a consultancy / staffing intermediary. */
+  /**
+   * The poster is a consultancy / staffing intermediary: the source's own flag when it has
+   * one (Naukri), else `looksLikeAgency` on the company name + JD (every other source). A
+   * trust signal + flag in scoring, never a filter (invariant #4).
+   */
   postedByAgency: boolean;
   dedupKey: string;
 }
@@ -92,12 +99,14 @@ export function normalizePosting(raw: RawPosting): NormalizedPosting {
     jdSkills: skills,
     requirements,
     location,
+    locationRaw: raw.locationRaw?.trim() || null,
     salary,
     salaryRaw: raw.salaryRaw ?? null,
     experience,
     applyUrl: raw.applyUrl,
     postedAt: parsePostedAt(raw.postedAt),
-    postedByAgency: raw.postedByAgency ?? false,
+    // the source's own answer wins (Naukri's flag, even a "no"); else read it ourselves
+    postedByAgency: raw.postedByAgency ?? looksLikeAgency({ companyName: raw.companyName, jdText: jd }),
     dedupKey: canonicalKey(companyNameNorm, dedupTitleKey(raw.title), location),
   };
 }

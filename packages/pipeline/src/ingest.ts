@@ -426,6 +426,7 @@ export async function toNewPosting(
     jdSkills: n.jdSkills,
     requirements: n.requirements,
     location: n.location,
+    locationRaw: n.locationRaw,
     salary: n.salary,
     salaryRaw: n.salaryRaw,
     experience: n.experience,
