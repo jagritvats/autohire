@@ -1,5 +1,5 @@
 import { LevelBandOrder, type LevelBand, type RawPosting, type SearchQuery } from "@jobflow/core";
-import { adapterNotice, htmlToText, httpJsonPolite, type FetchTarget, type SearchCaps, type SearchTargetContext, type SourceAdapter } from "../types.js";
+import { adapterNotice, htmlToText, httpJsonPolite, httpStatus, liveFromStatus, type FetchTarget, type LivenessTarget, type SearchCaps, type SearchTargetContext, type SourceAdapter } from "../types.js";
 import { crossCapped, queryCountries, queryTerms } from "../search.js";
 
 /**
@@ -62,6 +62,18 @@ export class HimalayasAdapter implements SourceAdapter {
   readonly searchCaps: SearchCaps = {
     keywords: true, location: false, country: true, remote: true, postedWithin: false, salaryMin: false, seniority: true, cost: "free",
   };
+
+  /**
+   * Himalayas' documented single-job check: the guid with /jobs/api after the domain →
+   * 200 open, 410 closed, 404 no such job (docs, checked live 2026-11-18). Anything else
+   * (429, 5xx, a network error) can't tell.
+   */
+  async isLive(job: LivenessTarget): Promise<boolean | null> {
+    const m = job.jobId.match(/^https:\/\/himalayas\.app\/(companies\/[^/?#]+\/jobs\/[^/?#]+)$/);
+    if (!m) return null;
+    const key = apiKey();
+    return liveFromStatus(await httpStatus(`https://himalayas.app/jobs/api/${m[1]}`, key ? { headers: { Authorization: `Bearer ${key}` } } : {}));
+  }
 
   /** remote-only board: one target per (term × country), worldwide-eligible roles included. */
   toTargets(q: SearchQuery, ctx: SearchTargetContext): FetchTarget[] {

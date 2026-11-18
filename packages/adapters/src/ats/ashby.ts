@@ -1,5 +1,5 @@
 import type { RawPosting } from "@jobflow/core";
-import { htmlToText, httpJson, type FetchTarget, type SourceAdapter } from "../types.js";
+import { htmlToText, httpJson, httpStatus, liveFromStatus, type FetchTarget, type LivenessTarget, type SourceAdapter } from "../types.js";
 
 /**
  * Ashby public posting API (Tier 1, free, no auth). Verified live:
@@ -33,6 +33,16 @@ interface AshbyResponse {
 export class AshbyAdapter implements SourceAdapter {
   readonly source = "ashby" as const;
   readonly tier = "tier1" as const;
+
+  /**
+   * The hosted job page answers 404 for a posting that isn't on the board (checked live
+   * 2026-11-18: a listed id → 200, an unknown id → 404). The posting API has no public
+   * per-job route (401), so the page is the check.
+   */
+  async isLive(job: LivenessTarget): Promise<boolean | null> {
+    if (!job.slug || !/^[0-9a-f-]{36}$/i.test(job.jobId)) return null;
+    return liveFromStatus(await httpStatus(`https://jobs.ashbyhq.com/${encodeURIComponent(job.slug)}/${job.jobId}`, { headers: { Accept: "text/html" } }));
+  }
 
   async fetch(target: FetchTarget): Promise<RawPosting[]> {
     const slug = target.slug;

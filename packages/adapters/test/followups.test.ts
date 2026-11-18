@@ -3,6 +3,7 @@ import { isPartialFetch } from "../src/types.js";
 import { WorkdayAdapter, splitRedacted } from "../src/ats/workday.js";
 import { GreenhouseAdapter, greenhouseLocation } from "../src/ats/greenhouse.js";
 import { EightfoldAdapter } from "../src/ats/eightfold.js";
+import { AshbyAdapter } from "../src/ats/ashby.js";
 import { HimalayasAdapter, resetHimalayasPause } from "../src/aggregators/himalayas.js";
 import { JobicyAdapter, JOBICY_MIN_INTERVAL_MS, resetJobicyPacing } from "../src/aggregators/jobicy.js";
 import { httpJsonPolite } from "../src/types.js";
@@ -246,6 +247,39 @@ describe("Jobicy: at most one pass an hour per target, enforced in the adapter",
     expect(await a.fetch({ query: "backend", params: { geo: "usa" } })).toHaveLength(1);
     expect(calls).toHaveBeenCalledTimes(3);
     resetJobicyPacing();
+  });
+});
+
+describe("isLive: Ashby (hosted page) and Himalayas (single-job API)", () => {
+  const ID = "34413f8d-26bf-4bbc-8ade-eb309a0e2245";
+  const page = (status: number) => new Response("<html></html>", { status });
+
+  it("Ashby: 200 listed, 404 gone, anything else unknown", async () => {
+    const a = new AshbyAdapter();
+    const calls = stub(() => page(200));
+    expect(await a.isLive({ slug: "example", jobId: ID, applyUrl: null })).toBe(true);
+    expect(String(calls.mock.calls[0]![0])).toBe(`https://jobs.ashbyhq.com/example/${ID}`);
+    stub(() => page(404));
+    expect(await a.isLive({ slug: "example", jobId: ID, applyUrl: null })).toBe(false);
+    stub(() => page(429));
+    expect(await a.isLive({ slug: "example", jobId: ID, applyUrl: null })).toBeNull();
+    expect(await a.isLive({ slug: null, jobId: ID, applyUrl: null })).toBeNull();
+  });
+
+  it("Himalayas: 200 open, 410 closed, 404 none; a non-guid id can't be checked", async () => {
+    vi.stubEnv("HIMALAYAS_API_KEY", "");
+    const a = new HimalayasAdapter();
+    const guid = "https://himalayas.app/companies/example/jobs/backend-engineer";
+    const calls = stub(() => json({ job: {} }));
+    expect(await a.isLive({ slug: null, jobId: guid, applyUrl: null })).toBe(true);
+    expect(String(calls.mock.calls[0]![0])).toBe("https://himalayas.app/jobs/api/companies/example/jobs/backend-engineer");
+    stub(() => json({ expiryDate: 1794900000 }, 410));
+    expect(await a.isLive({ slug: null, jobId: guid, applyUrl: null })).toBe(false);
+    stub(() => json({ ok: false, errors: "Job not found." }, 404));
+    expect(await a.isLive({ slug: null, jobId: guid, applyUrl: null })).toBe(false);
+    stub(() => json({}, 429));
+    expect(await a.isLive({ slug: null, jobId: guid, applyUrl: null })).toBeNull();
+    expect(await a.isLive({ slug: null, jobId: "12345", applyUrl: null })).toBeNull();
   });
 });
 
