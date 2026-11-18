@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { SearchQuery, SourceKind } from "@jobflow/core";
 import { makeSearchQuery } from "@jobflow/pipeline";
-import { searchJobs } from "@jobflow/service";
+import { rememberSearchResults, searchJobs } from "@jobflow/service";
 import { getRepo } from "@/lib/repo";
 import { guard } from "@/lib/auth";
 
@@ -33,6 +33,8 @@ export async function POST(req: Request) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid search." }, { status: 400 });
   const { text, query, ...opts } = parsed.data;
   const q = query ? SearchQuery.parse(query) : makeSearchQuery(text ?? "");
-  const out = await searchJobs(await getRepo(), auth.tenantId, q, opts);
+  const { postings, ...out } = await searchJobs(await getRepo(), auth.tenantId, q, { ...opts, withPostings: true });
+  // results not in the corpus stay server-side so "open / save / tailor" can keep one later
+  rememberSearchResults(auth.tenantId, (postings ?? []).filter((_, i) => !out.cards[i]?.inFeed));
   return NextResponse.json(out);
 }
