@@ -65,6 +65,15 @@ All notable changes to JobFlow are documented here. The format follows
   otherwise. New "one country only" filter chip; cards say "Remote · Canada only".
 - Every source's postings get the staffing-agency flag at ingest (Naukri's own flag still
   wins); employers mentioning "our clients" or "manpower" are no longer misread as agencies.
+- **More locations understood**: comma-separated place lists ("London, Berlin") count every
+  country while "City, State" stays one place; European postings name their country
+  ("Germany", not "Europe"); HR-system country codes, US state codes, "U.S." and "Home
+  based" (remote) are read. Unplaced postings fell from 4.1% to 2.5%.
+- Duplicate detection and salary estimates consider every country a posting names; a posting
+  that states its pay currency is priced in that country.
+- **Stored postings re-parse automatically** once after an upgrade (on the next sync), and
+  `jobflow renormalize` runs it by hand.
+- Cutshort's "hiring for a client" marks a posting as from a recruiter.
 - **New design system** ("calm ledger"): neutral Radix-based palette with one action colour
   and fixed semantic colours, Inter type, light/dark/system themes at WCAG AA, a shared
   navigation shell, responsive down to 375px with a filter drawer, and accessibility passes
