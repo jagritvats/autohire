@@ -7,7 +7,7 @@
 // Videos: walkthrough, trailer, guide-start, guide-mcp, reel-ranked, reel-gate, reel-mcp.
 // See scripts/video/README.md (needs ELEVENLABS_API_KEY for new narration, ffmpeg,
 // Playwright + Chromium, a built web app, and capture-cli.mjs / capture-mcp.mjs run first).
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { assemble } from "./lib/assemble.mjs";
@@ -85,5 +85,11 @@ try {
   await stopServer();
   await browser?.close();
 }
-if (summary.length) writeFileSync(join(outDir, `summary${draft ? ".draft" : ""}.json`), JSON.stringify({ ttsChars, videos: summary }, null, 1));
+if (summary.length) {
+  // merge with earlier runs: one entry per video, the latest render wins
+  const file = join(outDir, `summary${draft ? ".draft" : ""}.json`);
+  const prev = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : { videos: [] };
+  const videosOut = [...prev.videos.filter((v) => !summary.some((s) => s.id === v.id)), ...summary];
+  writeFileSync(file, JSON.stringify({ videos: videosOut }, null, 1));
+}
 console.log(`done · new TTS characters this run: ${ttsChars}`);

@@ -170,7 +170,7 @@ export function fillForm({ startLine = 0, view = {}, endNote = true, hoverSubmit
         await at(startLine, 0.2);
         await runFiller(page, paceMs);
       }
-      if (endNote) await note(page, '<span style="color:#e0673f">●</span>&nbsp; Stopped at the review screen. Nothing was submitted.', { top: vertical ? 92 : 22, ms: 0, vertical });
+      if (endNote) await note(page, `<span style="color:#e0673f">●</span>&nbsp; ${vertical ? "Stopped for your review. Nothing sent." : "Stopped at the review screen. Nothing was submitted."}`, { top: vertical ? 92 : 22, ms: 0, vertical });
       if (hoverSubmitLine != null) {
         await at(hoverSubmitLine, 0.4);
         await scrollToEl(page, "#submit_app", { offset: vertical ? 300 : 520, ms: 900 });

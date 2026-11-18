@@ -41,7 +41,7 @@ node scripts/video/capture-cli.mjs --fresh
 node scripts/video/capture-mcp.mjs
 
 # 2. everything: narration → timeline → scenes → MP4 + .srt + poster
-node --import tsx scripts/video/make.mjs all
+pnpm video all                            # = node --import tsx scripts/video/make.mjs all
 
 # one video, or re-record a few scenes, or only re-assemble after a narration tweak
 node --import tsx scripts/video/make.mjs walkthrough --only feed,filters
@@ -49,6 +49,9 @@ node --import tsx scripts/video/make.mjs trailer --steps tts,assemble
 
 # 3. transcripts with chapter times → docs/guides/video-walkthrough.md
 node scripts/video/transcript.mjs
+
+# docs/screenshots/cli-*.png from the same fictional captures (step 1)
+node scripts/video/cli-shots.mjs
 
 # 4. look at it: a contact sheet at every scene boundary and mid-scene
 node scripts/video/frames.mjs $VIDEO_OUT/out/jobflow-walkthrough.mp4 $VIDEO_OUT/work/walkthrough/timeline.json

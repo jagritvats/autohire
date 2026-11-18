@@ -10,12 +10,12 @@ import { ROOT, WORK } from "./lib/util.mjs";
 
 const VIDEOS = [
   { id: "walkthrough", file: "jobflow-walkthrough.mp4", what: "The whole product in about three and a half minutes: setup, sync, the Jobs feed and match cards, filters, a Job page, Search, Tailor, the apply checklist and the review gate, Applications, MCP." },
-  { id: "trailer", file: "jobflow-trailer.mp4", what: "A one-minute introduction. Also as a captioned cut and a 1:1 square cut for social media." },
+  { id: "trailer", file: "jobflow-trailer.mp4", what: "A short introduction, under a minute. Also as a captioned cut and a 1:1 square cut for social media." },
   { id: "guide-start", file: "jobflow-guide-get-started.mp4", what: "Terminal first: clone, install, `jobflow init --sample`, `jobflow sync`, `jobflow feed`, `jobflow show`, `jobflow serve`." },
   { id: "guide-mcp", file: "jobflow-guide-mcp.mp4", what: "Adding `jobflow mcp` to Claude Code, then an illustrative conversation built from real tool output: `search_jobs`, `get_job`, `prepare_application` (a dry run), and you running `jobflow apply --fill`." },
-  { id: "reel-ranked", file: "reels/jobflow-reel-ranked.mp4", what: "Vertical, ~30 s: ranked by fit to your résumé, with the honest card." },
-  { id: "reel-gate", file: "reels/jobflow-reel-gate.mp4", what: "Vertical, ~30 s: the form-filler stops at the review screen; you press submit." },
-  { id: "reel-mcp", file: "reels/jobflow-reel-mcp.mp4", what: "Vertical, ~30 s: JobFlow from an AI assistant over MCP; your data stays on your machine." },
+  { id: "reel-ranked", file: "reels/jobflow-reel-ranked.mp4", what: "Vertical, about 25 s: ranked by fit to your résumé, with the honest card." },
+  { id: "reel-gate", file: "reels/jobflow-reel-gate.mp4", what: "Vertical, about 25 s: the form-filler stops at the review screen; you press submit." },
+  { id: "reel-mcp", file: "reels/jobflow-reel-mcp.mp4", what: "Vertical, about 25 s: JobFlow from an AI assistant over MCP; your data stays on your machine." },
 ];
 
 const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
@@ -48,6 +48,11 @@ for (const v of VIDEOS) {
   const start = (id) => tl?.scenes.find((s) => s.id === id)?.start;
   out.push(`\n## ${narr.title}\n`);
   out.push(`File: \`${v.file}\`${tl ? ` · ${mmss(tl.total)}` : ""}. ${v.what}\n`);
+  // the reels have no chapters: their narration is one paragraph
+  if (narr.scenes.every((sc) => !sc.chapter)) {
+    out.push(narr.scenes.flatMap((sc) => sc.lines.map(lineText)).join(" ") + "\n");
+    continue;
+  }
   for (const sc of narr.scenes) {
     const t = start(sc.id);
     const head = sc.chapter ?? sc.id;

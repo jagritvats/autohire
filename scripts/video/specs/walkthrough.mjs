@@ -16,7 +16,7 @@ export default {
   scenes: {
     intro: { pre: 0.9 },
     sync: { post: 1.2 },
-    outro: { post: 3.2 },
+    outro: { post: 4.2 },
   },
   visuals: {
     intro: {
@@ -317,7 +317,7 @@ export default {
         {
           // Settings → Appearance: Editorial → Classic → Spark → back to Editorial, then the
           // one dark-theme moment
-          until: (l) => l(1) + 5.4,
+          until: (l) => l(1) + 6.6,
           visual: {
             kind: "live",
             url: "/settings#appearance",

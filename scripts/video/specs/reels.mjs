@@ -34,7 +34,7 @@ export default {
   "reel-ranked": {
     output: "jobflow-reel-ranked",
     ...base,
-    scenes: { hook: { pre: 0.25 }, end: { post: 2.2 } },
+    scenes: { hook: { pre: 0.25 }, filters: { post: 1.2 }, end: { post: 2.2 } },
     visuals: {
       hook: vcard({ ink: true, title: "Stop scrolling\n*500* job posts.", step: 0.1 }),
       rank: liveFeed(async ({ page, hand }) => {
@@ -57,9 +57,6 @@ export default {
         await hand.to(est, { ms: 400 }).catch(() => undefined);
       }, async ({ page }) => scrollToEl(page, `${CARD} >> nth=0`, { offset: 70, ms: 10 })),
       filters: liveFeed(async ({ page, hand }) => {
-        await hand.click(".filter-bar button", { ms: 500 });
-        await page.waitForSelector('.filter-rail[data-open="true"]', { timeout: 4000 }).catch(() => undefined);
-        await sleep(300);
         // a chip in view in the sheet: remote only
         const chip = page.locator('.filter-rail[data-open="true"] .chip', { hasText: /^remote$/ }).first();
         await hand.click(chip, { ms: 400 });
@@ -69,6 +66,10 @@ export default {
         const rep = page.locator(".ux-hidden-report").first();
         await scrollToEl(page, rep, { offset: 200, ms: 400 });
         await spotlight(page, rep, 2000);
+      }, async ({ page }) => {
+        // the sheet is already open when the cut lands
+        await page.click(".filter-bar button");
+        await page.waitForSelector('.filter-rail[data-open="true"]', { timeout: 4000 }).catch(() => undefined);
       }),
       end: vend(),
     },

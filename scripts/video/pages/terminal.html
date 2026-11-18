@@ -71,6 +71,8 @@ window.__frame = async (t) => {
   while (wi < D.writes.length && D.writes[wi][0] <= t) { buf += D.writes[wi][1]; wi++; }
   if (buf) {
     await new Promise((r) => term.write(buf, r));
+    // xterm paints on the next animation frames: wait, or a big write is captured half-drawn
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     changed = true;
   }
   return changed;

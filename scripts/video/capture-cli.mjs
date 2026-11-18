@@ -109,7 +109,7 @@ function capture(name, cmd, { env = {}, killAfter = null, cwd = REPO, cols = COL
     p.on("close", () => {
       if (timer) clearTimeout(timer);
       try {
-        resolve(parse(name, cmd, tlog, olog));
+        resolve(parse(name, cmd, tlog, olog, cols));
       } catch (e) {
         reject(e);
       }
@@ -117,7 +117,7 @@ function capture(name, cmd, { env = {}, killAfter = null, cwd = REPO, cols = COL
   });
 }
 
-function parse(name, cmd, tlog, olog) {
+function parse(name, cmd, tlog, olog, cols = COLS) {
   const raw = readFileSync(olog);
   const nl = raw.indexOf(0x0a);
   let body = raw.subarray(nl + 1);
@@ -137,7 +137,10 @@ function parse(name, cmd, tlog, olog) {
   for (const [k, [delay]] of timing.entries()) {
     t += delay;
     const end = Math.max(off, ends[k]);
-    const text = body.subarray(off, end).toString("utf8").split(HOME).join("~");
+    let text = body.subarray(off, end).toString("utf8").split(HOME).join("~");
+    // captured wide (so a long path isn't wrapped before it becomes ~): absolute column moves
+    // would land past the player's narrower window, so they become one space
+    if (cols !== COLS) text = text.replace(/\x1b\[\d+G/g, " ");
     off = end;
     if (text) events.push([Number(t.toFixed(3)), text]);
   }
@@ -180,7 +183,7 @@ for (const [name, cmd, opts = {}] of SESSIONS) {
     continue;
   }
   if (reparse) {
-    const r = parse(name, opts.display ?? cmd, join(CLI, `${name}.timing`), join(CLI, `${name}.log`));
+    const r = parse(name, opts.display ?? cmd, join(CLI, `${name}.timing`), join(CLI, `${name}.log`), opts.cols);
     writeFileSync(join(CLI, `${name}.json`), JSON.stringify(r));
     continue;
   }
