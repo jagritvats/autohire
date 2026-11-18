@@ -90,7 +90,7 @@ async function salary(): Promise<void> {
 async function salaryBacktest(): Promise<void> {
   const repo = await makeRepository();
   printBacktest(await backtestSalaryEstimates(repo, { withoutEmployerEvidence: false }));
-  // leak-free, before and after the per-market calibration
+  // leak-free, before and after the per market × role family calibration
   printBacktest(await backtestSalaryEstimates(repo, { withoutEmployerEvidence: true, calibrated: false }));
   printBacktest(await backtestSalaryEstimates(repo, { withoutEmployerEvidence: true }));
 }

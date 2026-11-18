@@ -17,7 +17,7 @@ import {
  *   1. per top company: levels.fyi comp benchmark (median + family breakdown), and its
  *      level ladder in each market its top postings are in (company × country), ~30d
  *   2. market benchmarks: levels.fyi market×level pages, Adzuna role×level×country (keyed)
- *   3. recalibrate per-market confidence from a backtest when last week's has expired
+ *   3. recalibrate confidence per market × role family from a backtest when last week's has expired
  *   4. estimate every active posting that states no pay → `posting.salaryEstimate`
  *      (never written into `posting.salary`, which is only ever what the posting says)
  */
