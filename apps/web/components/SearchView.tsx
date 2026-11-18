@@ -86,9 +86,9 @@ export function SearchView() {
   return (
     <div className="settings">
       <section className="card-block">
-        <h3>
+        <h2>
           Search <span className="hint">— e.g. <code>&quot;staff backend&quot; --remote --loc Berlin,DE --seniority senior --posted 7d</code></span>
-        </h3>
+        </h2>
         <form
           className="search-bar"
           onSubmit={(e) => {
@@ -141,9 +141,9 @@ export function SearchView() {
 
       {saved.length > 0 && (
         <section className="card-block">
-          <h3>
+          <h2>
             Saved searches <span className="hint">— run on a schedule as sources, and usable as feed views</span>
-          </h3>
+          </h2>
           <ul className="tokens-list">
             {saved.map((s) => (
               <li key={s.id}>

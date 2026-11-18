@@ -92,9 +92,9 @@ export function DiscoveryView() {
   return (
     <div className="settings">
       <section className="card-block">
-        <h3>
+        <h2>
           Built-in presets <span className="hint">— curated starting sets of companies and boards; switch on as many as you like</span>
-        </h3>
+        </h2>
         <div className="onb-presets">
           {data.presets.map((p) => (
             <button
@@ -129,9 +129,9 @@ export function DiscoveryView() {
       </section>
 
       <section className="card-block">
-        <h3>
+        <h2>
           Your sources <span className="hint">— added on top of the preset; polled on every sync</span>
-        </h3>
+        </h2>
         <div className="field-row">
           <label>
             type

@@ -60,7 +60,7 @@ export function ApplicationsView() {
 
       {due.length > 0 && (
         <section className="card-block danger" style={{ marginTop: 14 }}>
-          <h3>⏰ Follow-ups due <span className="hint">({due.length})</span></h3>
+          <h2>⏰ Follow-ups due <span className="hint">({due.length})</span></h2>
           {due.map((a) => (
             <div className="crm-due" key={a.id}>
               <span>{a.title} · {a.company}</span>
@@ -87,7 +87,7 @@ async function fillLocal(postingId: string) {
 function Group({ title, apps, patch }: { title: string; apps: App[]; patch: (b: Record<string, unknown>) => void }) {
   return (
     <section style={{ marginTop: 16 }}>
-      <h3 className="crm-group">{title} <span className="hint">({apps.length})</span></h3>
+      <h2 className="crm-group">{title} <span className="hint">({apps.length})</span></h2>
       <div className="reg-table">
         <div className="crm-head">
           <span>role</span>

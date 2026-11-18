@@ -183,9 +183,9 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
 
       {step === "resume" && (
         <section className="card-block">
-          <h3>
+          <h2>
             Your résumé <span className="hint">— PDF, DOCX, LaTeX, Markdown, text, JSON Resume or a LinkedIn data export</span>
-          </h3>
+          </h2>
           <p className="hint">
             JobFlow copies what&apos;s in your file — it never adds claims. You&apos;ll review everything before it&apos;s saved.
           </p>
@@ -216,7 +216,7 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
         <>
           {draft.warnings.length > 0 && (
             <section className="card-block danger">
-              <h3>Heads-up</h3>
+              <h2>Heads-up</h2>
               <ul className="onb-warnings">
                 {draft.warnings.map((w) => (
                   <li key={w}>{w}</li>
@@ -225,7 +225,7 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
             </section>
           )}
           <section className="card-block">
-            <h3>Contact <span className="hint">— only what you keep here is ever typed into a form, and the filler always stops at review</span></h3>
+            <h2>Contact <span className="hint">— only what you keep here is ever typed into a form, and the filler always stops at review</span></h2>
             <div className="field-row">
               {(Object.keys(contact) as (keyof typeof contact)[]).map((k) => (
                 <label key={k}>
@@ -236,7 +236,7 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
             </div>
           </section>
           <section className="card-block">
-            <h3>Skills <span className="hint">— your stack drives stack-adjacency scoring</span></h3>
+            <h2>Skills <span className="hint">— your stack drives stack-adjacency scoring</span></h2>
             <div className="chip-row">
               {skills.map((s) => (
                 <button key={s} type="button" className="chip" data-on="true" onClick={() => setSkills(skills.filter((x) => x !== s))}>
@@ -279,9 +279,9 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
             </div>
           </section>
           <section className="card-block">
-            <h3>
+            <h2>
               Evidence Bank <span className="hint">— the claims tailoring may cite; each is copied verbatim from your résumé</span>
-            </h3>
+            </h2>
             {draft.evidence.length === 0 && <p className="hint">No bullet points found — you can add evidence later in Settings.</p>}
             <ul className="onb-evidence">
               {draft.evidence.map((e, i) => (
@@ -311,7 +311,7 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
       {step === "prefs" && (
         <>
           <section className="card-block">
-            <h3>Where you work <span className="hint">— weighted signals, not filters: nothing is hidden for being elsewhere</span></h3>
+            <h2>Where you work <span className="hint">— weighted signals, not filters: nothing is hidden for being elsewhere</span></h2>
             <div className="field-row">
               <label>
                 home country (ISO code)
@@ -340,7 +340,7 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
             </div>
           </section>
           <section className="card-block">
-            <h3>Pay & roles <span className="hint">— only a confidently-stated salary below your floor is excluded</span></h3>
+            <h2>Pay & roles <span className="hint">— only a confidently-stated salary below your floor is excluded</span></h2>
             <div className="field-row">
               <label>
                 salary floor (yearly)
@@ -378,7 +378,7 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
       {step === "discovery" && (
         <>
           <section className="card-block">
-            <h3>Where to look <span className="hint">— pick one or more starting sets of companies and boards; add your own anytime</span></h3>
+            <h2>Where to look <span className="hint">— pick one or more starting sets of companies and boards; add your own anytime</span></h2>
             <div className="onb-presets">
               {PRESETS.map((p) => (
                 <button

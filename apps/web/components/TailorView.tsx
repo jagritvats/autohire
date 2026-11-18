@@ -341,7 +341,7 @@ export function TailorView({ posting, inputs, initialDrafts }: { posting: Tailor
       <section className="card-block tailor-block">
         <div className="tailor-block-head">
           <div>
-            <h3>Tailored résumé</h3>
+            <h2>Tailored résumé</h2>
             <span className="hint">your résumé, rewritten for this role — edit the source, check the preview, export</span>
           </div>
           <div className="variant-tabs">
@@ -495,9 +495,9 @@ export function TailorView({ posting, inputs, initialDrafts }: { posting: Tailor
       <section className="card-block tailor-block">
         <div className="tailor-block-head">
           <div>
-            <h3>
+            <h2>
               Cover letter <span className="hint">— optional</span>
-            </h3>
+            </h2>
             <span className="hint">grounded in your material; company facts only from this JD</span>
           </div>
         </div>
@@ -560,7 +560,7 @@ export function TailorView({ posting, inputs, initialDrafts }: { posting: Tailor
           <section className="card-block tailor-block" key={kind}>
             <div className="tailor-block-head">
               <div>
-                <h3>{title}</h3>
+                <h2>{title}</h2>
                 <span className="hint">{blurb}</span>
               </div>
               <div className="tailor-block-btns">
