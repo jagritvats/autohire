@@ -86,9 +86,9 @@ export function SearchView() {
   return (
     <div className="settings">
       <section className="card-block">
-        <h3>
+        <h2>
           Search <span className="hint">— e.g. <code>&quot;staff backend&quot; --remote --loc Berlin,DE --seniority senior --posted 7d</code></span>
-        </h3>
+        </h2>
         <form
           className="search-bar"
           onSubmit={(e) => {
@@ -96,7 +96,7 @@ export function SearchView() {
             void run();
           }}
         >
-          <input value={text} onChange={(e) => setText(e.target.value)} placeholder="backend engineer --remote" />
+          <input aria-label="Search query" value={text} onChange={(e) => setText(e.target.value)} placeholder="backend engineer --remote" />
           <button type="submit" className="save" disabled={busy || !text.trim()}>
             {busy ? "searching…" : "search"}
           </button>
@@ -108,7 +108,7 @@ export function SearchView() {
               key={p}
               type="button"
               className="chip"
-              data-on={tags.includes(p)}
+              data-on={tags.includes(p)} aria-pressed={tags.includes(p)}
               onClick={() => setTags(tags.includes(p) ? tags.filter((t) => t !== p) : [...tags, p])}
             >
               #{p}
@@ -136,14 +136,14 @@ export function SearchView() {
             save search
           </button>
         </div>
-        {error && <p className="auth-error">{error}</p>}
+        {error && <p className="auth-error" role="alert">{error}</p>}
       </section>
 
       {saved.length > 0 && (
         <section className="card-block">
-          <h3>
+          <h2>
             Saved searches <span className="hint">— run on a schedule as sources, and usable as feed views</span>
-          </h3>
+          </h2>
           <ul className="tokens-list">
             {saved.map((s) => (
               <li key={s.id}>
@@ -168,7 +168,7 @@ export function SearchView() {
 
       {res && (
         <>
-          <p className="hint search-summary">
+          <p className="hint search-summary" aria-live="polite">
             {res.fetched} fetched from {Object.keys(res.bySource).length} sources · {res.cards.length} shown
             {res.hiddenTotal > 0 && <> · {res.hiddenTotal} hidden by your filters ({hiddenList.map(([k, n]) => `${n} ${k}`).join(", ")})</>}
             {res.excluded > 0 && <> · {res.excluded} excluded (salary floor / impossible location)</>}

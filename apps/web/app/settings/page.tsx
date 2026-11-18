@@ -1,4 +1,5 @@
-import Link from "next/link";
+import { PageHeader } from "@/components/ui";
+import { SectionNav } from "@/components/ui/SectionNav";
 import { blankProfile } from "@jobflow/pipeline";
 import { toPublicConfig } from "@jobflow/core";
 import { pageAuth } from "@/lib/auth";
@@ -8,6 +9,25 @@ import { listSources } from "@/lib/sources";
 import { SettingsForm, type GenericDraft } from "@/components/SettingsForm";
 
 export const dynamic = "force-dynamic";
+
+/** Anchors for the long settings form — the ids live on SettingsForm's sections. */
+const SETTINGS_SECTIONS = [
+  { id: "resume", label: "Base résumé" },
+  { id: "about", label: "About you" },
+  { id: "context", label: "Connected context" },
+  { id: "evidence", label: "Evidence Bank" },
+  { id: "stack", label: "Tech stack" },
+  { id: "comp", label: "Comp & level" },
+  { id: "archetypes", label: "Archetypes" },
+  { id: "remote", label: "Remote geo" },
+  { id: "locations", label: "Location weights" },
+  { id: "contact", label: "Contact" },
+  { id: "drafts", label: "Drafts" },
+  { id: "cache", label: "Cache & refresh" },
+  { id: "model", label: "Generation model" },
+  { id: "tokens", label: "API tokens" },
+  { id: "automation", label: "Automation" },
+];
 
 export default async function SettingsPage() {
   const auth = await pageAuth("/settings");
@@ -24,21 +44,17 @@ export default async function SettingsPage() {
   const sources = await listSources(auth.tenantId);
 
   return (
-    <div className="settings-shell">
-      <header className="settings-head">
-        <h1 className="wordmark">
-          Job<span className="flow">Flow</span> <span className="settings-sub">/ settings</span>
-        </h1>
-        <Link className="back" href="/">
-          ← feed
-        </Link>
-      </header>
-      <SettingsForm
-        initialProfile={JSON.parse(JSON.stringify(profile))}
-        initialConfig={config}
-        initialDrafts={drafts}
-        initialSources={sources}
-      />
+    <div className="page page--wide">
+      <PageHeader title="Settings" />
+      <div className="settings-layout">
+        <SectionNav items={SETTINGS_SECTIONS} />
+        <SettingsForm
+          initialProfile={JSON.parse(JSON.stringify(profile))}
+          initialConfig={config}
+          initialDrafts={drafts}
+          initialSources={sources}
+        />
+      </div>
     </div>
   );
 }

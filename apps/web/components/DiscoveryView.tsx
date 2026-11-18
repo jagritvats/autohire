@@ -86,22 +86,22 @@ export function DiscoveryView() {
     }
   }
 
-  if (!data) return <p className="hint">loading…</p>;
+  if (!data) return <p className="hint" role="status">loading…</p>;
   const active = data.presets.filter((p) => p.active);
 
   return (
     <div className="settings">
       <section className="card-block">
-        <h3>
+        <h2>
           Built-in presets <span className="hint">— curated starting sets of companies and boards; switch on as many as you like</span>
-        </h3>
+        </h2>
         <div className="onb-presets">
           {data.presets.map((p) => (
             <button
               key={p.id}
               type="button"
               className="onb-preset"
-              data-on={p.active}
+              data-on={p.active} aria-pressed={p.active}
               disabled={busy || (p.active && active.length === 1)}
               title={p.active && active.length === 1 ? "keep at least one preset on" : p.active ? "click to switch off" : "click to switch on"}
               onClick={() => void op({ op: "preset", id: p.id, enabled: !p.active })}
@@ -119,7 +119,7 @@ export function DiscoveryView() {
             <p className="hint" style={{ marginTop: 12 }}>Feeds in “{a.label}” (click to turn off/on):</p>
             <div className="chip-row">
               {a.feeds.map((f) => (
-                <button key={f.id} type="button" className="chip" data-on={f.enabled} onClick={() => void op({ op: "preset_feed", feedId: f.id, enabled: !f.enabled })}>
+                <button key={f.id} type="button" className="chip" data-on={f.enabled} aria-pressed={f.enabled} onClick={() => void op({ op: "preset_feed", feedId: f.id, enabled: !f.enabled })}>
                   {f.source} · {f.id}
                 </button>
               ))}
@@ -129,9 +129,9 @@ export function DiscoveryView() {
       </section>
 
       <section className="card-block">
-        <h3>
+        <h2>
           Your sources <span className="hint">— added on top of the preset; polled on every sync</span>
-        </h3>
+        </h2>
         <div className="field-row">
           <label>
             type
@@ -157,7 +157,7 @@ export function DiscoveryView() {
             add
           </button>
         </div>
-        {error && <p className="auth-error">{error}</p>}
+        {error && <p className="auth-error" role="alert">{error}</p>}
         <ul className="tokens-list" style={{ marginTop: 14 }}>
           {data.sources.map((s) => (
             <li key={s.id} data-revoked={!s.enabled}>

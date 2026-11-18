@@ -1,22 +1,26 @@
-import type { Metadata } from "next";
-import { IBM_Plex_Mono, Instrument_Serif } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Inter, JetBrains_Mono } from "next/font/google";
+import { AppShell } from "@/components/ui/AppShell";
+import { THEME_INIT_SCRIPT } from "@/components/ui/ThemeToggle";
 import "./globals.css";
 
-const mono = IBM_Plex_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-mono",
-});
-const serif = Instrument_Serif({
-  subsets: ["latin"],
-  weight: ["400"],
-  style: ["normal", "italic"],
-  variable: "--font-serif",
-});
+// Inter for the interface (tabular figures for scores/counts); JetBrains Mono only for
+// code-ish bits — the search query DSL, résumé/LaTeX sources, job types.
+const sans = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
+const mono = JetBrains_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-jbmono", display: "swap" });
 
 export const metadata: Metadata = {
   title: "JobFlow — ranked match feed",
   description: "Job discovery, prep, and assisted-application. The card is the product.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#111113" },
+  ],
 };
 
 /**
@@ -27,15 +31,13 @@ const SOURCE_URL = process.env.JOBFLOW_SOURCE_URL || "https://github.com/jagritv
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${mono.variable} ${serif.variable}`}>
-      <body
-        style={{
-          // bind next/font to the CSS vars used in globals.css
-          ["--mono" as string]: `var(--font-mono), ui-monospace, monospace`,
-          ["--serif" as string]: `var(--font-serif), Georgia, serif`,
-        }}
-      >
-        {children}
+    // the init script sets data-theme before paint, so React must not complain about it
+    <html lang="en" className={`${sans.variable} ${mono.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
+      <body>
+        <AppShell>{children}</AppShell>
         <footer className="site-footer">
           JobFlow · free software under the{" "}
           <a href="https://www.gnu.org/licenses/agpl-3.0.html" rel="license noreferrer" target="_blank">

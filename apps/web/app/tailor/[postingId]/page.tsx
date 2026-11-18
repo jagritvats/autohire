@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Icon, PageHeader } from "@/components/ui";
 import { notFound } from "next/navigation";
 import { blankProfile, isSampleEvidence } from "@jobflow/pipeline";
 import { pageAuth } from "@/lib/auth";
@@ -54,15 +55,15 @@ export default async function TailorPage({ params }: { params: { postingId: stri
   };
 
   return (
-    <div className="settings-shell tailor-shell">
-      <header className="settings-head">
-        <h1 className="wordmark">
-          Job<span className="flow">Flow</span> <span className="settings-sub">/ tailor</span>
-        </h1>
-        <Link className="back" href="/">
-          ← feed
-        </Link>
-      </header>
+    <div className="page page--wide">
+      <PageHeader
+        eyebrow={
+          <Link href="/">
+            <Icon name="arrowLeft" size={14} /> Feed
+          </Link>
+        }
+        title="Tailor"
+      />
       <TailorView posting={dto} inputs={inputs} initialDrafts={drafts as unknown as Draft[]} />
     </div>
   );

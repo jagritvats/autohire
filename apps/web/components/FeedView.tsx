@@ -1,10 +1,11 @@
 "use client";
 
-import { AccountMenu } from "@/components/AccountMenu";
 import { useMemo, useState, useTransition } from "react";
 import type { FeedCard, FeedData, PostingView } from "@/lib/feed";
 import { MatchCard } from "./MatchCard";
 import { ActivityPanel } from "./ActivityPanel";
+import { Badge, Banner, Button, Chip, EmptyState, Segmented, Stat } from "./ui";
+import { FilterDrawer } from "./ui/FilterDrawer";
 
 const ARCHETYPES = ["backend", "platform", "infra_devops", "fullstack", "data_ml", "sre", "frontend"];
 const MODES = ["remote", "hybrid", "onsite"];
@@ -218,163 +219,156 @@ export function FeedView({ initial, viewName = null }: { initial: FeedData; view
         ? "Loading…"
         : `No ${view} yet.`;
 
-  return (
-    <div className="shell">
-      <aside className="rail">
-        <h1 className="wordmark">
-          Job<span className="flow">Flow</span>
-        </h1>
-        <div className="tagline">ranked match feed</div>
-        <nav className="rail-nav">
-          <a href="/" data-active="true">feed</a>
-          <a href="/searches">search</a>
-          <a href="/discovery">discovery</a>
-          <a href="/applications">pipeline</a>
-          <a href="/companies">registry</a>
-          <a href="/settings">settings</a>
-          <AccountMenu />
-          <span className="durable-pill" data-on={data.stats.durable}>
-            {data.stats.durable ? "durable" : "in-memory"}
-          </span>
-        </nav>
+  // how many filters are narrowing the feed — shown on the mobile "Filters" button
+  const activeFilters =
+    arch.size + modes.size + geos.size + presetTags.size + (minScore > 0 ? 1 : 0) + (maxYears > 0 ? 1 : 0) +
+    (hideUsOnly ? 1 : 0) + (hideServices ? 1 : 0) + (minTrust > 0 ? 1 : 0) + (indiaOnly ? 1 : 0);
 
+  return (
+    <div className="feed-layout">
+      <FilterDrawer activeCount={activeFilters}>
         <div className="rail-group">
-          <h4>
+          <label className="rail-group__label" htmlFor="f-min-score">
             min score <span className="slider-val">{minScore}</span>
-          </h4>
-          <input type="range" min={0} max={90} step={5} value={minScore} onChange={(e) => setMinScore(+e.target.value)} />
+          </label>
+          <input id="f-min-score" type="range" min={0} max={90} step={5} value={minScore} onChange={(e) => setMinScore(+e.target.value)} />
         </div>
 
         <div className="rail-group">
-          <h4>
+          <label className="rail-group__label" htmlFor="f-max-years">
             max years exp <span className="slider-val">{maxYears === 0 ? "any" : `≤${maxYears}y`}</span>
-          </h4>
+          </label>
           <input
+            id="f-max-years"
             type="range"
             min={0}
             max={15}
             step={1}
             value={maxYears}
+            aria-valuetext={maxYears === 0 ? "any" : `at most ${maxYears} years`}
             onChange={(e) => setMaxYears(+e.target.value)}
             title="Hide roles asking for more than N years of experience. Roles with no stated minimum are kept."
           />
         </div>
 
         {feedPresets.length > 0 && (
-          <div className="rail-group">
-            <h4>preset</h4>
+          <fieldset className="rail-group">
+            <legend>preset</legend>
             <div className="chip-row">
               {feedPresets.map((p) => (
-                <button key={p} className="chip" data-on={presetTags.has(p)} onClick={() => toggle(presetTags, p, setPresetTags)}>
+                <Chip key={p} on={presetTags.has(p)} onClick={() => toggle(presetTags, p, setPresetTags)}>
                   {p}
-                </button>
+                </Chip>
               ))}
             </div>
-          </div>
+          </fieldset>
         )}
 
-        <div className="rail-group">
-          <h4>archetype</h4>
+        <fieldset className="rail-group">
+          <legend>archetype</legend>
           <div className="chip-row">
             {ARCHETYPES.map((a) => (
-              <button key={a} className="chip" data-on={arch.has(a)} onClick={() => toggle(arch, a, setArch)}>
+              <Chip key={a} on={arch.has(a)} onClick={() => toggle(arch, a, setArch)}>
                 {a.replace(/_/g, "/")}
-              </button>
+              </Chip>
             ))}
           </div>
-        </div>
+        </fieldset>
 
-        <div className="rail-group">
-          <h4>work mode</h4>
+        <fieldset className="rail-group">
+          <legend>work mode</legend>
           <div className="chip-row">
             {MODES.map((m) => (
-              <button key={m} className="chip" data-on={modes.has(m)} onClick={() => toggle(modes, m, setModes)}>
+              <Chip key={m} on={modes.has(m)} onClick={() => toggle(modes, m, setModes)}>
                 {m}
-              </button>
+              </Chip>
             ))}
           </div>
-        </div>
+        </fieldset>
 
-        <div className="rail-group">
-          <h4>remote geo</h4>
+        <fieldset className="rail-group">
+          <legend>remote geo</legend>
           <div className="chip-row">
             {GEOS.map((g) => (
-              <button key={g} className="chip" data-on={geos.has(g)} onClick={() => toggle(geos, g, setGeos)}>
+              <Chip key={g} on={geos.has(g)} onClick={() => toggle(geos, g, setGeos)}>
                 {g.replace(/_/g, "-")}
-              </button>
+              </Chip>
             ))}
           </div>
-        </div>
+        </fieldset>
 
-        <div className="rail-group">
-          <h4>region</h4>
+        <fieldset className="rail-group">
+          <legend>region</legend>
           <div className="chip-row">
-            <button
-              className="chip"
-              data-on={indiaOnly}
+            <Chip
+              on={indiaOnly}
               onClick={toggleIndia}
               disabled={indiaLoading}
               title="Show only India-workable roles (onsite/hybrid in India, or India-ok / worldwide remote)"
             >
               {indiaLoading ? "loading…" : "india-onsite allowed"}
-            </button>
+            </Chip>
           </div>
-        </div>
+        </fieldset>
 
-        <div className="rail-group">
-          <h4>honesty</h4>
+        <fieldset className="rail-group">
+          <legend>honesty</legend>
           <div className="chip-row">
-            <button className="chip" data-on={hideUsOnly} onClick={() => setHideUsOnly((v) => !v)}>
+            <Chip on={hideUsOnly} onClick={() => setHideUsOnly((v) => !v)}>
               hide us-only “remote”
-            </button>
-            <button
-              className="chip"
-              data-on={hideServices}
+            </Chip>
+            <Chip
+              on={hideServices}
               onClick={() => setHideServices((v) => !v)}
               title="Hide IT-services / outsourcing employers (companies tagged 'services')"
             >
               hide IT services
-            </button>
+            </Chip>
           </div>
-        </div>
+        </fieldset>
 
         <div className="rail-group">
-          <h4>
+          <label className="rail-group__label" htmlFor="f-min-trust">
             min source trust <span className="slider-val">{minTrust === 0 ? "any" : `≥${minTrust}%`}</span>
-          </h4>
+          </label>
           <input
+            id="f-min-trust"
             type="range"
             min={0}
             max={90}
             step={5}
             value={minTrust}
+            aria-valuetext={minTrust === 0 ? "any" : `at least ${minTrust} percent`}
             onChange={(e) => setMinTrust(+e.target.value)}
             title="Source trust: how likely a listing is real, still open and answered (ATS boards ~85%, re-dating aggregators ~35%, gigs and agency posts lower)"
           />
         </div>
 
-        <div className="rail-group">
-          <h4>maintenance</h4>
-          <div className="chip-row">
-            <button className="chip" onClick={recheck} disabled={pending} title="Re-poll active boards to verify freshness">
-              recheck all
-            </button>
-            <button className="chip" onClick={purge} disabled={pending} title="Soft-delete postings older than a threshold">
-              remove old
-            </button>
-          </div>
-        </div>
-      </aside>
+        <hr className="rail-sep" />
 
-      <main className="main">
+        <fieldset className="rail-group">
+          <legend>maintenance</legend>
+          <div className="chip-row">
+            <Button size="sm" onClick={recheck} disabled={pending} title="Re-poll active boards to verify freshness">
+              recheck all
+            </Button>
+            <Button size="sm" onClick={purge} disabled={pending} title="Soft-delete postings older than a threshold">
+              remove old
+            </Button>
+          </div>
+        </fieldset>
+      </FilterDrawer>
+
+      <div className="feed-main">
+        <h1 className="sr-only">Ranked match feed</h1>
         {data.stats.needsOnboarding && (
-          <div className="feed-banner">
+          <Banner tone="info">
             These are the freshest postings, <b>unscored</b>. <a href="/onboarding">Add your résumé</a> to get ranked,
             honest match cards.
-          </div>
+          </Banner>
         )}
         {viewName && (
-          <div className="feed-banner">
+          <Banner tone="info">
             Viewing your feed through the saved search <b>{viewName}</b>
             {data.stats.hiddenTotal ? (
               <>
@@ -389,45 +383,55 @@ export function FeedView({ initial, viewName = null }: { initial: FeedData; view
               "."
             )}{" "}
             Scores are unchanged. <a href="/">show all</a>
-          </div>
+          </Banner>
         )}
         {data.stats.syncing && (
-          <div className="feed-banner">Fetching jobs from the built-in sources for the first time — refresh in a minute.</div>
+          <Banner tone="info" live>
+            Fetching jobs from the built-in sources for the first time — refresh in a minute.
+          </Banner>
         )}
-        <div className="statsbar">
-          <Stat n={data.stats.companies} l="companies" />
-          <Stat n={data.stats.postings} l="active postings" />
-          <Stat n={data.stats.ranked} l="ranked" good />
-          <Stat n={data.stats.excluded} l="hard-excluded" muted />
-          <Stat n={cards.length} l="shown" />
-          <button className="refresh" onClick={refresh} disabled={pending}>
-            {pending ? "polling…" : "↻ sync re-poll"}
-          </button>
+
+        <div className="feed-toolbar">
+          <div className="stats" aria-label="Corpus">
+            <Stat value={data.stats.companies} label="companies" />
+            <Stat value={data.stats.postings} label="active postings" />
+            <Stat value={data.stats.ranked} label="ranked" tone="good" />
+            <Stat value={data.stats.excluded} label="hard-excluded" tone="muted" />
+          </div>
+          <div className="feed-toolbar__end">
+            <Badge tone={data.stats.durable ? "good" : "neutral"} title="Where this instance stores data">
+              {data.stats.durable ? "durable" : "in-memory"}
+            </Badge>
+            <Button icon="refresh" onClick={refresh} disabled={pending}>
+              {pending ? "polling…" : "sync re-poll"}
+            </Button>
+          </div>
         </div>
 
         <StaleBanner lastPolledAt={data.stats.lastPolledAt} />
 
-        {notice && (
-          <div className="notice" role="status">
-            {notice}
-          </div>
-        )}
+        <div aria-live="polite">
+          {notice && (
+            <Banner tone="info" className="notice">
+              {notice}
+            </Banner>
+          )}
+        </div>
 
         <ActivityPanel />
 
-        <div className="view-tabs">
-          {VIEW_TABS.map((t) => (
-            <button key={t.id} className="view-tab" data-on={view === t.id} onClick={() => selectView(t.id)}>
-              {t.label}
-            </button>
-          ))}
+        <div className="feed-summary">
+          <Segmented label="Which postings" value={view} options={VIEW_TABS} onChange={selectView} />
+          <p className="feed-count" aria-live="polite">
+            <b>{cards.length}</b> shown
+          </p>
         </div>
 
-        <div className="feed">
-          {cards.length === 0 ? (
-            <div className="feed-empty">{emptyMsg}</div>
-          ) : (
-            cards.map((c, i) => (
+        {cards.length === 0 ? (
+          <EmptyState title={emptyMsg} />
+        ) : (
+          <div className="feed">
+            {cards.map((c, i) => (
               <MatchCard
                 key={c.id}
                 card={c}
@@ -437,10 +441,10 @@ export function FeedView({ initial, viewName = null }: { initial: FeedData; view
                 onArchive={archive}
                 onInvalidate={invalidate}
               />
-            ))
-          )}
-        </div>
-      </main>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -452,18 +456,9 @@ function StaleBanner({ lastPolledAt }: { lastPolledAt: string | null }) {
   if (hours < 24) return null;
   const ago = hours < 48 ? `${Math.round(hours)} hours` : `${Math.round(hours / 24)} days`;
   return (
-    <div className="stale-banner" role="status">
+    <Banner tone="warn" live>
       Last poll was {ago} ago — listings are unverified and may be closed. Keep the worker runner up (it
       re-polls every few hours) or use ↻ sync re-poll.
-    </div>
-  );
-}
-
-function Stat({ n, l, good, muted }: { n: number; l: string; good?: boolean; muted?: boolean }) {
-  return (
-    <div className="stat">
-      <div className={`n ${good ? "good" : muted ? "muted" : ""}`}>{n}</div>
-      <div className="l">{l}</div>
-    </div>
+    </Banner>
   );
 }

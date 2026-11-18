@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PageHeader, btn } from "@/components/ui";
 import { pageAuth } from "@/lib/auth";
 import { getRepo } from "@/lib/repo";
 import { tenantProvider } from "@jobflow/service";
@@ -12,15 +13,15 @@ export default async function OnboardingPage() {
   const config = await (await getRepo()).getConfig(auth.tenantId);
   const llmReady = !isOfflineProvider(tenantProvider(config));
   return (
-    <div className="settings-shell">
-      <header className="settings-head">
-        <h1 className="wordmark">
-          Job<span className="flow">Flow</span> <span className="settings-sub">/ get started</span>
-        </h1>
-        <nav className="rail-nav" style={{ margin: 0 }}>
-          <Link href="/">skip for now</Link>
-        </nav>
-      </header>
+    <div className="page">
+      <PageHeader
+        title="Get started"
+        actions={
+          <Link className={btn("ghost")} href="/">
+            skip for now
+          </Link>
+        }
+      />
       <OnboardingWizard llmReady={llmReady} />
     </div>
   );

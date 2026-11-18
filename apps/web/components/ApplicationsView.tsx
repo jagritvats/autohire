@@ -60,7 +60,7 @@ export function ApplicationsView() {
 
       {due.length > 0 && (
         <section className="card-block danger" style={{ marginTop: 14 }}>
-          <h3>⏰ Follow-ups due <span className="hint">({due.length})</span></h3>
+          <h2>⏰ Follow-ups due <span className="hint">({due.length})</span></h2>
           {due.map((a) => (
             <div className="crm-due" key={a.id}>
               <span>{a.title} · {a.company}</span>
@@ -87,7 +87,7 @@ async function fillLocal(postingId: string) {
 function Group({ title, apps, patch }: { title: string; apps: App[]; patch: (b: Record<string, unknown>) => void }) {
   return (
     <section style={{ marginTop: 16 }}>
-      <h3 className="crm-group">{title} <span className="hint">({apps.length})</span></h3>
+      <h2 className="crm-group">{title} <span className="hint">({apps.length})</span></h2>
       <div className="reg-table">
         <div className="crm-head">
           <span>role</span>
@@ -102,13 +102,14 @@ function Group({ title, apps, patch }: { title: string; apps: App[]; patch: (b: 
               {a.companyId ? <a href={`/company/${a.companyId}`}>{a.company}</a> : a.company}
               <span className="crm-title">{a.title}</span>
             </span>
-            <select value={a.status} onChange={(e) => patch({ id: a.id, status: e.target.value })}>
+            <select aria-label={`Status — ${a.title} at ${a.company}`} value={a.status} onChange={(e) => patch({ id: a.id, status: e.target.value })}>
               {STATUSES.map((s) => (
                 <option key={s}>{s}</option>
               ))}
             </select>
             <input
               className="crm-input"
+              aria-label={`Next action — ${a.title} at ${a.company}`}
               defaultValue={a.nextAction ?? ""}
               placeholder="e.g. send follow-up"
               onBlur={(e) => e.target.value !== (a.nextAction ?? "") && patch({ id: a.id, nextAction: e.target.value })}
@@ -116,6 +117,7 @@ function Group({ title, apps, patch }: { title: string; apps: App[]; patch: (b: 
             <input
               className="crm-date"
               type="date"
+              aria-label={`Due date — ${a.title} at ${a.company}`}
               defaultValue={a.nextActionAt ? a.nextActionAt.slice(0, 10) : ""}
               onChange={(e) => patch({ id: a.id, nextActionAt: e.target.value ? new Date(e.target.value).toISOString() : null })}
             />
