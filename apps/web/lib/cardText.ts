@@ -6,24 +6,13 @@ import type { FeedCard } from "@jobflow/service";
  * "archetype") in user-facing copy.
  */
 
-const GEO: Record<string, string> = {
-  worldwide: "anywhere",
-  us_only: "US only",
-  eu_only: "EU only",
-  us_eu: "US or EU",
-  india_ok: "India OK",
-  apac_ok: "APAC",
-  country_only: "one country only",
-  unknown: "region not stated",
-};
-
+/**
+ * The card's own location line ("Remote · worldwide", "Remote · Canada only", "Hybrid ·
+ * München, Germany", "Onsite · Bengaluru, India + Singapore") — built once in the service
+ * (`describeLocation`) so the web, the CLI and the MCP tools say exactly the same thing.
+ */
 export function locationText(c: Pick<FeedCard, "location">): string {
-  const l = c.location;
-  // remote for residents of one country: say which ("Remote · Canada only")
-  if (l.mode === "remote" && l.remoteGeo === "country_only" && l.country) return `Remote · ${l.country} only`;
-  if (l.mode === "remote") return `Remote · ${GEO[l.remoteGeo] ?? l.remoteGeo.replace(/_/g, " ")}`;
-  const mode = l.mode === "unknown" ? "" : l.mode.charAt(0).toUpperCase() + l.mode.slice(1);
-  return [mode, l.label].filter(Boolean).join(" · ") || "Location not stated";
+  return c.location.label || "Location not stated";
 }
 
 export function ageText(days: number): string {

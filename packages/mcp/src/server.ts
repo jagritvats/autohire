@@ -527,7 +527,7 @@ export function createJobflowMcpServer(ctx: JobflowMcpContext, opts: JobflowMcpO
           const appliedHidden = args.includeApplied ? 0 : visible.filter((c) => c.applied).length;
           // the company spread runs on what is returned, so "≤3 per company in any 20" holds for it
           const shown = visible.filter((c) => args.includeApplied || !c.applied);
-          const cards = (args.diversify === false ? shown : diversifyByCompany(shown, (c) => diversifyKey(c.company))).slice(0, args.limit);
+          const cards = (args.diversify === false ? shown : diversifyByCompany(shown, (c) => diversifyKey(c.company), { scoreOf: (c) => c.score })).slice(0, args.limit);
           const jobs = cards.map((c) => summarize(c, scored));
           const lines: string[] = [];
           if (!data.stats.postings) lines.push("The corpus is empty. Fill it with sync_sources (a minute or two), or search live with search_jobs.");
@@ -1024,7 +1024,7 @@ export function createJobflowMcpServer(ctx: JobflowMcpContext, opts: JobflowMcpO
                 uri: `jobflow://job/${c.id}`,
                 name: `${c.title} · ${c.company}`,
                 mimeType: "application/json",
-                description: `${data.stats.mode === "ranked" ? `score ${c.score} · ` : ""}${c.location.label || c.location.mode}${c.comp ? ` · ${payText({ label: c.comp.label, kind: c.comp.estimate ? "estimate" : "stated", confidence: c.comp.confidence, confidenceScore: c.comp.confidenceScore, basis: c.comp.basis })}` : ""}`,
+                description: `${data.stats.mode === "ranked" ? `score ${c.score} · ` : ""}${c.location.label}${c.comp ? ` · ${payText({ label: c.comp.label, kind: c.comp.estimate ? "estimate" : "stated", confidence: c.comp.confidence, confidenceScore: c.comp.confidenceScore, basis: c.comp.basis })}` : ""}`,
               })),
             };
           });

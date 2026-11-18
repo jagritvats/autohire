@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NAV, activeNav } from "../lib/nav";
+import { describeLocation } from "@jobflow/core";
 import { experienceText, locationText, payText } from "../lib/cardText";
 
 describe("navigation (the IA every page shares)", () => {
@@ -21,9 +22,20 @@ describe("navigation (the IA every page shares)", () => {
 });
 
 describe("card text (plain language, no internals)", () => {
-  it("says where a remote job can be done from", () => {
-    expect(locationText({ location: { mode: "remote", label: "", remoteGeo: "worldwide", country: null, confidence: 1 } })).toBe("Remote · anywhere");
-    expect(locationText({ location: { mode: "onsite", label: "Pune, IN", remoteGeo: "unknown", country: "IN", confidence: 1 } })).toBe("Onsite · Pune, IN");
+  /** a card's location as the service builds it (`describeLocation`) */
+  const card = (loc: Parameters<typeof describeLocation>[0] & { confidence?: number }) => {
+    const d = describeLocation(loc);
+    return { location: { mode: loc.mode, label: d.label, place: d.place, places: d.places, remoteGeo: loc.remoteGeo, country: d.country, countries: d.countries, confidence: loc.confidence ?? 1 } };
+  };
+
+  it("says where a remote job can be done from — never an empty label", () => {
+    expect(locationText(card({ mode: "remote", city: null, country: null, remoteGeo: "worldwide" }))).toBe("Remote · worldwide");
+    expect(locationText(card({ mode: "remote", city: null, country: null, remoteGeo: "apac_ok" }))).toBe("Remote · APAC");
+    expect(locationText(card({ mode: "remote", city: "Canada", country: "Canada", countries: ["CA"], remoteGeo: "country_only" }))).toBe("Remote · Canada only");
+    expect(locationText(card({ mode: "onsite", city: "Pune", country: "India", remoteGeo: "unknown" }))).toBe("Onsite · Pune, India");
+    // the real country, not the legacy region "Europe"; the other places are counted
+    expect(locationText(card({ mode: "hybrid", city: "München", country: "Europe", countries: ["DE"], remoteGeo: "unknown" }))).toBe("Hybrid · München, Germany");
+    expect(locationText(card({ mode: "hybrid", city: "Bengaluru", country: "India", countries: ["IN", "SG"], remoteGeo: "unknown" }))).toBe("Hybrid · Bengaluru, India + Singapore");
   });
 
   it("never blurs an estimate into stated pay", () => {

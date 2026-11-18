@@ -7,7 +7,7 @@ import { MatchCard } from "./MatchCard";
 import { Badge, Banner, Button, ButtonLink, Chip, EmptyState, Panel, Segmented, Skeleton, Stat } from "./ui";
 import { FilterDrawer } from "./ui/FilterDrawer";
 import { roleText } from "@/lib/cardText";
-import { diversifyByCompany, diversifyKey } from "@jobflow/core";
+import { DIVERSIFY_WINDOW, diversifyByCompany, diversifyKey, moreBelow } from "@jobflow/core";
 
 const ARCHETYPES = ["backend", "platform", "infra_devops", "fullstack", "data_ml", "sre", "frontend", "mobile"];
 const MODES = ["remote", "hybrid", "onsite"];
@@ -145,7 +145,7 @@ export function FeedView({
   // then the ORDER: by default no company fills the page (at most 3 in any 20 cards, the
   // rest follow later); scores are untouched and nothing is hidden by it (invariant #4).
   // It runs on what the filters SHOW, so the spread holds for the list on screen.
-  const { cards, hidden } = useMemo(() => {
+  const { cards, hidden, more } = useMemo(() => {
     const shown: FeedCard[] = [];
     const by: Record<string, number> = {};
     for (const c of baseCards) {
@@ -153,8 +153,11 @@ export function FeedView({
       if (why) by[why] = (by[why] ?? 0) + 1;
       else shown.push(c);
     }
-    const ordered = scored && scoreOrder ? [...shown].sort((a, b) => b.score - a.score) : diversifyByCompany(shown, (c) => diversifyKey(c.company));
-    return { cards: ordered, hidden: by };
+    const spread = !(scored && scoreOrder);
+    const ordered = spread ? diversifyByCompany(shown, (c) => diversifyKey(c.company), scored ? { scoreOf: (c) => c.score } : {}) : [...shown].sort((a, b) => b.score - a.score);
+    // "+N more at Acme further down" on a company's last card in the first screenful
+    const more = spread ? moreBelow(ordered, (c) => diversifyKey(c.company), DIVERSIFY_WINDOW) : new Map<number, number>();
+    return { cards: ordered, hidden: by, more };
   }, [baseCards, filters, scored, scoreOrder]);
   const hiddenTotal = Object.values(hidden).reduce((a, b) => a + b, 0);
   const filtersOn = hiddenTotal > 0 || JSON.stringify(filters, (_k, v) => (v instanceof Set ? [...v] : v)) !== JSON.stringify(NO_FILTERS, (_k, v) => (v instanceof Set ? [...v] : v));
@@ -587,7 +590,7 @@ export function FeedView({
         ) : (
           <div className="feed">
             {cards.map((c, i) => (
-              <MatchCard key={c.id} card={c} index={i} scored={scored} selected={kbdActive && i === selected} onSave={save} onHide={hide} />
+              <MatchCard key={c.id} card={c} index={i} scored={scored} selected={kbdActive && i === selected} onSave={save} onHide={hide} moreAtCompany={more.get(i) ?? 0} />
             ))}
           </div>
         )}

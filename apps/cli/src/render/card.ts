@@ -9,17 +9,9 @@ import { ago, type Out } from "../output.js";
 
 export type CardLike = FeedCard & { relevance?: number; inFeed?: boolean };
 
-export function locationLabel(c: FeedCard): string {
-  const l = c.location;
-  if (l.mode === "remote") {
-    const geo =
-      l.remoteGeo === "country_only" && l.country
-        ? ` (${l.country} only)`
-        : l.remoteGeo && l.remoteGeo !== "unknown" ? ` (${l.remoteGeo.replace(/_/g, " ")})` : "";
-    return `Remote${geo}`;
-  }
-  const mode = l.mode === "unknown" ? "" : l.mode.charAt(0).toUpperCase() + l.mode.slice(1);
-  return [mode, l.label].filter(Boolean).join(" · ") || "Location n/a";
+/** the card's own plain-language location line — one wording on every surface */
+export function locationLabel(c: Pick<FeedCard, "location">): string {
+  return c.location.label || "Location not stated";
 }
 
 export function compLabel(c: FeedCard): string | null {
@@ -31,13 +23,20 @@ export function compLabel(c: FeedCard): string | null {
   return `${c.comp.label} (stated)`;
 }
 
+/** "3–5 yrs", "4 yrs", "5+ yrs", "up to 2 yrs" */
+export function experienceLabel(e: FeedCard["experience"]): string | null {
+  if (e.min == null && e.max == null) return null;
+  const range = e.min != null && e.max != null ? (e.min === e.max ? `${e.min}` : `${e.min}–${e.max}`) : e.min != null ? `${e.min}+` : `up to ${e.max}`;
+  return `${range} yrs`;
+}
+
 export function scoreBadge(out: Out, score: number, scored: boolean): string {
   if (!scored) return out.dim(" -- ");
   const s = String(score).padStart(3, " ");
   return score >= 80 ? out.green(out.bold(s)) : score >= 60 ? out.yellow(s) : out.dim(s);
 }
 
-export function renderCard(out: Out, c: CardLike, idx: number, opts: { scored: boolean; jdNote?: boolean } = { scored: true }): string {
+export function renderCard(out: Out, c: CardLike, idx: number, opts: { scored: boolean; jdNote?: boolean; moreAtCompany?: number } = { scored: true }): string {
   const lines: string[] = [];
   const num = out.dim(`${String(idx).padStart(2, " ")}.`);
   lines.push(`${num} ${scoreBadge(out, c.score, opts.scored)}  ${out.bold(c.title)} ${out.dim("·")} ${c.company} ${out.dim("·")} ${locationLabel(c)}`);
@@ -46,8 +45,9 @@ export function renderCard(out: Out, c: CardLike, idx: number, opts: { scored: b
     compLabel(c),
     ago(c.ageDays),
     c.source + (c.atsDirect ? "" : " (aggregator)"),
+    c.agency ? out.yellow("staffing agency") : null,
     c.level ? c.level : null,
-    c.experience.min != null ? `${c.experience.min}${c.experience.max != null ? `–${c.experience.max}` : "+"} yrs${c.experience.fit && c.experience.fit !== "ok" ? ` (${c.experience.fit})` : ""}` : null,
+    experienceLabel(c.experience) ? `asks ${experienceLabel(c.experience)}${c.experience.fit && c.experience.fit !== "ok" ? ` (${c.experience.fit})` : ""}` : null,
   ].filter(Boolean);
   lines.push(indent + out.dim(meta.join(" · ")));
   if (c.stackNote) lines.push(`${indent}${out.cyan("fit")}   ${c.stackNote}`);
@@ -57,6 +57,7 @@ export function renderCard(out: Out, c: CardLike, idx: number, opts: { scored: b
   const tags = [(c.presets ?? []).length ? out.cyan((c.presets ?? []).map((p) => `#${p}`).join(" ")) : null, c.applied ? out.green("applied") : null, c.bookmarked ? "bookmarked" : null, c.inFeed === false ? out.dim("not in your feed yet") : null].filter(Boolean);
   if (tags.length) lines.push(indent + tags.join(" · "));
   if (c.applyUrl) lines.push(indent + out.dim(c.applyUrl));
+  if (opts.moreAtCompany) lines.push(indent + out.dim(`+${opts.moreAtCompany} more at ${c.company} further down`));
   return lines.join("\n");
 }
 
@@ -69,7 +70,7 @@ export function cardRows(out: Out, cards: CardLike[], scored: boolean): string[]
     locationLabel(c),
     compLabel(c) ?? "",
     ago(c.ageDays),
-    (c.presets ?? []).map((p) => `#${p}`).join(" "),
+    [c.agency ? "agency" : null, ...(c.presets ?? []).map((p) => `#${p}`)].filter(Boolean).join(" "),
   ]);
 }
 
@@ -77,13 +78,13 @@ export const CARD_HEADERS = ["#", "score", "title", "company", "location", "comp
 export const CARD_WIDTHS = [3, 5, 42, 22, 24, 30, 9, 24];
 
 /** cards or a table, numbered so `jobflow show 3` / `apply 3` can refer to a row */
-export function printCards(out: Out, cards: CardLike[], opts: { scored: boolean; format?: string }): void {
+export function printCards(out: Out, cards: CardLike[], opts: { scored: boolean; format?: string; moreBelow?: Map<number, number> }): void {
   if (opts.format === "table") {
     out.table(CARD_HEADERS, cardRows(out, cards, opts.scored), { maxWidth: CARD_WIDTHS });
     return;
   }
   cards.forEach((c, i) => {
-    out.line(renderCard(out, c, i + 1, { scored: opts.scored }));
+    out.line(renderCard(out, c, i + 1, { scored: opts.scored, moreAtCompany: opts.moreBelow?.get(i) }));
     out.line();
   });
 }
