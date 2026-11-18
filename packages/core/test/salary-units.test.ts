@@ -222,7 +222,7 @@ describe("formatPay", () => {
     ["annual INR, shown to a USD reader", { min: 3_000_000, max: 4_500_000, currency: "INR", period: "year" }, { currency: "USD" }, "₹30L–45L / yr (≈ $32k–48k)"],
     ["monthly EUR, same currency, yearly view", { min: 66_000, max: 78_000, currency: "EUR", period: "month" }, { currency: "EUR" }, "€5,500–6,500 / mo (≈ €66k–78k / yr)"],
     ["hourly USD", { min: 104_000, max: 145_600, currency: "USD", period: "hour" }, { currency: "USD" }, "$50–70 / hr (≈ $104k–146k / yr, annualised from hourly)"],
-    ["annual INR, monthly view", { min: 3_000_000, max: 4_500_000, currency: "INR", period: "year" }, { currency: "INR", period: "month" }, "₹30L–45L / yr (≈ ₹2.5L–3.75L / mo)"],
+    ["annual INR, monthly view", { min: 3_000_000, max: 4_500_000, currency: "INR", period: "year" }, { currency: "INR", period: "month" }, "₹30L–45L / yr (≈ ₹2.5L–3.8L / mo)"],
     ["annual USD, no conversion asked", { min: 150_000, max: 200_000, currency: "USD" }, {}, "$150k–200k / yr"],
     ["same currency + period: nothing to add", { min: 150_000, max: 200_000, currency: "USD", period: "year" }, { currency: "USD" }, "$150k–200k / yr"],
     ["a cap", { min: null, max: 2_400_000, currency: "INR", period: "year" }, {}, "up to ₹24L / yr"],

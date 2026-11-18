@@ -239,8 +239,9 @@ function shape(lo: number | null, hi: number | null, cur: string, period: Salary
 /** one amount without its currency mark */
 function amount(n: number, cur: string, period: SalaryPeriod, approx: boolean): string {
   if (cur === "INR") {
-    if (n >= 10_000_000) return `${trim(n / 10_000_000, 2)}Cr`;
-    if (n >= 100_000) return `${trim(n / 100_000, 2)}L`;
+    // a converted figure is approximate: whole lakhs (one decimal under 10L) — "≈ ₹72L", not "₹71.74L"
+    if (n >= 10_000_000) return `${trim(n / 10_000_000, approx ? 1 : 2)}Cr`;
+    if (n >= 100_000) return `${trim(n / 100_000, approx ? (n < 1_000_000 ? 1 : 0) : 2)}L`;
     return group(roundTo(n, approx ? 1000 : 1), "en-IN");
   }
   if (n >= 1_000_000) return `${trim(n / 1_000_000, 2)}M`;
