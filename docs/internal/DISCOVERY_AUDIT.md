@@ -254,7 +254,8 @@ Remaining ranking observations, not fixed here:
 
 ## Follow-ups (2026-11-18, second pass)
 
-The db, sync, feed and salary items above, done; the single-country remote geo, designed.
+The db, sync, feed and salary items above, done; the single-country remote geo, designed and
+then built (with multi-country locations, below).
 
 ### db: dedup key refresh and clearing canonical pointers (done)
 
@@ -346,7 +347,7 @@ copy of the IN corpus reproduce the IN row (its all-evidence table reads 38% / 2
 and both commands now exit when done (the one-shot worker used to hold the store open). Pinned by `packages/core/test/salary-estimate.test.ts` ("per market ×
 role family calibration").
 
-### Single-country remote (designed, not built)
+### Single-country remote (designed; built — see the next section)
 
 "Remote - Canada" / "Remote - Brazil" keep `remoteGeo: unknown` plus the country, and the
 scorer down-weights a remote role restricted to a foreign country softly, with a flag. A
@@ -366,6 +367,78 @@ proper representation is a `country_only` `RemoteGeo` ("remote for residents of
   `remote` facet) need a "this country only" entry; `remoteGeoOk` stays region-level, since
   markets already say which countries the user can work from.
 
-Not done now: the parser lives in `core/normalize`, which another change is reworking
-(multi-country locations), and the soft down-weight already keeps these roles honest. It is
-a small change once that lands.
+Built as designed, with one choice: the parser keeps confidence 0.8 for these (a stated
+country, but "Remote - Canada" can also mean a Canada-based team), so the hard rule is wired
+but does not fire on parsed rows today; they stay a soft down-weight.
+
+## Follow-ups (2026-11-18, third pass): places, local spellings, agency flag, country-only remote
+
+From `SOURCE_HEALTH.md` "Notes for the core / normalization owners". Measured on one live
+scratch corpus (sample persona, presets `india`, `us`, `eu-uk`; the default `jobflow sync`
+slice: 25 boards + 12 feeds, 5,435 fetched, 1,959 active), polled into an in-memory store so
+every posting kept its location text, then old parser (the base commit's `location.ts`) vs
+new on the same rows. Fixtures: `packages/core/test/location-places.test.ts`,
+`packages/pipeline/test/location-places.test.ts`, `packages/core/test/agency.test.ts`.
+
+**Multi-place locations.** `ParsedLocation.countries` (ISO-2, primary first; optional, the
+primary `country` is unchanged) holds every country a location string names: places split on
+`;` `|` ` / ` ` · ` and lower-case " or " / " and " (Greenhouse offices, Workday's joined
+locations), never on commas, which qualify a place ("Austin, TX, United States"; "Dublin, OH"
+stays US). A segment that names countries keeps all of them ("Remote (US/Canada)", "USA,
+Canada, Australia"). `locationInCountry` is `parsedCountryMatches` over every place: `true`
+when any office is in the country, `false` only when every office is definitely elsewhere,
+`null` for a European office vs a European country (the region rule "Europe" always had). It
+backs `isWorkableIn` (preset tags, discovery plausibility, poll ranking), the search view's
+place filter, the scorer's home-onsite boost and visa discount, and the impossible-location
+rule, which therefore can only get narrower.
+
+| | count |
+|---|---|
+| postings naming 2+ countries | 81 (53 across 2+ markets, IN / US / CA / Europe…) |
+| … by source | Himalayas 55, HN 12, Workday 5, Remotive 5, Wellfound 3 |
+| newly workable for a preset market (was not) | us 2, eu-uk 5, canada 2 (none lost) |
+| location hard exclusions, old → new, home IN / GB / US / DE | 217→217, 136→136, 79→79, 136→136 (none added, none removed on this slice) |
+
+Most multi-country rows are remote lists (Himalayas' restrictions), whose geo was already
+right; the onsite gains are the Greenhouse/Workday offices ("Atlanta; Bengaluru, India",
+"Stafford; Glasgow; Oslo", HN's "Berlin, Freiburg, NYC").
+
+**Place names.** European places by country with local spellings (München, Köln,
+Deutschland, Österreich, Wien, Zürich, Genève, Bruxelles, Warszawa, Praha, Lisboa,
+København, Göteborg…), matched on an ASCII-folded string (`foldPlace`: NFD plus ø æ ß ł đ ı),
+and a Unicode-aware city pattern ("München", not "M"). City words shared with common US
+places (Cambridge, Birmingham, Hanover, Florence, York…) are left out; an explicit country
+name or a US state code wins. `countryCodeFromText` uses the same resolver. On the corpus
+168 postings now carry a specific European country (all 33 of `EUROPE_CODES` appear); 2 of
+the 97 rows the old parser left without a country gained one ("Karlsruhe", "Den Haag,
+Zuid-Holland, Nederland"); the rest are bare "Remote" / "Worldwide" or small towns
+(Villeurbanne, Massy, Magdeburg). The `eu-uk` preset polls GB/DE/NL (country-filtered boards
+are fetched once per market, so more markets multiply requests), but its tag already takes
+any European office through the region rule, so a Copenhagen or München role counts for it.
+
+**Agency flag.** `normalizePosting` sets `postedByAgency` from `looksLikeAgency` (name + JD)
+for every source that doesn't flag it itself (Naukri's own answer, a "no" included, wins).
+The scorer already applied the same rule at score time, so ranking is unchanged: a trust
+discount and a flag, never a filter. 65 of 1,959 were flagged; a spot check of every one found
+7 false positives, all in the JD rule: services employers on "value / work / reports for our
+clients" and GE Vernova's "erection tools, manpower, working hours". The rule now needs the
+recruiter phrasing ("for our client, a…", "who…", "based in…") and an agency word after
+"manpower": 58 flagged, the rest intermediaries by name (HiringBlaze, Staffision, Jobskey
+Consultancy, HuntingCube Recruitment…), JD ("ClanX is a recruitment partner", "Our client
+is…", C2H / corp-to-corp) or Cutshort's own "hiring for a client" field (41 of the 58).
+
+**Country-only remote.** `country_only` as designed above. 3 rows on this corpus ("Remote -
+Japan", "REMOTE (Canada)", a Lagos/Cairo/Lahore list), all at confidence 0.8, so 0 hard
+exclusions; at ≥ 0.85 the rule would exclude all 3 for each of the four test homes.
+
+**Re-normalizing stored rows.** Location is stored derived and the location text was not
+stored, so stored rows can't be re-parsed. `Posting.locationRaw` is now carried from ingest and
+`renormalizePostings` (pipeline) re-parses rows that have it and re-reads the agency flag,
+idempotently. Persisting `loc_countries` / `location_raw` and the store method it calls
+(`updatePostingNormalized`) are a db change (migration 0019, `postgres.ts`, `memory.ts`,
+contract test) plus a worker `renormalize` command, kept as a separate patch for the db
+owner; until it lands, PGlite/Postgres rows read back without `countries`, so their scoring
+uses the primary country as before (in-memory stores keep the field).
+
+Left: comma-separated city lists in one segment ("London, Berlin") still give one country;
+`dedup`'s location compatibility and the salary market still read the primary country only.
