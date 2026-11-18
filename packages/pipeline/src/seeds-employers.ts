@@ -109,7 +109,6 @@ export const INDIA_EMPLOYER_BOARDS: SeedCompany[] = [
 
   // ── Eightfold, older /api/apply/v2 (PCSX answers 403; the detector resolves "…/v2") ──
   { name: "NetApp", careersUrl: "https://netapp.eightfold.ai/careers?domain=netapp.com", tags: ["global", "india", "infra"] }, // 34 / 12
-  { name: "Bayer", careersUrl: "https://talent.bayer.com/careers?domain=bayer.com", tags: ["global", "india", "health"] }, // 10 / 4
   { name: "HSBC", careersUrl: "https://portal.careers.hsbc.com/careers?domain=hsbc.com", tags: ["global", "india", "fintech", "gcc"] }, // 4 / 0 by title (159 India roles, 15 in Technology; ICs are titled "Consultant Specialist")
 
   // ── iCIMS Jibe (the careers site's own /api/jobs) ──

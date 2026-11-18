@@ -23,6 +23,18 @@ export const EU_UK_PRESET: DiscoveryPreset = {
     },
     { id: "eu-uk.arbeitnow", source: "arbeitnow", targets: [{ query: "engineer", limit: 60 }, { query: "developer", limit: 60 }] },
     { id: "eu-uk.remotive", source: "remotive", targets: [{ query: "software engineer", limit: 60 }] },
+    // Jobicy: remote roles by Jobicy geo, last 7 days. Its terms allow one automated pass an
+    // hour, which the adapter enforces per target; `slow` keeps request-bound refreshes off it.
+    {
+      id: "eu-uk.jobicy",
+      source: "jobicy",
+      slow: true,
+      targets: [
+        { limit: 100, params: { geo: "uk", industry: "engineering" } },
+        { limit: 100, params: { geo: "germany", industry: "engineering" } },
+        { limit: 100, params: { geo: "netherlands", industry: "engineering" } },
+      ],
+    },
     {
       id: "eu-uk.hn_whoishiring",
       source: "hn_whoishiring",

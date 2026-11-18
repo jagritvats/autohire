@@ -22,6 +22,9 @@ export const CANADA_PRESET: DiscoveryPreset = {
       ],
     },
     { id: "canada.remotive", source: "remotive", targets: [{ query: "software engineer", limit: 60 }] },
+    // Jobicy: remote roles by Jobicy geo, last 7 days. Its terms allow one automated pass an
+    // hour, which the adapter enforces per target; `slow` keeps request-bound refreshes off it.
+    { id: "canada.jobicy", source: "jobicy", slow: true, targets: [{ limit: 100, params: { geo: "canada", industry: "engineering" } }] },
     { id: "canada.hn_whoishiring", source: "hn_whoishiring", targets: [{ query: "canada", limit: 60 }, { query: "toronto", limit: 60 }, { query: "vancouver", limit: 40 }] },
     {
       id: "canada.adzuna",
