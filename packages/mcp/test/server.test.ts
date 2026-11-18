@@ -6,7 +6,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { InMemoryRepository, type Repository } from "@jobflow/db";
 import { normCompany, normalizePosting, type Posting, type RawPosting } from "@jobflow/core";
 import { HONEST_VOICE } from "@jobflow/llm";
-import { sampleEvidence, toNewPosting, type PollStats } from "@jobflow/pipeline";
+import { sampleEvidence, toNewPosting, type PollEvent, type PollStats } from "@jobflow/pipeline";
 import type { SourceAdapter } from "@jobflow/adapters";
 import { defaultConfig, loadSampleProfile, rankTenant } from "@jobflow/service";
 import { createJobflowMcpServer, createLocalStore, sharedRepo, type JobflowMcpOptions, type RepoAccess } from "../src/index.js";
@@ -438,7 +438,29 @@ describe("sync_sources", () => {
     const r = await call(client, "sync_sources", {});
     expect(r.isError).toBeFalsy();
     expect(polled).toBe(1);
-    expect(r.structuredContent).toMatchObject({ boardsPolled: 3, fetched: 12, gone: 1, ranked: true, activePostings: 4 });
+    expect(r.structuredContent).toMatchObject({ boardsPolled: 3, fetched: 12, gone: 1, ranked: true, activePostings: 4, status: "done", matchThreshold: 60 });
+  });
+
+  it("maps the structured progress to MCP progress notifications (monotonic, with phase and counts)", async () => {
+    const sync = async (_repo: Repository, o: { full: boolean; log: (l: string) => void; onProgress?: (e: PollEvent) => void }): Promise<PollStats> => {
+      const emit = o.onProgress!;
+      emit({ type: "plan", boards: 2, deferred: 0, notDue: 0, budgetMs: null, concurrency: 1 });
+      emit({ type: "phase", phase: "boards", state: "start" });
+      emit({ type: "board", state: "done", id: "a", name: "Initech", fetched: 4, created: 4, updated: 0, staled: 0, ms: 5 });
+      await new Promise((r) => setTimeout(r, 550)); // past the notification throttle
+      emit({ type: "board", state: "done", id: "b", name: "Globex", fetched: 2, created: 1, updated: 1, staled: 0, ms: 5 });
+      emit({ type: "phase", phase: "boards", state: "done" });
+      return { companiesPolled: 2, fetched: 6, staled: 0, feeds: {}, resolved: [], expired: 0, errors: [] };
+    };
+    const { client } = await fixture({ sync });
+    const notes: Array<{ progress: number; total?: number; message?: string }> = [];
+    const r = (await client.callTool({ name: "sync_sources", arguments: {} }, undefined, { onprogress: (p) => notes.push(p) })) as Result;
+    expect(r.isError).toBeFalsy();
+    expect(r.structuredContent).toMatchObject({ status: "done", newPostings: 5, boardsPolled: 2 });
+    expect(notes.length).toBeGreaterThan(1);
+    expect(notes.every((n) => n.total === 100)).toBe(true);
+    for (let i = 1; i < notes.length; i++) expect(notes[i]!.progress).toBeGreaterThanOrEqual(notes[i - 1]!.progress);
+    expect(notes.some((n) => /Check job boards · boards \d\/2/.test(n.message ?? ""))).toBe(true);
   });
 });
 

@@ -1,4 +1,4 @@
-import { describeLocation, formatSalary, postingAgeDays, type Match, type Posting } from "@jobflow/core";
+import { describeLocation, describePay, postingAgeDays, type Match, type Posting } from "@jobflow/core";
 
 /** Render the §11.6 match card — the actual product surface. */
 export function renderMatchCard(m: Match & { posting: Posting }, idx: number): string {
@@ -36,28 +36,16 @@ function freshnessLine(p: Posting): string {
 }
 
 function compLine(p: Posting): string | null {
-  const s = p.salary;
-  if (s.source !== "none" && (s.min != null || s.max != null)) {
-    const range =
-      s.min != null && s.max != null
-        ? `${fmt(s.min, s.currency)}–${fmt(s.max, s.currency)}`
-        : s.max != null
-          ? `up to ${fmt(s.max, s.currency)}`
-          : `${fmt(s.min!, s.currency)}+`;
-    return `${range} (stated · ${s.confidence})`;
-  }
-  const e = p.salaryEstimate;
-  if (!e) return null;
-  return `~${fmt(e.min, e.currency)}–${fmt(e.max, e.currency)} (estimate · ${Math.round(e.confidenceScore * 100)}% · ${e.basis})`;
+  // core's one pay formatter (period, currency, estimate labelling)
+  const pay = describePay(p);
+  if (!pay) return null;
+  if (!pay.estimate) return `${pay.label} (stated · ${pay.confidence})${pay.warning ? ` — ${pay.warning}` : ""}`;
+  return `${pay.label} (${Math.round((pay.confidenceScore ?? 0) * 100)}% · ${pay.basis})`;
 }
 
 function companyLine(p: Posting): string | null {
   // enrichment (ratings) is gated on match score & runs later; show nothing if absent
   return null;
-}
-
-function fmt(n: number, cur: string): string {
-  return formatSalary(n, cur);
 }
 
 function scoreBadge(s: number): string {

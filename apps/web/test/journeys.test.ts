@@ -39,10 +39,10 @@ describe("card text (plain language, no internals)", () => {
   });
 
   it("never blurs an estimate into stated pay", () => {
-    const est = payText({ comp: { label: "$150k–$190k", confidence: "low", source: "levels", estimate: true, confidenceScore: 0.45, basis: "12 similar" } });
-    expect(est?.text).toBe("~$150k–$190k (estimate · 45% confident)");
-    const stated = payText({ comp: { label: "$150k–$190k", confidence: "high", source: "jd", estimate: false, confidenceScore: null, basis: null } });
-    expect(stated?.text).toBe("$150k–$190k");
+    const est = payText({ comp: { label: "est. $150k–190k / yr", confidence: "low", source: "levels", estimate: true, confidenceScore: 0.45, basis: "12 similar" } });
+    expect(est?.text).toBe("est. $150k–190k / yr (45% confident)");
+    const stated = payText({ comp: { label: "$150k–190k / yr", confidence: "high", source: "jd", estimate: false, confidenceScore: null, basis: null } });
+    expect(stated?.text).toBe("$150k–190k / yr");
     expect(payText({ comp: null })).toBeNull();
   });
 

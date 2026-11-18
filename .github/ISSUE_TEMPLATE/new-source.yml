@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Want to write it yourself? See [Adding a job source](https://github.com/jagritvats/autohire/blob/main/docs/contributing/adding-a-job-source.md).
+        Want to write it yourself? See [Adding a job source](https://github.com/jagritvats/jobflow/blob/main/docs/contributing/adding-a-job-source.md).
         If you only want to follow one company or feed, you may not need a new source: `jobflow discovery add-company`, `add-rss` and `add-json` cover many cases.
   - type: input
     id: url

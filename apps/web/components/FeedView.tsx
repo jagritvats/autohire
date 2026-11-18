@@ -1,15 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FeedCard, FeedData } from "@/lib/feed";
 import type { SetupProgress } from "@jobflow/service";
 import { MatchCard } from "./MatchCard";
 import { Badge, Banner, Button, ButtonLink, Chip, EmptyState, Panel, Segmented, Skeleton, Stat } from "./ui";
 import { FilterDrawer } from "./ui/FilterDrawer";
 import { roleText } from "@/lib/cardText";
+import { todaySummary, type TodaySummary } from "@/lib/today";
 import { DIVERSIFY_WINDOW, diversifyByCompany, diversifyKey, moreBelow } from "@jobflow/core";
+import { onSyncFinished, startSync, useSyncStatus } from "@/lib/syncClient";
+import { runHeadline } from "./SyncDetails";
 
-const ARCHETYPES = ["backend", "platform", "infra_devops", "fullstack", "data_ml", "sre", "frontend", "mobile"];
+const ARCHETYPES = ["backend", "platform", "infra_devops", "fullstack", "data_ml", "data_analytics", "sre", "frontend", "mobile"];
 const MODES = ["remote", "hybrid", "onsite"];
 /** remote-region chips; only the regions present in YOUR jobs are offered (region-neutral). */
 const GEOS: Array<{ id: string; label: string }> = [
@@ -105,7 +108,12 @@ export function FeedView({
       return !on;
     });
   const [notice, setNotice] = useState<string | null>(null);
-  const [syncing, setSyncing] = useState(initial.stats.syncing);
+  // the shared sync watcher (the header indicator's) — a sync started anywhere shows here
+  const { status: syncStatus } = useSyncStatus();
+  const liveRun = syncStatus?.current ?? null;
+  const syncing = syncStatus ? liveRun != null : initial.stats.syncing;
+  /** a finished sync's news, offered instead of swapping the list under the reader */
+  const [fresh, setFresh] = useState<{ matches: number; jobs: number } | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [selected, setSelected] = useState(0);
   // the selection only shows (and o/t/a/s/x only act) once the keyboard is in use — a stray
@@ -190,33 +198,40 @@ export function FeedView({
     return { feed: f as FeedData | null, progress: p as SetupProgress | null };
   }, []);
 
-  useEffect(() => {
-    if (!syncing) return;
-    let stop = false;
-    const tick = async () => {
-      const p = (await fetch("/api/progress", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null)) as SetupProgress | null;
-      if (stop || !p) return;
-      setProgress(p);
-      if (!p.corpus.syncing) {
-        setSyncing(false);
-        const { feed } = await reloadFeed();
-        if (feed && feed.stats.postings === 0) setSyncError("No jobs came back. The job boards may be unreachable from here (no network, or a proxy blocking them).");
-        else flash(`Sync finished — ${feed?.stats.postings ?? p.corpus.postings} jobs in your list.`);
-      }
-    };
-    const t = setInterval(tick, 3000);
-    return () => {
-      stop = true;
-      clearInterval(t);
-    };
-  }, [syncing, reloadFeed]);
+  // when a sync ends: an empty list fills in by itself (the first sync); a list the person is
+  // reading stays put, and the page offers what's new instead ("N new matches — show")
+  const shownCount = useRef(0);
+  shownCount.current = data.cards.length;
+  useEffect(
+    () =>
+      onSyncFinished(async (run, status) => {
+        if (shownCount.current === 0) {
+          const { feed } = await reloadFeed();
+          if (feed && feed.stats.postings === 0) setSyncError("No jobs came back. The job boards may be unreachable from here (no network, or a proxy blocking them).");
+          else flash(`Sync finished — ${feed?.stats.postings ?? 0} jobs in your list.`);
+          return;
+        }
+        const matches = status.you?.ranked ? status.you.newMatches : 0;
+        if (matches > 0 || run.postings.new > 0) setFresh({ matches, jobs: run.postings.new });
+        else flash("Sync finished — nothing new since your last look.");
+        void fetch("/api/progress", { cache: "no-store" })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((p) => p && setProgress(p))
+          .catch(() => {});
+      }),
+    [reloadFeed],
+  );
+
+  async function showFresh() {
+    setFresh(null);
+    await reloadFeed();
+  }
 
   async function syncNow() {
     setSyncError(null);
-    const r = await fetch("/api/refresh?background=1", { method: "POST" });
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok) return flash(d.error ?? "Couldn't start a sync.");
-    setSyncing(true);
+    setFresh(null);
+    const err = await startSync();
+    if (err) flash(err);
   }
 
   // ── card actions ──
@@ -329,6 +344,9 @@ export function FeedView({
     { tab: { kind: "hidden" }, label: "Hidden" },
   ];
   const corpusEmpty = data.stats.postings === 0;
+  // the "today" summary over your whole list (not the current filters): Editorial's lede, Spark's chips
+  const today = useMemo(() => todaySummary(data.cards, scored), [data.cards, scored]);
+  const dueFollowUps = progress.applications.dueFollowUps;
   const lastSync = progress.corpus.lastSyncAt;
   // how many filters are narrowing the list — shown on the mobile "Filters" button
   const activeFilters =
@@ -497,13 +515,23 @@ export function FeedView({
       </FilterDrawer>
 
       <div className="feed-main">
-        <div className="feed-toolbar">
+        {/* one header, three presentations (lib/style.ts): Editorial's dated masthead + lede,
+            Spark's "today" hero with count chips, Classic's title + plain counts */}
+        <div className="feed-toolbar feed-hero">
           <div className="feed-toolbar__start">
             <Dateline />
+            <p className="feed-hero__eyebrow">Today</p>
             <h1 className="page-title">Jobs</h1>
-            <TodayLede cards={data.cards} scored={scored} />
-            <div className="stats" aria-label="Your jobs">
-              <Stat value={cards.length} label="shown" tone="good" />
+            <TodayLede today={today} scored={scored} />
+            <div className="stats feed-hero__stats" aria-label="Your jobs">
+              <Stat className="stat--shown" value={cards.length} label="shown" tone="good" />
+              {today.newThisWeek > 0 && <Stat className="feed-hero__extra" value={today.newThisWeek} label="new this week" tone="accent" />}
+              {today.great > 0 && <Stat className="feed-hero__extra" value={today.great} label={today.great === 1 ? "great match" : "great matches"} tone="good" />}
+              {dueFollowUps > 0 && (
+                <a className="stat-link feed-hero__extra" href="/applications" title="Applications with a follow-up date that has come">
+                  <Stat value={dueFollowUps} label={dueFollowUps === 1 ? "follow-up due" : "follow-ups due"} tone="warn" />
+                </a>
+              )}
               <Stat value={data.stats.postings} label="jobs in your list" />
               {data.stats.excluded > 0 && <Stat value={data.stats.excluded} label="left out (pay / location)" tone="muted" />}
             </div>
@@ -535,9 +563,24 @@ export function FeedView({
             against your background, with an honest note on fit and gaps.
           </Banner>
         )}
-        {syncing && (
+        {syncing && corpusEmpty && (
           <Banner tone="info" live title="Fetching jobs…">
-            Polling the boards in your presets. The first sync takes a minute or two — this page updates by itself.
+            {liveRun ? `${runHeadline(liveRun)}. ` : ""}The first sync takes a minute or two — this page updates by itself.
+          </Banner>
+        )}
+        {fresh && !syncing && (
+          <Banner
+            tone="good"
+            live
+            title={fresh.matches ? `${fresh.matches} new match${fresh.matches === 1 ? "" : "es"}` : `${fresh.jobs} new job${fresh.jobs === 1 ? "" : "s"}`}
+            action={
+              <Button size="sm" variant="primary" onClick={showFresh}>
+                show
+              </Button>
+            }
+          >
+            {fresh.matches ? "The last sync found new jobs that fit you. " : "The last sync added jobs, none above your match line. "}
+            Your list stays put until you choose to refresh it.
           </Banner>
         )}
         {syncError && !syncing && (
@@ -601,6 +644,13 @@ export function FeedView({
             </Button>
           </p>
         )}
+        {(data.stats.siblingsFolded ?? 0) > 0 && (
+          <p className="ux-hidden-report" role="status">
+            <span>
+              <b>{data.stats.siblingsFolded}</b> more posted for other countries — shown once, under “Also posted for” on their role. Scores are unchanged.
+            </span>
+          </p>
+        )}
         {cards.length > 0 && (
           <p className="ux-kbd">
             {showKeys ? (
@@ -651,12 +701,10 @@ function Dateline() {
  * source's own date) and the strongest match. Plain counts only — unscored lists never claim a
  * "best match".
  */
-function TodayLede({ cards, scored }: { cards: FeedCard[]; scored: boolean }) {
-  const live = cards.filter((c) => !c.archived && !c.invalidated);
-  if (live.length === 0) return null;
-  const fresh = live.filter((c) => c.ageDays <= 1).length;
+function TodayLede({ today, scored }: { today: TodaySummary & { top: FeedCard | null }; scored: boolean }) {
+  const { live, fresh, top } = today;
+  if (live === 0) return null;
   const noun = scored ? (fresh === 1 ? "match" : "matches") : fresh === 1 ? "job" : "jobs";
-  const top = scored ? live.reduce((a, b) => (b.score > a.score ? b : a)) : null;
   return (
     <p className="feed-lede">
       {fresh > 0 ? (
@@ -671,7 +719,7 @@ function TodayLede({ cards, scored }: { cards: FeedCard[]; scored: boolean }) {
       )}{" "}
       {top && (
         <>
-          The strongest of {live.length}:{" "}
+          The strongest of {live}:{" "}
           <a href={`/jobs/${top.id}`}>
             {top.title}
           </a>{" "}

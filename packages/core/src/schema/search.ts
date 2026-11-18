@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { LevelBand, RemoteGeo, SourceKind } from "./enums.js";
+import { LevelBand, RemoteGeo, SalaryPeriod, SourceKind } from "./enums.js";
 
 const uuid = z.string().uuid();
 const ts = z.union([z.string().datetime({ offset: true }), z.date()]);
@@ -31,7 +31,14 @@ export const SearchQuery = z.object({
   remote: z.enum(["any", "only", "exclude"]).default("any"),
   remoteGeo: z.array(RemoteGeo).default([]),
   seniority: z.array(LevelBand).default([]),
-  minSalary: z.object({ amount: z.number(), currency: z.string() }).nullable().default(null),
+  /**
+   * `amount` is ANNUAL in `currency` ("5000 EUR/mo" → 60000 EUR); `period` is how it was
+   * written, kept to echo it back. Compared across currencies via FX (core/salary/compare).
+   */
+  minSalary: z
+    .object({ amount: z.number(), currency: z.string(), period: SalaryPeriod.optional() })
+    .nullable()
+    .default(null),
   postedWithinDays: z.number().int().positive().nullable().default(null),
   /** [] = every enabled, search-capable source. */
   sources: z.array(SourceKind).default([]),

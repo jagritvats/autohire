@@ -3,11 +3,13 @@
 // fully fictional corpus and the fictional "Alex Example" candidate (JOBFLOW_DEMO_DATA=1) —
 // so screenshots never depend on live APIs and never show a real person or listing.
 //
-//   pnpm --filter @jobflow/web build && node scripts/screenshots.mjs [--only jobs,settings]
+//   pnpm --filter @jobflow/web build && node scripts/screenshots.mjs [--only jobs,settings] [--style editorial]
 //
-// Writes docs/screenshots/*.png: every page in the dark theme, the key pages again in the
-// light theme (*-light.png), 375px-wide mobile views (*-mobile*.png), and the guide captures
-// (jobs-checklist, jobs-keyboard, jobs-saved-search, onboarding-review).
+// Writes docs/screenshots/*.png: every page in the light theme (Editorial's default), the key pages again in the
+// dark theme (*-dark.png), 375px-wide mobile views (*-mobile*.png), and the guide captures
+// (jobs-checklist, jobs-keyboard, jobs-saved-search, onboarding-review), all in one visual
+// style — `--style` (default: Editorial, the app's default). Plus the style set
+// (styles-<style>-light/dark.png: the Jobs page in each style; `--only styles` for just those).
 // Needs Playwright + Chromium (`npx playwright install chromium`).
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
@@ -22,6 +24,14 @@ const PORT = Number(process.env.SCREENSHOT_PORT ?? 3111);
 const BASE = `http://localhost:${PORT}`;
 const onlyArg = process.argv.indexOf("--only");
 const ONLY = onlyArg > 0 ? new Set(process.argv[onlyArg + 1]?.split(",")) : null;
+// the visual style (apps/web/lib/style.ts); the docs set is taken in one style
+const STYLES = ["editorial", "classic", "spark"];
+const styleArg = process.argv.indexOf("--style");
+const STYLE = styleArg > 0 ? process.argv[styleArg + 1] : "editorial";
+if (!STYLES.includes(STYLE)) {
+  console.error(`--style must be one of ${STYLES.join(", ")}`);
+  process.exit(1);
+}
 mkdirSync(OUT, { recursive: true });
 
 let chromium;
@@ -88,11 +98,21 @@ try {
   } catch {}
   const browser = await chromium.launch(executablePath ? { executablePath } : {});
 
-  const context = (colorScheme, viewport, extra = {}) =>
-    browser.newContext({ viewport, deviceScaleFactor: 2, colorScheme, reducedMotion: "reduce", timezoneId: "UTC", locale: "en-US", ...extra });
+  const context = async (colorScheme, viewport, extra = {}, style = STYLE) => {
+    const c = await browser.newContext({ viewport, deviceScaleFactor: 2, colorScheme, reducedMotion: "reduce", timezoneId: "UTC", locale: "en-US", ...extra });
+    // the style is a per-browser choice (localStorage), applied by the page's head script
+    await c.addInitScript((s) => localStorage.setItem("jobflow-style", s), style);
+    return c;
+  };
+  // "networkidle" may never come while the header's sync indicator polls: wait for load,
+  // then give the page a few seconds to settle
+  const settle = async (p, url) => {
+    await p.goto(url, { waitUntil: "load" });
+    await p.waitForLoadState("networkidle", { timeout: 4000 }).catch(() => undefined);
+  };
   const shooter = (page) => async (name, url, opts = {}) => {
     if (ONLY && !ONLY.has(name)) return;
-    await page.goto(`${BASE}${url}`, { waitUntil: "networkidle" });
+    await settle(page, `${BASE}${url}`);
     await page.addStyleTag({ content: "*{animation:none!important;transition:none!important}" });
     if (opts.wait) await page.waitForSelector(opts.wait, { timeout: 10_000 }).catch(() => undefined);
     if (opts.scrollTo) await page.locator(opts.scrollTo).first().scrollIntoViewIfNeeded().catch(() => undefined);
@@ -110,9 +130,9 @@ try {
     await p.fill(".search-bar input", '"backend engineer" --remote --posted 14d');
   };
 
-  // ── desktop, dark ──
-  const dark = await (await context("dark", { width: 1440, height: 900 })).newPage();
-  let shot = shooter(dark);
+  // ── desktop, light (Editorial's default) ──
+  const main = await (await context("light", { width: 1440, height: 900 })).newPage();
+  let shot = shooter(main);
   await shot("jobs", "/", { wait: CARD });
   await shot("match-card", "/", { wait: CARD, element: CARD });
   // a card carrying caveats: red flags and/or a modeled (estimated) salary
@@ -126,8 +146,8 @@ try {
   await shot("settings", "/settings");
   // the Job page (fit, description, the apply checklist) for the top job not yet in
   // Applications (so the checklist shows), and Tailor for the top card
-  await dark.goto(`${BASE}/`, { waitUntil: "networkidle" });
-  const job = await dark
+  await settle(main, `${BASE}/`);
+  const job = await main
     .locator(CARD)
     .filter({ hasNotText: "in Applications" })
     .first()
@@ -135,7 +155,7 @@ try {
     .first()
     .getAttribute("href")
     .catch(() => null);
-  const href = await dark
+  const href = await main
     .locator(`${CARD} a[href^="/tailor/"]`)
     .first()
     .getAttribute("href")
@@ -146,21 +166,21 @@ try {
   }
   if (href) await shot("tailor", href);
 
-  // ── desktop, light ──
-  const light = await (await context("light", { width: 1440, height: 900 })).newPage();
-  shot = shooter(light);
-  await shot("jobs-light", "/", { wait: CARD });
-  await shot("match-card-light", "/", { wait: CARD, element: CARD });
-  if (job) await shot("job-light", job);
-  await shot("profile-light", "/profile");
-  await shot("settings-light", "/settings");
-  await shot("sources-light", "/sources", { wait: ".onb-preset" });
-  await shot("search-light", "/search", { before: search });
-  if (href) await shot("tailor-light", href);
+  // ── desktop, dark ──
+  const dark = await (await context("dark", { width: 1440, height: 900 })).newPage();
+  shot = shooter(dark);
+  await shot("jobs-dark", "/", { wait: CARD });
+  await shot("match-card-dark", "/", { wait: CARD, element: CARD });
+  if (job) await shot("job-dark", job);
+  await shot("profile-dark", "/profile");
+  await shot("settings-dark", "/settings");
+  await shot("sources-dark", "/sources", { wait: ".onb-preset" });
+  await shot("search-dark", "/search", { before: search });
+  if (href) await shot("tailor-dark", href);
 
   // ── mobile, 375px ──
   const mobileOpts = { isMobile: true, hasTouch: true };
-  const m = await (await context("dark", { width: 375, height: 812 }, mobileOpts)).newPage();
+  const m = await (await context("light", { width: 375, height: 812 }, mobileOpts)).newPage();
   shot = shooter(m);
   await shot("jobs-mobile", "/", { wait: CARD });
   await shot("jobs-mobile-filters", "/", {
@@ -178,15 +198,33 @@ try {
       await p.click(".app-header__menu");
     },
   });
-  const ml = await (await context("light", { width: 375, height: 812 }, mobileOpts)).newPage();
+  const ml = await (await context("dark", { width: 375, height: 812 }, mobileOpts)).newPage();
   shot = shooter(ml);
-  await shot("jobs-mobile-light", "/", { wait: CARD });
-  await shot("applications-mobile-light", "/applications", { wait: ".crm-row, .empty" });
-  await shot("sources-mobile-light", "/sources", { wait: ".onb-preset" });
+  await shot("jobs-mobile-dark", "/", { wait: CARD });
+  await shot("applications-mobile-dark", "/applications", { wait: ".crm-row, .empty" });
+  await shot("sources-mobile-dark", "/sources", { wait: ".onb-preset" });
+
+  // ── the style set: the Jobs page in each style, light and dark (docs/screenshots/styles-*.png) ──
+  for (const style of STYLES) {
+    for (const scheme of ["light", "dark"]) {
+      const name = `styles-${style}-${scheme}`;
+      if (ONLY && !ONLY.has(name) && !ONLY.has("styles")) continue;
+      const ctx = await context(scheme, { width: 1440, height: 900 }, {}, style);
+      const p = await ctx.newPage();
+      await settle(p, `${BASE}/`);
+      await p.waitForSelector(CARD, { timeout: 10_000 }).catch(() => undefined);
+      await p.addStyleTag({ content: "*{animation:none!important;transition:none!important}" });
+      const file = join(OUT, `${name}.png`);
+      await p.screenshot({ path: file });
+      shots.push(file);
+      console.log("✓", name);
+      await ctx.close();
+    }
+  }
 
   // ── guide captures (dark, desktop) — last, because they add a saved search and read a
   // résumé into the in-memory store, which would otherwise show up in the shots above ──
-  const g = await (await context("dark", { width: 1440, height: 900 })).newPage();
+  const g = await (await context("light", { width: 1440, height: 900 })).newPage();
   shot = shooter(g);
   const hideChecklist = async (p) => {
     await p.locator("#get-started button", { hasText: "later" }).click().catch(() => undefined);
@@ -204,7 +242,7 @@ try {
   });
   // a saved search as a Jobs tab: what the search hides, plus a rail filter's hidden report
   if (!ONLY || ONLY.has("jobs-saved-search")) {
-    await g.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    await settle(g, `${BASE}/`);
     const viewId = await g.evaluate(async () => {
       const r = await fetch("/api/searches", {
         method: "POST",

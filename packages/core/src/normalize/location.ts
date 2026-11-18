@@ -443,6 +443,42 @@ function expandPlaceCodes(raw: string): string {
 }
 
 /** Ashby-style "US-CA-Menlo Park", "JP-Tokyo", "Fins Only-AU-Sydney-MSO", "6 Locations" → the place words. */
+/**
+ * The city text of a location string: the first run of capitalised words that is not a
+ * country or region. A run is taken WHOLE — "San Francisco Bay Area or Remote (U.S.)" is San
+ * Francisco Bay Area and "Remote (United States)" names no city; the old fallback took a
+ * run's first word alone, so 1,000+ rows read "San" / "United" / "New" (2026-11 feed review).
+ * Unicode letters, so "München" and "Kraków" are whole words, not "M" / "Krak". When every run
+ * is a country or region the first one is returned (the caller drops it from the city slot,
+ * but it still counts as a named place for confidence).
+ */
+function cityCandidate(s: string): string | null {
+  const india = s.match(INDIA_CITY_ONLY);
+  if (india) return india[0].replace(/,$/, "").trim();
+  let first: string | null = null;
+  // up to four capitalised words ending at a separator: "San Francisco, CA", "New York City or …"
+  const atSeparator = /(?<![\p{L}\p{N}])\p{Lu}[\p{L}.'-]+(?:\s+\p{Lu}[\p{L}.'-]+){0,3}(?=\s*(?:[,()|/;]|\s-\s|\s(?:or|and|&)\s|$))/gu;
+  for (const m of s.matchAll(atSeparator)) {
+    const t = m[0].trim();
+    if (!notACity(t)) return t;
+    first ??= t;
+  }
+  // a run with no separator after it — with the words that follow, so "United states" (any
+  // case) is recognised as the country it is, not a city "United"
+  const loose = /(?<![\p{L}\p{N}])(\p{Lu}\p{L}+(?:\s+\p{Lu}\p{L}+){0,3})((?:\s+\p{L}+){0,2})/gu;
+  for (const m of s.matchAll(loose)) {
+    const t = m[1]!.trim();
+    const next = (m[2] ?? "").trim().split(/\s+/).filter(Boolean);
+    const extended = [t, ...next.map((_, i) => `${t} ${next.slice(0, i + 1).join(" ")}`)];
+    if (extended.some(notACity)) {
+      first ??= extended.find(notACity) ?? t;
+      continue;
+    }
+    return t;
+  }
+  return first;
+}
+
 function cleanForCity(loc: string): string {
   return loc
     .replace(/\b\d+\s+locations?\b/gi, " ")
@@ -550,17 +586,10 @@ export function parseLocation(locationRaw: string | null, jdText = ""): ParsedLo
         : EU_HINT.test(loc)
           ? "Europe"
           : null;
-  const locForCity = cleanForCity(raw.replace(/\bUS-[A-Z]{2}\b(?!-)/g, " ")).replace(/\b(remote|home[- ]based|hybrid|on[ -]?site|in[ -]?office|anywhere|worldwide|global)\b/gi, " ");
-  // up to three capitalised words ending at a separator: "San Francisco, CA", "New York
-  // City", "Tel Aviv" — not just their first word. Unicode letters, so "München" and
-  // "Kraków" are whole words, not "M" / "Krak".
-  const cityMatch =
-    locForCity.match(INDIA_CITY_ONLY) ??
-    locForCity.match(/(?<![\p{L}\p{N}])\p{Lu}[\p{L}.'-]+(?:\s+\p{Lu}[\p{L}.'-]+){0,2}(?=\s*(?:[,(|/;]|\s-\s|$))/u) ??
-    locForCity.match(/(?<![\p{L}\p{N}])(\p{Lu}\p{L}+)(?:,|\s|$)/u);
-  const cityText = cityMatch ? cityMatch[0].replace(/,$/, "").trim() : null;
+  const locForCity = cleanForCity(raw.replace(/\bUS-[A-Z]{2}\b(?!-)/g, " ")).replace(/\b(remote|home[- ]based|hybrid|on[ -]?site|in[ -]?office|anywhere|worldwide|global|only)\b/gi, " ");
+  const cityText = cityCandidate(locForCity);
   // a country or region word is not a city: "Remote - Canada" has no city
-  const city = cityText && !notACity(cityText) ? cityText : null;
+  let city = cityText && !notACity(cityText) ? cityText : null;
   // every country the string names, place by place: a multi-office role is workable in each
   const placed = locationCountries(raw);
   // The primary country is a real country whenever one is known: "München" is Germany, not
@@ -572,6 +601,9 @@ export function parseLocation(locationRaw: string | null, jdText = ""): ParsedLo
   if (country !== "Europe" && (!primary || (placed.length && !placed.includes(primary)))) primary = placed[0] ?? primary;
   if (primary) country = countryDisplayName(primary);
   const countries = primary ? [primary, ...placed.filter((c) => c !== primary)] : placed;
+  // a remote role open in a LIST of countries names no city: its first unknown word
+  // ("Andorra" in "Remote - Albania; Andorra; Argentina; …") is one more country
+  if (mode === "remote" && countries.length >= 3) city = null;
 
   // 3. remote geo — the load-bearing signal (§11.3)
   const indiaSignal = INDIA_OK_RE.test(jd) || INDIA_CITIES.test(loc);
@@ -580,11 +612,15 @@ export function parseLocation(locationRaw: string | null, jdText = ""): ParsedLo
   let remoteGeo: RemoteGeo = "unknown";
   let geoSource: GeoSource = "none";
   if (mode === "remote") {
-    const fromLoc = geoFromLoc(loc);
+    let fromLoc = geoFromLoc(loc);
+    // a list of countries that reaches beyond Europe ("Remote - Albania; Argentina; Austria; …
+    // Uruguay") is remote within THOSE countries, not "Europe only" (2026-11 feed review:
+    // a Toptal role read eu_only while naming 17 Latin American countries)
+    if (fromLoc === "eu_only" && countries.length > 1 && countries.some((c) => !EUROPE_CODES.has(c)) && !/\b(europe|european|emea|eu)\b/i.test(loc)) fromLoc = null;
     if (fromLoc) {
       remoteGeo = fromLoc;
       geoSource = "loc";
-    } else if (country && (country === "Canada" || otherCountry(loc))) {
+    } else if (country && (country === "Canada" || otherCountry(loc) || countries.length > 1)) {
       // "Remote - Brazil": remote WITHIN the named country (or countries: "Remote - Canada;
       // Brazil" — `countries`). A structured claim — JD boilerplate ("customers worldwide", a
       // stray "US") must not reinterpret it.
@@ -799,7 +835,7 @@ export function inEurope(loc: CountryFields): boolean {
   return locationCountryCodes(loc).some((x) => EUROPE_CODES.has(x)) || loc.country === "Europe";
 }
 
-const REGION_WORD = /^(europe|european union|eu|emea|apac|asia|asia pacific|americas|north america|latin america|latam|worldwide|anywhere|global|international|multiple|various|n\/a|tbd)$/;
+const REGION_WORD = /^(europe|european union|eu|emea|apac|asia|asia pacific|americas|north america|south america|central america|latin america|latam|worldwide|anywhere|global|international|multiple|various|n\/a|tbd|north|south|east|west|central|northern|southern|eastern|western|midwest|west coast|east coast)$/;
 
 /** a country or region word that the city slot must not take ("Remote - Canada", "UK"). */
 function notACity(word: string): boolean {

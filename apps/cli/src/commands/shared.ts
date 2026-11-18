@@ -5,6 +5,8 @@ import {
   RemoteGeo,
   RoleArchetype,
   countryDisplayName,
+  formatAmount,
+  resolveDisplayCurrency,
   matchSkillToken,
   type Profile,
 } from "@jobflow/core";
@@ -52,7 +54,7 @@ export function remoteGeos(v: string): RemoteGeo[] {
 }
 
 export function archetypes(v: string): RoleArchetype[] {
-  const alias: Record<string, string> = { devops: "infra_devops", infra: "infra_devops", data: "data_ml", ml: "data_ml", "full-stack": "fullstack", "full_stack": "fullstack" };
+  const alias: Record<string, string> = { devops: "infra_devops", infra: "infra_devops", data: "data_ml", ml: "data_ml", analytics: "data_analytics", analyst: "data_analytics", bi: "data_analytics", "full-stack": "fullstack", "full_stack": "fullstack" };
   const ok = RoleArchetype.options as readonly string[];
   const out = csv(v).map((r) => {
     const k = r.toLowerCase().replace(/\s+/g, "_");
@@ -164,7 +166,9 @@ export function printProfile(out: Out, p: Profile, evidenceCount: number): void 
   kv("markets", p.prefs.markets.join(", "));
   kv("remote ok", p.prefs.remoteGeoOk.join(", "));
   kv("relocate", p.prefs.relocate ? "yes" : "no");
-  kv("salary floor", p.prefs.salaryFloor > 0 ? money2(p.prefs.salaryFloor, p.prefs.currency) : "");
+  kv("salary floor", p.prefs.salaryFloor > 0 ? formatAmount(p.prefs.salaryFloor, p.prefs.currency) : "");
+  const showIn = resolveDisplayCurrency(p.prefs);
+  kv("pay shown", `${showIn ? `the posting's currency + ≈ ${showIn}` : "the posting's currency only"} · per ${p.prefs.display.period}`);
   kv("locations", p.prefs.locationWeights.map((l) => l.label).join(", "));
   kv("contact", [c.phone, c.linkedin, c.github, c.portfolio].filter(Boolean).join(" · "));
   kv("résumé", p.resumeFile ? `${p.resumeFile.filename}${c.resumePath ? out.dim(`  (${c.resumePath})`) : ""}` : c.resumePath || (p.masterResume.trim() ? "text only (no file to attach)" : ""));

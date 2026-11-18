@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>JobFlow launch card 2: Pay, stated vs estimate</title>
+<link rel="stylesheet" href="brand.css">
+<link rel="stylesheet" href="card.css">
+<!-- Launch post 2/3, 1080 x 1080. Two real card captures (fictional demo data), cropped to
+     the title and fact row: one posting that states its pay, one that doesn't. -->
+<style>
+  .pair { margin-top: 40px; display: grid; gap: 26px; }
+  .row { display: grid; grid-template-columns: 170px 1fr; gap: 24px; align-items: start; }
+  .row .label b { display: block; font-family: var(--serif); font-weight: 450; font-variation-settings: "SOFT" 50, "opsz" 48; font-size: 30px; line-height: 1; color: var(--ink); }
+  .row .label p { margin: 8px 0 0; font-size: 15px; line-height: 1.4; color: var(--ink-2); }
+  /* crop: score, title, company and the fact row (capture CSS box x 20-640, y 20-130), zoomed
+     1.25x so the pay badge reads on a phone; it runs off the right edge */
+  .crop { height: 142px; overflow: hidden; margin-right: -66px; border: 1px solid var(--hair-strong); border-right: 0; background: var(--paper); }
+  .crop img { display: block; width: 1400px; margin-left: -25px; margin-top: -24px; }
+  .rule-note { margin: 34px 0 0 194px; font-family: var(--serif); font-variation-settings: "SOFT" 50, "opsz" 36; font-size: 23px; line-height: 1.3; color: var(--ink); max-width: 28em; }
+</style>
+</head>
+<body>
+  <div class="frame">
+    <div class="top"><img class="logo" src="../logo/jobflow-horizontal.svg" alt="JobFlow"><span class="no caps">2 / 3</span></div>
+    <div class="kicker kick">Pay, honestly</div>
+    <h1 class="display">Stated, or <em>estimated</em>. Never mixed.</h1>
+    <p class="lede">A posting’s own pay range keeps a solid frame and how sure the parse is. When a posting says nothing, a modeled figure is marked rough, dashed, with its confidence.</p>
+    <div class="pair">
+      <div class="row"><div class="label"><b>Stated</b><p>what the posting says</p></div><div class="crop"><img src="../.out/captures/card-top-light.png" alt=""></div></div>
+      <div class="row"><div class="label"><b>Estimate</b><p>modeled, and says so</p></div><div class="crop"><img src="../.out/captures/card-estimate-light.png" alt=""></div></div>
+    </div>
+    <p class="rule-note">An estimate never hides a job. Only a clearly stated range below your pay floor can.</p>
+    <div class="foot"><span class="url">github.com/jagritvats/jobflow</span><span>Free software · runs on your machine</span></div>
+  </div>
+</body>
+</html>

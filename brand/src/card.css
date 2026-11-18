@@ -1,0 +1,11 @@
+/* Shared frame for the 1080 x 1080 launch-post cards. */
+html, body { width: 1080px; height: 1080px; overflow: hidden; }
+.frame { position: absolute; inset: 64px; display: flex; flex-direction: column; }
+.top { display: flex; justify-content: space-between; align-items: center; padding-bottom: 14px; border-bottom: 2px solid var(--ink); }
+.top .logo { height: 34px; }
+.top .no { font-size: 13px; color: var(--ink-3); }
+.kick { margin-top: 36px; font-size: 14px; }
+h1.display { margin-top: 12px; font-size: 92px; }
+.lede { margin-top: 20px; font-size: 24px; max-width: 30em; }
+.foot { margin-top: auto; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--hair-strong); padding-top: 14px; font-size: 15px; color: var(--ink-2); }
+.foot .url { font-weight: 700; color: var(--ink); }

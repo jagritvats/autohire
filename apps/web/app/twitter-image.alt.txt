@@ -1,0 +1,1 @@
+JobFlow: every job, ranked by how well it fits you. A match card with a score, the reason it fits, and a flag to check.

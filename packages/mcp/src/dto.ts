@@ -41,6 +41,9 @@ export const JobSummaryOut = z.object({
   applied: z.boolean().describe("the user already applied to this company+role"),
   agency: z.boolean().describe("posted by a staffing agency / third-party recruiter, not the employer — tell the user"),
   workable: z.boolean().nullable().describe("workable for the user (an office in their home country or a market, or remote open to where they live); null = can't tell"),
+  alsoPostedFor: z
+    .array(z.object({ id: z.string(), place: z.string() }))
+    .describe("the same role posted by the same company for other countries (separate reqs, folded under this one); get_job reads each"),
 });
 export type JobSummary = z.infer<typeof JobSummaryOut>;
 
@@ -62,7 +65,7 @@ export function payOf(c: FeedCard): JobSummary["pay"] {
 
 export function payText(p: JobSummary["pay"]): string | null {
   if (!p) return null;
-  if (p.kind === "estimate") return `~${p.label} (JobFlow estimate${p.confidenceScore != null ? `, ${Math.round(p.confidenceScore * 100)}% confidence` : ""} — not stated)`;
+  if (p.kind === "estimate") return `${p.label} (JobFlow estimate${p.confidenceScore != null ? `, ${Math.round(p.confidenceScore * 100)}% confidence` : ""} — not stated)`;
   return `${p.label} (stated)`;
 }
 
@@ -90,6 +93,7 @@ export function summarize(c: FeedCard, scored: boolean): JobSummary {
     applied: c.applied,
     agency: c.agency,
     workable: c.workable,
+    alsoPostedFor: (c.siblings ?? []).map((x) => ({ id: x.id, place: x.place })),
   };
 }
 
@@ -107,6 +111,7 @@ export function jobLines(j: JobSummary, i?: number): string {
   ].filter(Boolean);
   const lines = [head, `   ${meta.join(" · ")}`];
   if (j.fitNote) lines.push(`   fit: ${j.fitNote}`);
+  if (j.alsoPostedFor.length) lines.push(`   also posted for: ${j.alsoPostedFor.map((x) => `${x.place} (${x.id})`).join(", ")}`);
   if (j.levelNote) lines.push(`   level: ${j.levelNote}`);
   if (j.redFlags.length) lines.push(`   watch: ${j.redFlags.join(" · ")}`);
   lines.push(`   id: ${j.id}`);

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { JobDetail } from "@jobflow/service";
 import { ageText, experienceText, locationText, payText, roleText, sourceText, STATUS_LABEL } from "@/lib/cardText";
 import { LOCAL_AGENT_GUIDE } from "@/lib/docs";
-import { Badge, Banner, Button, Icon, btn } from "./ui";
+import { Badge, Banner, Button, Icon, ScoreRing, btn } from "./ui";
 
 const TIER3 = new Set(["naukri", "ambitionbox", "glassdoor", "linkedin"]);
 
@@ -131,14 +131,7 @@ export function JobView({ initial }: { initial: JobDetail }) {
       <section className="card-block ux-job-summary">
         <div className="ux-job-facts">
           {job.scored ? (
-            <div className="match__score ux-score" data-band={c.score >= 78 ? "hi" : c.score >= 60 ? "mid" : "lo"} role="img" aria-label={`Match score ${c.score} of 100`}>
-              <span className="score-num" aria-hidden="true">
-                {c.score}
-              </span>
-              <span className="score-meter" aria-hidden="true">
-                <span style={{ width: `${Math.max(0, Math.min(100, c.score))}%` }} />
-              </span>
-            </div>
+            <ScoreRing score={c.score} size="lg" className="ux-score" />
           ) : (
             <a className="ux-score ux-score--none" href="/onboarding">
               Not scored yet — add your résumé
@@ -164,9 +157,8 @@ export function JobView({ initial }: { initial: JobDetail }) {
             )}
             {pay && c.comp && (
               <Badge estimate={pay.estimate} className="tag comp" data-estimate={pay.estimate || undefined} title={pay.title}>
-                {pay.estimate ? "~" : ""}
                 {c.comp.label}{" "}
-                <span className="conf">· {pay.estimate ? `est ${Math.round((c.comp.confidenceScore ?? 0) * 100)}%` : c.comp.confidence}</span>
+                <span className="conf">· {pay.estimate ? `${Math.round((c.comp.confidenceScore ?? 0) * 100)}%` : c.comp.confidence}</span>
               </Badge>
             )}
             {exp && (
@@ -285,7 +277,7 @@ export function JobView({ initial }: { initial: JobDetail }) {
             )}
           </dl>
         )}
-        {pay?.estimate && <p className="hint">Pay: {pay.title}</p>}
+        {pay && (pay.estimate || c.comp?.rateDate || c.comp?.warning) && <p className="hint">Pay: {pay.title}</p>}
       </section>
 
       {/* ── apply ── */}

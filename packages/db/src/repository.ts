@@ -13,6 +13,10 @@ import type {
   ConnectedContext,
   Evidence,
   ParsedLocation,
+  ExperienceRange,
+  LevelBand,
+  Requirement,
+  RoleArchetype,
   Generation,
   GenerationKind,
   Job,
@@ -25,6 +29,7 @@ import type {
   Profile,
   SalaryBand,
   SalaryEstimate,
+  SyncRunRecord,
   TenantConfig,
 } from "@jobflow/core";
 
@@ -67,10 +72,11 @@ export interface Repository {
    */
   updatePostingSalary(id: string, band: SalaryBand, salaryRaw?: string | null): Promise<void>;
   /**
-   * Rewrite a posting's derived location + agency flag (a re-normalize after a parser fix,
-   * `renormalizePostings`). Never touches lifecycle columns (lastSeen, status…).
+   * Rewrite a posting's derived fields (a re-normalize after a parser fix,
+   * `renormalizePostings`): location + agency flag always; the title / JD derivations when
+   * given (omitted ones stay as stored). Never touches lifecycle columns (lastSeen, status…).
    */
-  updatePostingNormalized(id: string, patch: { location: ParsedLocation; postedByAgency: boolean }): Promise<void>;
+  updatePostingNormalized(id: string, patch: PostingNormalizedPatch): Promise<void>;
   /** set (or clear, with null) the modeled salary on many postings in one write. */
   saveSalaryEstimates(updates: Array<{ id: string; estimate: SalaryEstimate | null }>): Promise<number>;
   /** soft-delete postings not seen in this poll of a company (role filled/pulled). */
@@ -234,7 +240,34 @@ export interface Repository {
   followCompany(tenantId: string, companyId: string): Promise<void>;
   unfollowCompany(tenantId: string, companyId: string): Promise<void>;
   listFollowedCompanyIds(tenantId: string): Promise<string[]>;
+
+  // ── sync runs (global: the corpus is shared; per-tenant entries are filtered by the service) ──
+  /** insert or replace a run by id; only the newest SYNC_RUNS_KEPT are kept. */
+  saveSyncRun(run: SyncRunRecord): Promise<void>;
+  /** newest first */
+  listSyncRuns(limit?: number): Promise<SyncRunRecord[]>;
 }
+
+/** what a re-normalize rewrites on a stored posting (`updatePostingNormalized`). */
+export interface PostingNormalizedPatch {
+  location: ParsedLocation;
+  postedByAgency: boolean;
+  /** the title as a person reads it (entities decoded) and what it derives */
+  title?: string;
+  titleNorm?: string;
+  roleArchetype?: RoleArchetype;
+  levelBand?: LevelBand | null;
+  /** the JD as plain text (markup / entities cleaned) and what it derives */
+  jdText?: string;
+  jdSkills?: string[];
+  requirements?: Requirement[];
+  experience?: ExperienceRange;
+  /** the stage-1 dedup key recomputed from the above (the don't-double-apply guard reads it) */
+  dedupKey?: string;
+}
+
+/** sync-run history kept in the store (older rows are pruned on save) */
+export const SYNC_RUNS_KEPT = 50;
 
 export interface EnqueueJob {
   tenantId: string;

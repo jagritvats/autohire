@@ -1,4 +1,4 @@
-import type { SearchQuery, SourceKind } from "@jobflow/core";
+import { formatAmount, type SearchQuery, type SourceKind } from "@jobflow/core";
 import { searchCapableAdapters } from "@jobflow/adapters";
 import { listPresets, makeSearchQuery } from "@jobflow/pipeline";
 import { ToolError } from "./refs.js";
@@ -83,7 +83,7 @@ export function describeQuery(query: SearchQuery): string {
   if (query.remote === "exclude") parts.push("on-site");
   if (query.locations.length) parts.push(query.locations.map((l) => [l.city, l.country].filter(Boolean).join(", ")).join(" | "));
   if (query.seniority.length) parts.push(query.seniority.join("/"));
-  if (query.minSalary) parts.push(`≥ ${query.minSalary.amount.toLocaleString("en")} ${query.minSalary.currency}`);
+  if (query.minSalary) parts.push(`≥ ${formatAmount(query.minSalary.amount, query.minSalary.currency, query.minSalary.period)}`);
   if (query.postedWithinDays) parts.push(`≤ ${query.postedWithinDays}d old`);
   if (query.mustSkills.length) parts.push(`must: ${query.mustSkills.join(", ")}`);
   if (query.excludeCompanies.length) parts.push(`not: ${query.excludeCompanies.join(", ")}`);

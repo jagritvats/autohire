@@ -2,16 +2,19 @@ import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mc
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z, ZodError } from "zod";
 import type { SourceAdapter } from "@jobflow/adapters";
-import { ApplicationStatus, COVER_LETTER_ANSWER_KEY, diversifyByCompany, diversifyKey, scorePosting, type Posting } from "@jobflow/core";
+import { ApplicationStatus, COVER_LETTER_ANSWER_KEY, diversifyByCompany, diversifyKey, scorePosting, type Posting, type SyncProgress } from "@jobflow/core";
 import type { FileStore, Repository } from "@jobflow/db";
 import { ProviderError, isOfflineProvider, redactSecrets } from "@jobflow/llm";
-import { isOnboarded, loadProfile, pollAll, type PollStats } from "@jobflow/pipeline";
+import { isOnboarded, loadProfile, pollAll, type PollListener, type PollStats } from "@jobflow/pipeline";
 import {
   ApplyError,
   JobNotFoundError,
   KIND_QUESTION,
   buildApplyPlan,
   syncPollOptions,
+  runSync,
+  syncFraction,
+  syncStatusLine,
   findSearch,
   generateTailored,
   getFeed,
@@ -69,7 +72,15 @@ export interface JobflowMcpOptions {
   /** search_jobs: ask these adapters instead of the registry (tests); still Tier 1–2 only */
   adapters?: SourceAdapter[];
   /** sync_sources: the poll routine (tests inject a fake; default: the bounded `pollAll`) */
-  sync?: (repo: Repository, opts: { full: boolean; log: (line: string) => void }) => Promise<PollStats>;
+  sync?: (repo: Repository, opts: SyncHooks) => Promise<PollStats>;
+}
+
+/** what sync_sources hands its poll: the sweep size, a log, and the progress/cancel hooks */
+export interface SyncHooks {
+  full: boolean;
+  log: (line: string) => void;
+  onProgress?: PollListener;
+  signal?: AbortSignal;
 }
 
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
@@ -408,7 +419,7 @@ export function createJobflowMcpServer(ctx: JobflowMcpContext, opts: JobflowMcpO
         presets: strs("discovery-preset tags: india, us, eu-uk, global-remote (searches their feeds)"),
         sources: strs("only these sources, e.g. remotive, himalayas"),
         limit: z.number().int().min(1).max(50).default(15),
-        sort: z.enum(["score", "relevance"]).default("score"),
+        sort: z.enum(["score", "relevance", "pay"]).default("score"),
         ingest: z.boolean().default(false).describe("also add every result to the user's corpus/feed (default false: searching writes nothing)"),
       },
       outputSchema: {
@@ -507,6 +518,7 @@ export function createJobflowMcpServer(ctx: JobflowMcpContext, opts: JobflowMcpO
         hidden: HiddenOut,
         hiddenTotal: z.number(),
         appliedHidden: z.number(),
+        siblingsFolded: z.number().describe("postings of the same role for other countries folded under their role (alsoPostedFor)"),
       },
       annotations: { title: "List ranked jobs", ...READ_ONLY },
     },
@@ -540,6 +552,8 @@ export function createJobflowMcpServer(ctx: JobflowMcpContext, opts: JobflowMcpO
           const h = hiddenText(data.stats.hidden, data.stats.hiddenTotal, args.savedSearch ? `Saved search "${args.savedSearch}"` : "The preset filter");
           if (h) lines.push("", h);
           if (appliedHidden) lines.push(`${appliedHidden} role(s) already applied to are left out (includeApplied: true shows them).`);
+          const siblingsFolded = jobs.reduce((n, j) => n + j.alsoPostedFor.length, 0);
+          if (siblingsFolded) lines.push(`${siblingsFolded} posting(s) of the same role for other countries are folded under their role ("also posted for" — get_job reads each).`);
           return ok(lines.join("\n"), {
             mode: scored ? "ranked" : "browse",
             jobs,
@@ -548,6 +562,7 @@ export function createJobflowMcpServer(ctx: JobflowMcpContext, opts: JobflowMcpO
             hidden: data.stats.hidden ?? {},
             hiddenTotal: data.stats.hiddenTotal ?? 0,
             appliedHidden,
+            siblingsFolded,
           });
         }),
       ),
@@ -928,19 +943,24 @@ export function createJobflowMcpServer(ctx: JobflowMcpContext, opts: JobflowMcpO
       title: "Sync job sources",
       description:
         "Discover + poll what the user's discovery plan names (their presets, custom sources and saved searches; public Tier 1–2 sources only), expire postings that are gone, then re-rank the feed. " +
-        "Bounded like `jobflow sync` (full: true is the slow, worker-sized sweep). Takes a minute or more; sends progress notifications when the client asks for them. Other JobFlow tools wait while it runs.",
+        "Bounded like `jobflow sync` (full: true is the slow, worker-sized sweep). Takes a minute or more; sends progress notifications (percent done + phase, boards n/N, jobs fetched/new, time left) when the client asks for them, and cancelling the request cancels the sync cleanly (what was fetched is kept, nothing is retired). Reports new matches for the user. Other JobFlow tools wait while it runs.",
       inputSchema: { full: z.boolean().default(false).describe("every due board and the slow feeds too — much longer") },
       outputSchema: {
+        status: z.enum(["done", "cancelled", "failed", "running"]),
         boardsPolled: z.number(),
         fetched: z.number(),
         gone: z.number().describe("postings their boards no longer list (soft-deleted)"),
         expired: z.number(),
+        newPostings: z.number().describe("postings first seen in this sync"),
         feeds: z.record(z.number()),
         newBoards: z.array(z.string()),
         errors: z.array(z.string()),
         errorCount: z.number(),
         ranked: z.boolean(),
         matches: z.number(),
+        newMatches: z.number().describe("new postings matching the user at matchThreshold or above"),
+        strongMatches: z.number(),
+        matchThreshold: z.number(),
         activePostings: z.number(),
         seconds: z.number(),
       },
@@ -949,45 +969,69 @@ export function createJobflowMcpServer(ctx: JobflowMcpContext, opts: JobflowMcpO
     (args, extra) =>
       guard(() =>
         ctx.withRepo(async (repo) => {
-          const started = Date.now();
           const token = extra._meta?.progressToken;
-          let n = 0;
-          const log = (line: string) => {
-            n++;
+          // progress notifications from the shared SyncProgress model: progress/total is the
+          // run's weighted fraction (monotonic), the message its one-line status. At most
+          // twice a second, plus every phase change.
+          let lastSent = 0;
+          let lastProgress = -1;
+          let lastPhase: string | null = "";
+          const notify = (s: SyncProgress) => {
             if (token === undefined) return;
+            const now = Date.now();
+            const progress = Math.round(syncFraction(s) * 100);
+            const phaseChanged = s.phase !== lastPhase;
+            if ((!phaseChanged && now - lastSent < 500) || progress < lastProgress) return;
+            lastSent = now;
+            lastProgress = progress;
+            lastPhase = s.phase;
             void extra
-              .sendNotification({ method: "notifications/progress", params: { progressToken: token, progress: n, message: line.replace(/\s+/g, " ").slice(0, 160) } })
+              .sendNotification({ method: "notifications/progress", params: { progressToken: token, progress, total: 100, message: syncStatusLine(s).slice(0, 160) } })
               .catch(() => {});
           };
-          const sync =
+          const poll =
             opts.sync ??
-            ((r: Repository, o: { full: boolean; log: (l: string) => void }) =>
-              pollAll(r, syncPollOptions({ full: o.full, log: o.log })));
-          const stats = await sync(repo, { full: args.full, log });
-          log("ranking against the profile");
-          const ranked = await rankTenant(repo, tenantId);
+            ((r: Repository, o: SyncHooks) => pollAll(r, syncPollOptions({ full: o.full, log: o.log, onProgress: o.onProgress, signal: o.signal })));
+          const { progress: run, stats, ranked, you } = await runSync(repo, tenantId, {
+            trigger: "manual",
+            origin: "mcp",
+            // the client cancelling the request cancels the sync (nothing is retired from it)
+            signal: extra.signal,
+            onUpdate: notify,
+            sync: (r, hooks) => poll(r, { full: args.full, log: () => {}, ...hooks }),
+          });
           const matches = ranked ? (await repo.listMatches(tenantId, 1000)).length : 0;
           const active = (await repo.listActivePostings()).length;
-          const seconds = Math.round((Date.now() - started) / 1000);
-          const feeds = Object.entries(stats.feeds).filter(([, k]) => k > 0);
+          const seconds = Math.round(run.timing.elapsedMs / 1000);
+          const feeds = Object.entries(stats?.feeds ?? {}).filter(([, k]) => k > 0);
+          const errors = run.errors.map((e) => redactSecrets(`${e.source}: ${e.message}`));
+          const fetched = stats?.fetched ?? run.postings.fetched;
           const lines = [
-            `Polled ${stats.companiesPolled} board(s) + ${Object.keys(stats.feeds).length} feed(s) in ${seconds}s: ${stats.fetched} postings fetched, ${stats.staled} gone, ${stats.expired} expired.`,
+            `${run.status === "cancelled" ? "Cancelled — " : run.status === "failed" ? "Stopped with an error — " : ""}${run.message ?? ""} (${seconds}s)`,
             feeds.length ? `Feeds: ${feeds.map(([k, v]) => `${k} ${v}`).join(", ")}` : null,
-            `Corpus: ${active} active postings${ranked ? ` · ${matches} ranked for the user` : " · not ranked (no profile yet)"}.`,
-            stats.errors.length ? `${stats.errors.length} source error(s), e.g. ${stats.errors.slice(0, 2).map((x) => redactSecrets(x)).join("; ")}` : null,
-            stats.fetched === 0 ? "Nothing was fetched — if online, a proxy or firewall may be blocking job boards (`jobflow doctor` checks)." : "Next: list_jobs.",
+            ranked
+              ? `${you.newMatches} new match(es) for the user at score ${you.threshold}+${you.strongMatches ? ` (${you.strongMatches} strong)` : ""}; ${matches} ranked in all.`
+              : "Not ranked (no profile yet).",
+            `Corpus: ${active} active postings.`,
+            errors.length ? `${errors.length} source problem(s), e.g. ${errors.slice(0, 2).join("; ")}` : null,
+            fetched === 0 && run.status === "done" ? "Nothing was fetched — if online, a proxy or firewall may be blocking job boards (`jobflow doctor` checks)." : "Next: list_jobs.",
           ].filter(Boolean);
           return ok(lines.join("\n"), {
-            boardsPolled: stats.companiesPolled,
-            fetched: stats.fetched,
-            gone: stats.staled,
-            expired: stats.expired,
-            feeds: stats.feeds,
-            newBoards: stats.resolved.slice(0, 50),
-            errors: stats.errors.map((x) => redactSecrets(x)).slice(0, 20),
-            errorCount: stats.errors.length,
+            status: run.status,
+            boardsPolled: stats?.companiesPolled ?? run.boards.done + run.boards.failed,
+            fetched,
+            newPostings: run.postings.new,
+            gone: stats?.staled ?? run.postings.gone,
+            expired: stats?.expired ?? run.postings.expired,
+            feeds: stats?.feeds ?? {},
+            newBoards: (stats?.resolved ?? []).slice(0, 50),
+            errors: errors.slice(0, 20),
+            errorCount: errors.length,
             ranked,
             matches,
+            newMatches: you.newMatches,
+            strongMatches: you.strongMatches,
+            matchThreshold: you.threshold,
             activePostings: active,
             seconds,
           });

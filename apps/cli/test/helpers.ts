@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import type { Repository } from "@jobflow/db";
+import type { SyncRunner } from "@jobflow/service";
 import { runCli } from "../src/program.js";
 import type { CliIO } from "../src/output.js";
 
@@ -22,7 +23,7 @@ export function tempDir(prefix = "jobflow-cli-"): { dir: string; cleanup(): void
 /** Run one CLI invocation in-process with captured stdout/stderr and the given stdin. */
 export async function run(
   args: string[],
-  opts: { dataDir: string; repo?: Repository; stdin?: string; store?: "memory" | "pglite" },
+  opts: { dataDir: string; repo?: Repository; stdin?: string; store?: "memory" | "pglite"; sync?: SyncRunner },
 ): Promise<RunResult> {
   let out = "";
   let err = "";
@@ -40,7 +41,7 @@ export async function run(
     env,
   };
   const argv = ["--data-dir", opts.dataDir, "--store", opts.store ?? "memory", ...args];
-  const code = await runCli(argv, { io, repo: opts.repo });
+  const code = await runCli(argv, { io, repo: opts.repo, sync: opts.sync });
   return {
     code,
     out,

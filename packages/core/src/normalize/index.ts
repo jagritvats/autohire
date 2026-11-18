@@ -7,9 +7,9 @@ import type {
   ExecutionTier,
 } from "../schema/enums.js";
 import type { ExperienceRange, ParsedLocation, Requirement, SalaryBand } from "../schema/entities.js";
-import { dedupTitleKey, normCompany, parseTitle, slugify } from "./titles.js";
+import { dedupTitleKey, normCompany, parseTitle, slugify, type TitleParse } from "./titles.js";
 import { extractSkills, parseRequirements } from "./skills.js";
-import { parseLocation } from "./location.js";
+import { locationCountryCodes, parseLocation } from "./location.js";
 import { parseExperience } from "./experience.js";
 import { extractSalaryFromText } from "./salary.js";
 import { currencyHintFor } from "../salary/market.js";
@@ -25,6 +25,7 @@ export * from "./chat.js";
 export * from "./reposts.js";
 export * from "./jd.js";
 export * from "./version.js";
+export * from "./markup.js";
 
 /**
  * The canonical fields derived from a RawPosting. The persistence layer combines
@@ -95,7 +96,7 @@ export function normalizePosting(raw: RawPosting): NormalizedPosting {
     title: raw.title.trim(),
     titleNorm: title.titleNorm,
     roleArchetype: title.roleArchetype,
-    levelBand: title.levelBand ?? raw.levelHint ?? null, // title wins; the source's bucket fills a gap
+    levelBand: titleLevel(title, raw.levelHint ?? null),
     jdText: jd,
     jdSkills: skills,
     requirements,
@@ -113,15 +114,26 @@ export function normalizePosting(raw: RawPosting): NormalizedPosting {
 }
 
 /**
+ * The posting's level: the title's band wins, the source's own bucket fills a gap — except
+ * that a company ladder code the title merely implies ("L5", "E5", "IC4": confidence < 0.6,
+ * their meaning varies by employer) yields to a bucket the source states.
+ */
+export function titleLevel(title: Pick<TitleParse, "levelBand" | "levelConfidence">, levelHint: LevelBand | null): LevelBand | null {
+  if (title.levelBand && (title.levelConfidence >= 0.6 || !levelHint)) return title.levelBand;
+  return levelHint ?? title.levelBand ?? null;
+}
+
+/**
  * Salary cascade step 1 (§11.4): what the posting states — the source's own salary field
  * first, then the JD. The location prices a bare "$" and an unlabeled salary field. No
  * stated pay → an empty band; the estimator fills `salaryEstimate` separately.
  */
 export function parseStatedSalary(salaryRaw: string | null, jdText: string, location: ParsedLocation): SalaryBand {
   const currencyHint = currencyHintFor(location);
+  const country = salaryCountryOf(location);
   return (
-    extractSalaryFromText(salaryRaw ?? "", { structured: true, currencyHint }) ??
-    extractSalaryFromText(jdText, { currencyHint }) ?? {
+    extractSalaryFromText(salaryRaw ?? "", { structured: true, currencyHint, country }) ??
+    extractSalaryFromText(jdText, { currencyHint, country }) ?? {
       min: null,
       max: null,
       currency: currencyHint ?? "USD",
@@ -129,6 +141,25 @@ export function parseStatedSalary(salaryRaw: string | null, jdText: string, loca
       confidence: "low",
     }
   );
+}
+
+const DOLLAR_COUNTRIES: ReadonlySet<string> = new Set(["CA", "AU", "NZ", "SG", "HK", "MX"]);
+
+/**
+ * The country whose currency a bare "$" / "kr" / "¥" in this posting is read in: its
+ * primary place, else the country a remote restriction names (US-only remote → US).
+ * null = unknown, so a "$" stays USD but at reduced confidence.
+ */
+function salaryCountryOf(location: ParsedLocation): string | null {
+  const codes = locationCountryCodes(location);
+  // a multi-office role with a US office and no other dollar country: its "$" is the US one
+  // (Cisco's "Bengaluru; San Jose" posts a US range for US applicants)
+  if (codes.includes("US") && !codes.some((c) => c !== "US" && DOLLAR_COUNTRIES.has(c))) return "US";
+  const primary = codes[0];
+  if (primary) return primary;
+  if (location.mode === "remote" && (location.remoteGeo === "us_only" || location.remoteGeo === "us_eu")) return "US";
+  if (location.mode === "remote" && location.remoteGeo === "india_ok") return "IN";
+  return null;
 }
 
 /**
@@ -188,6 +219,7 @@ const CITY_ALIASES: Readonly<Record<string, string>> = {
   sf: "san-francisco",
   "bay-area": "san-francisco",
   "sf-bay-area": "san-francisco",
+  "san-francisco-bay-area": "san-francisco",
 };
 
 export function cityKey(city: string): string {

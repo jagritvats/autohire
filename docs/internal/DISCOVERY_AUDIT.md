@@ -570,3 +570,134 @@ Root causes and fixes (match, service card, adapters, CLI/web/MCP card text):
 
 Left for other owners: see the report of this pass (title normalizer, skills dictionary,
 salary display, presets tags, same role posted per country).
+
+
+## Taxonomy pass (2026-11-18): titles, skills, levels, cross-country siblings
+
+The feed review's "left for other owners" list, measured on the same four persona stores
+(copies; IN Java backend p0 9,381 postings, DE frontend p1 5,497, US new-grad analyst p2
+5,965, CA backend p3 3,110). Corpus numbers compare the parser before this pass (HEAD) with
+this one on the same stored rows; feed numbers compare the feed review's final top 50 with a
+`jobflow renormalize` + `feed --limit 50` of a copy. Fixtures: `packages/core/test/taxonomy.test.ts`,
+`packages/pipeline/test/renormalize-taxonomy.test.ts`, the sibling cases in
+`packages/service/test/feed-cards.test.ts`, the patch case in `packages/db/test/contract.test.ts`.
+
+| corpus (IN / DE / US / CA) | before | after |
+|---|---|---|
+| analyst / BI / analytics-engineering titles filed `other` | 74 of 80 / 66 of 67 / 35 of 35 / 30 of 31 | 0 / 1 / 0 / 1 |
+| data-titled roles (the feed review's regex) filed `other` | 104 / 83 / 60 / 40 | 5 / 5 / 5 / 2 |
+| all titles filed `other` | 6,974 / 4,474 / 4,695 / 2,363 | 6,836 / 4,385 / 4,622 / 2,324 |
+| iOS / Swift titles whose JD named no language we know | 9 of 14 / 16 of 17 / 11 of 12 / 6 of 8 | 2 / 1 / 2 / 0 |
+| postings with no recognised skill | 3,809 / 2,459 / 2,461 / 1,078 | 3,310 / 2,222 / 2,144 / 936 |
+| city a fragment of a multi-word name ("San", "United", "New") | 1 / 8 / 43 / 29 (stored) | 0 / 0 / 0 / 0 (one "North", one "St" fixed after) |
+| remote `eu_only` naming a non-European country (US corpus) | 12 | 1 (it names EMEA) |
+| sibling groups (same role, other countries) / cards they save | — | 196 / 277 · 331 / 485 · 310 / 462 · 235 / 280 |
+
+| top 50 (IN / DE / US / CA) | before | after |
+|---|---|---|
+| a domain ("fintech") listed as missing | 3 / 5 / 7 / 0 | 0 / 0 / 0 / 0 |
+| `#india` on a role not workable in India | 0 / 2 / 15 / 9 | 0 / 0 / 0 / 0 |
+| same company + title shown twice | 2 / 0 / 0 / 2 | 1\* / 0 / 0 / 0 |
+| cards carrying "Also posted for …" (folded) | — | 0 / 1 (1) / 2 (2) / 6 (6) |
+| US analyst: data / analytics-titled roles, `other` cards | 16, 5 | 17, 0 (persona targets `data_ml`, read as both) |
+| same analyst with `--roles data_analytics` | — | 26 data-titled, 5 SWE (was 18) |
+
+\* GE HealthCare's two Bengaluru "Software Engineer" reqs (hybrid / onsite, one place): separate
+headcount, correctly not siblings. An American Express pair was a duplicate whose match row
+from before the re-dedup was still listed — `listMatches` now lists canonical postings only. Résumé import of the fictional personas (`feedqa/resumes`): analyst 1
+skill → 9 (SQL, Python, pandas, Excel, Tableau, Power BI, R, statistics, A/B testing), frontend
+4 → 12 ("Next.js" / "Vue.js" were read as JavaScript; Vue, CSS, HTML, Jest, Playwright,
+webpack, Storybook were unknown), backend 13 (unchanged). Every one is a span in the file.
+
+- **Role types.** `data_analytics` (enum value appended; stored values keep their meaning) for
+  analyst / BI / analytics-engineering heads, read before the non-engineering guard. The guard
+  now lets the role NOUN win: assistant, administrator (not sysadmin / DBA), support, success,
+  coordinator. The scorer's "Data Analyst filed as other" fallback became one source of
+  truth: a stored `other` row is re-read with `parseTitle`. A `data_ml`-only target reads as
+  both data types (`effectiveTargets`). Analytics roles are far from software engineering both
+  ways, with a flag saying which. The software-engineer title family (salary comparables)
+  applies to engineering role types only.
+- **Levels.** Rungs after any role noun, V / 5, L8+, Meta E-levels and IC / ICT codes beside a
+  role noun or as a tag, the MTS ladder; a bare "Member of Technical Staff" has no level (53
+  rows on the US corpus read "staff"). `levelConfidence`: a company code (< 0.6) yields to the
+  source's own level bucket. The level-null share of engineering titles barely moves (31 new
+  bands, 53 MTS bands removed on the US corpus) — most titles carry no level at all; the JD's
+  years decide those.
+- **Skills.** 30 dictionary entries; ambiguous names only in cased / contextual form; Snowflake
+  left out (named as a customer in boilerplate on three boards), "statistics" only as a skill or
+  a field of study ("frequently cited statistics show…" is diversity boilerplate on 50 Tailscale
+  JDs). A skills-list token takes the alias covering most of it. Declared skills canonicalize
+  before scoring, so a profile saved with "power bi" matches `power_bi`.
+- **Siblings** (`core/dedup/siblings.ts`): company + dedup title key (level kept) with place /
+  work-mode segments dropped ("… | Spain | Remote", "(Remote, Canada)"), word-set JD overlap ≥ 0.7,
+  a different place. The service folds each group under its best-scoring member after the view
+  and before the page cut (fetching 3× the page so a folded sibling doesn't take a slot).
+- **Re-normalize v3.** Cleans stored JD markup / entities (`cleanStoredJd`, moved with
+  `htmlToText` / `cleanTitle` to `core/normalize/markup.ts`), decodes title entities, re-derives
+  title family / role type / level / skills / requirements / years and the dedup key (the
+  "left" item of the fourth pass). On the persona copies: 4,936 / 4,933 / 7,689 / 2,571 rows
+  changed (US / DE / IN / CA), 3,439 / 2,254 / 4,358 / 1,514 JDs cleaned. Level and years a
+  source states aren't stored apart from parsed ones, so for the sources that send them a
+  stored value is kept unless the title / JD now states one with confidence.
+
+Left: the iOS roles that still name no language have no Swift / Objective-C in their stored
+JD (lite listings); "Data Analyst" titles outside the regexes ("Senior Analyst, Frontline
+Performance") stay `other`; the analyst persona's top 50 still holds AI-engineer roles because
+`data_ml` mixes data science with ML engineering — a split of that value was not attempted;
+the salary pipeline's ENG archetype sets (owned by the salary pass) don't include
+`data_analytics` yet, so analyst roles are priced like `other` as before.
+
+## Salary units, periods and currencies (2026-11-18)
+
+Ask: read pay with its units (per year / month / week / day / hour, LPA / lakh / crore / CTC,
+k / M), its currency (incl. an ambiguous "$", "kr", "¥"), base vs OTE vs total comp and equity;
+compare in one currency via FX; show the posting's own figure plus a converted one.
+
+What changed:
+- **Parse** (`core/normalize/salary.ts`): the stated `period`, `basis` and `equity` are kept on
+  `posting.salary` (min/max stay annual; migration 0021). A bare "$" follows the posting's
+  country — CA$/A$/NZ$/S$/HK$/MX$, a US (or US-only remote, or US-office) posting's is USD, and
+  anywhere else (or unknown) it is read as USD at `medium_high`, which the hard floor never
+  acts on. "kr" needs SE/NO/DK/IS, "¥" CN/JP. A figure too small to be a year with no period
+  written is read as monthly at `medium_high`. Variable-pay labels ("Target Variable range",
+  commission, bonus) and equity grants ("INR 30-50L in stock") are never salary; with a base
+  and an OTE band, base wins and the two are never unioned. `SALARY_PARSE_VERSION` re-parses a
+  store once on its next sync.
+- **FX** (`core/salary/fx.ts`, `pipeline/src/fx.ts`): ECB table dated 2026-11-18 (+ AED/SAR
+  pegs); syncs refresh it from api.frankfurter.dev (keyless) and cache it in `store_meta`.
+- **Comparisons** (`core/salary/compare.ts`): floor, `--min-salary`, score, `--sort pay` in one
+  currency. Converted: one confidence step lower for soft uses; a hard decision only when
+  still below after the rate's uncertainty (3% + 1%/month of age). Hourly/daily/weekly rates
+  never decide alone.
+- **Display** (`core/salary/format.ts`): one formatter for web, CLI and MCP. Estimates under
+  0.4 confidence (or wider than ×2.2) show one rough figure; equal ends print once; a stated
+  currency that disagrees with the location is flagged (feed review items 1–3).
+
+QA corpus (sample persona, `india` preset, two syncs: 9,469 active postings, 336 with a source
+salary field). Old code + old `salary` vs new `salary`:
+
+| | before | after |
+|---|---|---|
+| postings with stated pay | 884 | 898 (+14: ₹ monthly intern stipends, PHP) |
+| currencies seen | 8 | 10 (+PHP, MXN) |
+| period recorded | none (everything annualised silently) | 416 explicit: 381 year, 10 month (1.1%), 22 hour (2.4%), 3 week; 482 unchanged rows read as year |
+| basis / equity | — | base 224, OTE 89, total 11; equity on top 41 |
+| confidence high / medium_high / medium | 804 / 78 / 2 | 793 / 103 / 2 |
+
+Of the 804 old `high` bands, 18 dropped to `medium_high` — every one a bare "$" on a posting
+not placed in the US (India offices, Wellfound "$35k – $40k" for India-remote, unplaced
+onsite roles): exactly the conversions that must not hard-exclude. 9 bands changed figures,
+all corrections (OTE or variable pay had been unioned into the base band: "$94.4k–$298.7k" →
+"$94.4k–$149.4k"; an equity grant had widened "15-25 LPA" to ₹15L–50L). One Canada-only remote
+"$55 - $75" is now CAD per hour.
+
+`salary-backtest`, median error by confidence band (`< 0.30 / 0.30–0.50 / 0.50–0.70 / ≥ 0.70`):
+
+| | before | after |
+|---|---|---|
+| all-evidence | 50% / 23% / 20% / 12% (n 738) | 46% / 23% / 20% / 12% (n 762) |
+| leak-free, calibrated | 45% / 24% / 19% / — (n 738) | 44% / 25% / 18% / — (n 762) |
+
+Monotonic in both. Left: the 482 untouched rows carry no explicit `period` until their board's
+next poll (absent = year by contract); an unplaced remote "$" band is no longer hard-excluded
+(by design).

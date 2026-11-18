@@ -30,3 +30,6 @@ docs/screenshots/.tmp/
 
 # agent worktrees
 .claude/worktrees/
+
+# generated video media (scripts/video)
+.video/

@@ -1,10 +1,15 @@
-# JobFlow
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/social/readme-banner-dark.png">
+    <img alt="JobFlow: every job ranked against your résumé, with an honest match card. It pre-fills the application and stops: you press submit." src="brand/social/readme-banner-light.png" width="100%">
+  </picture>
+</h1>
 
 **A local-first job search engine for one person. It finds roles across hundreds of company
 boards, ranks them against *your* résumé with honest match cards, tailors your documents from
 your own material, and pre-fills applications. Then it stops, so you can review and submit.**
 
-[![CI](https://github.com/jagritvats/autohire/actions/workflows/ci.yml/badge.svg)](https://github.com/jagritvats/autohire/actions/workflows/ci.yml)
+[![CI](https://github.com/jagritvats/jobflow/actions/workflows/ci.yml/badge.svg)](https://github.com/jagritvats/jobflow/actions/workflows/ci.yml)
 [![License: AGPL-3.0-only](https://img.shields.io/badge/license-AGPL--3.0--only-blue.svg)](LICENSE)
 ![Node 20+](https://img.shields.io/badge/node-%E2%89%A520-brightgreen)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)
@@ -15,7 +20,7 @@ your own material, and pre-fills applications. Then it stops, so you can review 
 ## Quick start
 
 ```bash
-git clone https://github.com/jagritvats/autohire.git jobflow && cd jobflow
+git clone https://github.com/jagritvats/jobflow.git && cd jobflow
 pnpm install && pnpm -r build
 pnpm jobflow init && pnpm jobflow sync    # your résumé, reviewed by you; then fetch and rank jobs
 pnpm jobflow serve                        # the web app at http://localhost:3000 (or stay in the terminal)
@@ -70,7 +75,7 @@ walkthrough is in **[Getting started](docs/getting-started.md)**.
   </tr>
   <tr>
     <td valign="top">
-      <a href="docs/screenshots/jobs-light.png"><img src="docs/screenshots/jobs-light.png" alt="Jobs in the light theme"></a>
+      <a href="docs/screenshots/jobs-dark.png"><img src="docs/screenshots/jobs-dark.png" alt="Jobs in the dark theme"></a>
       <br><b>Light or dark</b>: the theme follows your system, or pick one with the toggle in the header.
     </td>
     <td valign="top">
@@ -84,7 +89,7 @@ walkthrough is in **[Getting started](docs/getting-started.md)**.
   <img src="docs/screenshots/jobs-mobile.png" width="200" alt="Jobs on a phone">
   <img src="docs/screenshots/jobs-mobile-filters.png" width="200" alt="Filters on a phone">
   <img src="docs/screenshots/job-mobile.png" width="200" alt="A Job page on a phone">
-  <img src="docs/screenshots/applications-mobile-light.png" width="200" alt="Applications on a phone, light theme">
+  <img src="docs/screenshots/applications-mobile-dark.png" width="200" alt="Applications on a phone, dark theme">
   <br><em>Every page works on a phone. The filters open as a sheet.</em>
 </p>
 
@@ -220,5 +225,9 @@ it privately however you like. If you distribute it, or run a **modified** versi
 service for other people, you must offer them the corresponding source under the same
 licence. The web app links to its source in the footer for exactly that reason
 (`JOBFLOW_SOURCE_URL`).
+
+The logo, posters and other artwork in [`brand/`](brand/README.md) are licensed under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); the scripts that build them are AGPL-3.0
+like the rest of the code.
 
 Salary benchmarks from levels.fyi are shown with attribution.

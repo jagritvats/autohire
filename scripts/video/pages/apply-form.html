@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apply · Backend Engineer (Kafka) · Stark Fintech</title>
+<!-- A FICTIONAL employer's application form (Greenhouse-style field ids) for showing the
+     real form-filler at work. It is never submitted: JobFlow has no submit code path. -->
+<style>
+  body{font-family:"Helvetica Neue",Arial,system-ui,sans-serif;max-width:720px;margin:44px auto 480px;padding:0 24px;color:#1b1f24;background:#fff}
+  .co{display:flex;align-items:center;gap:12px;margin-bottom:26px;color:#57606a;font-size:15px}
+  .co b{display:inline-grid;place-items:center;width:38px;height:38px;border-radius:9px;background:#21364f;color:#fff;font-size:17px}
+  h1{font-size:30px;margin:0 0 6px} p.sub{color:#57606a;margin:0 0 26px;font-size:16px}
+  label{display:block;font-size:14.5px;font-weight:600;margin:16px 0 6px}
+  input[type=text],input[type=email],input[type=tel],textarea{width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid #d0d7de;border-radius:7px;font-size:16px;font-family:inherit;transition:background .4s}
+  input.filled,textarea.filled{background:#fff8e6}
+  .attach{display:inline-block;padding:9px 14px;border:1px solid #d0d7de;border-radius:7px;background:#f6f8fa;font-size:14.5px}
+  #resume{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden}
+  #resume-name{margin-left:10px;font-size:14.5px;color:#1a7f37}
+  button{margin-top:28px;padding:13px 22px;border:0;border-radius:7px;background:#1f883d;color:#fff;font-size:16px;font-weight:600}
+</style>
+</head>
+<body>
+<div class="co"><b>SF</b> Stark Fintech · Careers</div>
+<h1>Backend Engineer (Kafka)</h1><p class="sub">Mumbai, India · Engineering</p>
+<form id="application_form" method="post" action="about:blank" enctype="multipart/form-data">
+  <label for="first_name">First name</label><input type="text" id="first_name" name="first_name">
+  <label for="last_name">Last name</label><input type="text" id="last_name" name="last_name">
+  <label for="email">Email</label><input type="email" id="email" name="email">
+  <label for="phone">Phone</label><input type="tel" id="phone" name="phone">
+  <label>Résumé/CV</label><span class="attach">Attach</span>
+  <input type="file" id="resume" name="resume"><span id="resume-name"></span>
+  <label for="linkedin">LinkedIn profile</label><input type="text" id="linkedin" name="job_application[linkedin]">
+  <label for="cover_letter_text">Cover letter (optional)</label><textarea id="cover_letter_text" name="cover_letter" rows="4"></textarea>
+  <button type="submit" id="submit_app">Submit application</button>
+</form>
+<script>
+  document.getElementById('resume').addEventListener('change', (e) => { document.getElementById('resume-name').textContent = e.target.files[0]?.name || ''; });
+  for (const el of document.querySelectorAll('input,textarea')) el.addEventListener('input', () => el.classList.toggle('filled', !!el.value));
+  // belt and braces for the recording: a submit would be visible, and never happens
+  document.getElementById('application_form').addEventListener('submit', (e) => { e.preventDefault(); document.title = 'SUBMITTED'; });
+</script>
+</body>
+</html>

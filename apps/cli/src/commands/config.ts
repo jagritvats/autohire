@@ -1,6 +1,6 @@
 import type { Command } from "commander";
-import { LlmChoice, activePresets, type TenantConfig } from "@jobflow/core";
-import { listPresets } from "@jobflow/pipeline";
+import { LlmChoice, activePresets, knownCurrency, type Profile, type TenantConfig } from "@jobflow/core";
+import { blankProfile, listPresets } from "@jobflow/pipeline";
 import { setPresets, tenantProvider } from "@jobflow/service";
 import type { Ctx } from "../context.js";
 import { notFound, usage } from "../errors.js";
@@ -18,7 +18,12 @@ interface KeyDef {
   get(c: TenantConfig): string;
   set(c: TenantConfig, v: string): TenantConfig;
   secret?: boolean;
+  /** a setting kept with the tenant's PROFILE prefs instead (display.*) */
+  profile?: { get(p: Profile): string; set(p: Profile, v: string): Profile; reset: string };
 }
+
+/** profile-backed keys have no TenantConfig side */
+const viaProfile = (help: string, profile: NonNullable<KeyDef["profile"]>): KeyDef => ({ help, get: () => "", set: (c) => c, profile });
 
 const onOff = (v: string): boolean => {
   if (/^(on|yes|true|1)$/i.test(v.trim())) return true;
@@ -56,6 +61,28 @@ export const KEYS: Record<string, KeyDef> = {
       return { ...c, automationFlags: { ...c.automationFlags, rate: r } };
     },
   },
+  "display.currency": viaProfile(
+    "show pay in: auto (your home country's currency, default) | none (the posting's own only) | USD, EUR, GBP, INR, … — the posting's figure always leads",
+    {
+      reset: "auto",
+      get: (p) => p.prefs.display.currency,
+      set: (p, v) => {
+        const c = v.trim().toUpperCase() || "AUTO";
+        const value = c === "AUTO" ? "auto" : c === "NONE" || c === "ORIGINAL" ? "none" : c;
+        if (value === c && !(/^[A-Z]{3}$/.test(c) && knownCurrency(c))) throw usage(`unknown currency "${v}"`, "Use auto, none or a code like USD, EUR, GBP, INR.");
+        return { ...p, prefs: { ...p.prefs, display: { ...p.prefs.display, currency: value } } };
+      },
+    },
+  ),
+  "display.payPeriod": viaProfile("the converted pay figure per: year (default) | month", {
+    reset: "year",
+    get: (p) => p.prefs.display.period,
+    set: (p, v) => {
+      const r = v.trim().toLowerCase().replace(/^(yearly|annual|yr|y)$/, "year").replace(/^(monthly|mo|m)$/, "month");
+      if (r !== "year" && r !== "month") throw usage(`payPeriod must be year or month (got "${v}")`);
+      return { ...p, prefs: { ...p.prefs, display: { ...p.prefs.display, period: r } } };
+    },
+  }),
   "discovery.presets": {
     help: `discovery presets switched on, comma-separated: ${listPresets().map((p) => p.id).join(", ")}`,
     get: (c) => activePresets(c).join(","),
@@ -69,8 +96,17 @@ async function config(ctx: Ctx): Promise<TenantConfig> {
   return c;
 }
 
+async function profileOf(ctx: Ctx): Promise<Profile> {
+  return (await (await ctx.repo()).getProfile(ctx.tenantId)) ?? blankProfile(ctx.tenantId);
+}
+
+/** a key's current value, from the config or (display.*) the profile */
+async function valueOf(ctx: Ctx, def: KeyDef, c?: TenantConfig): Promise<string> {
+  return def.profile ? def.profile.get(await profileOf(ctx)) : def.get(c ?? (await config(ctx)));
+}
+
 function keyDef(key: string): KeyDef {
-  const def = KEYS[key === "discovery.preset" ? "discovery.presets" : key];
+  const def = KEYS[key === "discovery.preset" ? "discovery.presets" : key === "display.period" ? "display.payPeriod" : key];
   if (!def) throw usage(`unknown config key "${key}"`, `Keys: ${Object.keys(KEYS).join(", ")}`);
   return def;
 }
@@ -78,7 +114,7 @@ function keyDef(key: string): KeyDef {
 const shown = (def: KeyDef, v: string) => (def.secret ? mask(v) : v);
 
 export function register(program: Command, ctx: Ctx): void {
-  const cfg = program.command("config").description("settings: generation model + key, form-filler, discovery presets");
+  const cfg = program.command("config").description("settings: generation model + key, form-filler, discovery presets, pay display");
   const keysHelp = "\nKeys:\n" + Object.entries(KEYS).map(([k, d]) => `  ${k.padEnd(18)} ${d.help}`).join("\n");
 
   cfg.command("list", { isDefault: true })
@@ -86,7 +122,7 @@ export function register(program: Command, ctx: Ctx): void {
     .action(async () => {
       const c = await config(ctx);
       const llm = tenantProvider(c);
-      const rows = Object.entries(KEYS).map(([k, d]) => ({ key: k, value: shown(d, d.get(c)) }));
+      const rows = await Promise.all(Object.entries(KEYS).map(async ([k, d]) => ({ key: k, value: shown(d, await valueOf(ctx, d, c)) })));
       ctx.out.emit({ settings: Object.fromEntries(rows.map((r) => [r.key, r.value])), effectiveProvider: llm.name }, () => {
         ctx.out.table(["key", "value"], rows.map((r) => [r.key, r.value || ctx.out.dim("(default)")]));
         ctx.out.line();
@@ -101,7 +137,7 @@ export function register(program: Command, ctx: Ctx): void {
     .addHelpText("after", keysHelp)
     .action(async (key: string) => {
       const def = keyDef(key);
-      const v = shown(def, def.get(await config(ctx)));
+      const v = shown(def, await valueOf(ctx, def));
       ctx.out.emit({ key, value: v }, () => ctx.out.line(v));
     });
 
@@ -119,11 +155,13 @@ export function register(program: Command, ctx: Ctx): void {
       if (v == null) throw usage(`give a value for ${key}${def.secret ? " (use --stdin for the key)" : ""}`);
       if (def.secret && value != null && !o.stdin) ctx.out.warn("a key passed as an argument is saved in your shell history — prefer `--stdin` next time.");
       const repo = await ctx.repo();
-      if (key.startsWith("discovery.preset")) await setPresets(repo, ctx.tenantId, presetIds(v));
+      if (def.profile) await repo.saveProfile(def.profile.set(await profileOf(ctx), v));
+      else if (key.startsWith("discovery.preset")) await setPresets(repo, ctx.tenantId, presetIds(v));
       else await repo.saveConfig(def.set(await config(ctx), v));
       const after = await config(ctx);
-      ctx.out.emit({ ok: true, key, value: shown(def, def.get(after)) }, () => {
-        ctx.out.ok(`${key} = ${shown(def, def.get(after)) || "(default)"}`);
+      const now = shown(def, await valueOf(ctx, def, after));
+      ctx.out.emit({ ok: true, key, value: now }, () => {
+        ctx.out.ok(`${key} = ${now || "(default)"}`);
         if (key === "llm.key" && after.llmChoice === "echo") ctx.out.hint("Now pick the provider it belongs to: jobflow config set llm.provider anthropic");
         if (key === "llm.provider" && after.llmChoice !== "echo" && !after.llmApiKey && !after.llmBaseUrl) ctx.out.hint("Add its key: jobflow config set llm.key --stdin");
         if (key.startsWith("llm.")) ctx.out.hint("Check it works: jobflow doctor");
@@ -137,6 +175,11 @@ export function register(program: Command, ctx: Ctx): void {
       const def = keyDef(key);
       const repo = await ctx.repo();
       if (key.startsWith("discovery.preset")) throw usage("pick presets instead: jobflow discovery use <preset,preset>");
+      if (def.profile) {
+        await repo.saveProfile(def.profile.set(await profileOf(ctx), def.profile.reset));
+        ctx.out.emit({ ok: true, key }, () => ctx.out.ok(`${key} reset`));
+        return;
+      }
       await repo.saveConfig(def.set(await config(ctx), key === "llm.provider" ? "echo" : key === "automation.fill" ? "off" : key === "automation.rate" ? "human" : ""));
       ctx.out.emit({ ok: true, key }, () => ctx.out.ok(`${key} reset`));
     });

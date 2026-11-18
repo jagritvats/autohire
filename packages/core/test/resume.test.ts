@@ -133,8 +133,9 @@ describe("skills", () => {
 
   it("keeps unknown list entries as unrecognized, drops parenthetical asides", () => {
     const s = parseSkillLines(["- Languages: Java, SQL", "Backend: Kafka (event-driven), REST APIs", "Other: Figma, Technical writing", "Cloud (AWS, GCP)"]);
-    expect(s.canonical).toEqual(["java", "kafka", "rest", "aws", "gcp"]);
-    expect(s.unrecognized).toEqual(["SQL", "Figma", "Technical writing", "Cloud"]);
+    // SQL and Figma are dictionary skills now (2026-11 taxonomy pass)
+    expect(s.canonical).toEqual(["java", "sql", "kafka", "rest", "figma", "aws", "gcp"]);
+    expect(s.unrecognized).toEqual(["Technical writing", "Cloud"]);
   });
 });
 
@@ -220,7 +221,8 @@ describe("parseResume", () => {
     expect(md.yoe.value).toBeCloseTo(6.7, 1);
     expect(md.levelBand.value).toBe("senior");
     expect(md.archetypes).toEqual(["backend"]);
-    expect(md.skills.unrecognized).toEqual(["SQL", "Figma", "Technical writing"]);
+    expect(md.skills.canonical).toEqual(expect.arrayContaining(["sql", "figma"]));
+    expect(md.skills.unrecognized).toEqual(["Technical writing"]);
     expect(md.text).not.toMatch(/\*\*|^#/m);
     expect(md.warnings).toEqual([]);
   });
@@ -277,8 +279,8 @@ describe("parseResume", () => {
     expect(li.roles.map((r) => [r.title, r.company, r.start, r.end, r.current])).toEqual(
       md.roles.map((r) => [r.title, r.company, r.start, r.end, r.current]),
     );
-    expect(li.skills.canonical).toEqual(expect.arrayContaining(["java", "javascript", "go", "kafka", "aws", "postgres"]));
-    expect(li.skills.unrecognized).toEqual(["Figma"]);
+    expect(li.skills.canonical).toEqual(expect.arrayContaining(["java", "javascript", "go", "kafka", "aws", "postgres", "figma"]));
+    expect(li.skills.unrecognized).toEqual([]);
     expect(li.evidence.every((e) => e.origin === "linkedin")).toBe(true);
     expect(li.yoe.value).toBeCloseTo(6.7, 1);
   });

@@ -7,6 +7,37 @@ All notable changes to JobFlow are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **A logo and app icons**: the mark (a J and a full stop on a tile: JobFlow stops, you act)
+  in the header of every style, a favicon (`/favicon.ico` no longer 404s), an SVG icon that
+  follows light/dark, an Apple touch icon, a web manifest with PWA icons, extension icons, and
+  an Open Graph image. The logo files, posters, share images and a brand sheet live in
+  [`brand/`](brand/README.md) (artwork CC BY 4.0), built from scripts with fictional data only.
+- **"Also posted for …"**: a role a company posts once per country (same title, level and
+  JD, separate reqs) is one card — the sibling that scores best for you — listing where else
+  it is posted, each one a click (or `jobflow show <id>`) away. Scores are unchanged and the
+  folded count is reported in the web feed, `jobflow feed` and the MCP `list_jobs` result.
+- **`data_analytics` role type** for analyst, BI and analytics-engineering roles ("Data
+  Analyst", "Analytics Engineer", "BI Developer", "Product Analyst"), selectable in setup,
+  the profile and `--roles data_analytics` (alias `analytics`). A profile targeting `data_ml`
+  alone keeps covering analytics roles.
+- **More skills recognised**: SQL, Excel, Tableau, Power BI, Looker, pandas, NumPy, dbt,
+  statistics, A/B testing, R, SAS, Vue, Nuxt, Angular, Svelte, Next.js, CSS, HTML, Sass, Jest,
+  Cypress, Playwright, webpack, Storybook, Figma, Swift, SwiftUI, Objective-C, Dart / Flutter
+  and C — in JDs and in your imported résumé (only what the file names).
+- **Salary units and currencies**: pay is read with its period (per year, month, week, day or
+  hour — "LPA", "p.a.", "/mo", "pm", "monatlich", "/hr", "an hour", "day rate"…), its basis
+  (base, OTE, total comp) and any equity on top, in 30+ currencies (₹/Rs/INR, lakh and crore,
+  €, £, CHF, kr, zł, ¥, R$, MX$, AED, …). A bare "$" follows the posting's country (CA$, A$,
+  NZ$, S$, HK$, MX$), and outside the US it is never trusted enough to hide a job. Cards show
+  the posting's own figure first, then your currency: "₹30L–45L / yr (≈ $32k–48k)",
+  "€5,500–6,500 / mo (≈ €66k–78k / yr)", "$50–70 / hr (≈ $104k–146k / yr, annualised from
+  hourly)".
+- **"Show pay in" setting**: web Settings → Pay display, or `jobflow config set
+  display.currency USD` and `display.payPeriod month`. Defaults to your home country's
+  currency, per year.
+- **Exchange rates**: a dated table of ECB reference rates ships with JobFlow; syncs refresh it
+  from the free ECB feed when reachable (`JOBFLOW_FX_REFRESH=0` turns that off). The salary
+  floor, `--min-salary`, the salary score and the new `--sort pay` compare in one currency.
 - **MCP server for AI agents**: `jobflow mcp` (new package `@jobflow/mcp`) serves JobFlow
   over the Model Context Protocol on stdio, for Claude Code, Claude Desktop or any MCP client.
   Tools: `jobflow_status`, `search_jobs`, `list_jobs`, `get_job`, saved searches,
@@ -29,6 +60,25 @@ All notable changes to JobFlow are documented here. The format follows
 - **Liveness checks** for Ashby and Himalayas postings (a definitive 404/410 retires a role).
 
 ### Changed
+- **Company level ladders** read conservatively: "Engineer 5", "Data Scientist II", L8+,
+  "E5" / "IC4" beside a role noun, SMTS / LMTS / PMTS. A bare "Member of Technical Staff" no
+  longer reads as a staff-level role. A level the source states wins over a code the title
+  only implies. The mappings are in `docs/architecture.md`.
+- **Preset tags (#india, #us, …) follow where a role is workable**: a US-only remote role
+  found by an India feed, or an India-list employer's US office, no longer carries `#india`.
+- **Stored postings re-read on the next sync** (normalize version 3): JDs saved with HTML
+  markup or entities are cleaned, titles' entities decoded, and role type, level, skills and
+  years asked re-derived — no re-poll needed.
+- **Salary floor across currencies**: a posting stated in another currency is now compared
+  after conversion. It is hidden or excluded only when it stays below the line after the
+  rate's margin of error (3% plus 1% per month of rate age); hourly, daily and weekly rates
+  never decide alone. Converted pay counts a little less in the score.
+- **Estimates on cards**: a low-confidence or very wide estimate shows as one rough figure
+  ("rough est. ~₹17L / yr") instead of a precise-looking range; a range whose ends are equal
+  prints one value; a stated currency that doesn't match the job's location is flagged.
+- **`--min-salary` and filters** accept the same amounts as postings ("40L INR", "$120k",
+  "5000 EUR/mo").
+- Stored salaries are re-parsed once on your next sync (no re-poll needed).
 - **Bigger, verified presets.** Every non-India seed now carries a board URL checked live
   with at least one role in the preset's markets. Seeds: `us` 47 → 130, `eu-uk` 27 → 133,
   `global-remote` 24 → 31, `india` 230 → 239 (dead and India-less boards dropped, 18
@@ -90,6 +140,17 @@ All notable changes to JobFlow are documented here. The format follows
   instead of an in-memory fallback, and keeps the feed synced on a schedule while open.
 
 ### Fixed
+- **Role types**: an assistant, administrator, support or success role is no longer filed as
+  platform or backend engineering because its title names a developer platform; "Developer
+  Advocate" and similar are no longer in the software-engineer salary family.
+- **Stack notes**: a domain ("fintech") is never listed as a skill "new to you"; iOS roles
+  name Swift / Objective-C instead of "no languages we recognise"; a Next.js role is no
+  longer read as plain React; skills typed before the dictionary knew them count.
+- **Résumé import** found 1 skill in a fictional analyst's résumé and 4 in a frontend
+  developer's; now 9 and 12 ("Next.js", "Vue.js" were read as JavaScript).
+- **Locations**: multi-word cities are kept whole ("San Francisco Bay Area", not "San";
+  "Remote (United States)" has no city "United"); a remote list of countries reaching beyond
+  Europe is "those countries only", not "Europe only".
 - **Feed cards read the same, plainly, everywhere**: one location line built once for the
   web, `jobflow feed`/`show` and the MCP tools — remote roles always say where they can be done
   from ("Remote · worldwide", "Remote · APAC", "Remote · Canada only"), onsite/hybrid roles
@@ -211,5 +272,5 @@ tailoring and an autofill that always stops at a human review gate.
 - Docs: getting started, CLI reference, guides, configuration, architecture, legal & ethics.
 - CI: build, typecheck, ~650 offline tests, plus personal-data and tenant-isolation guards.
 
-[Unreleased]: https://github.com/jagritvats/autohire/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/jagritvats/autohire/releases/tag/v0.1.0
+[Unreleased]: https://github.com/jagritvats/jobflow/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/jagritvats/jobflow/releases/tag/v0.1.0

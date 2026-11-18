@@ -18,6 +18,7 @@ your first sync and search, and the web app.
 | [AI agents (MCP)](guides/ai-agents-mcp.md) | Use JobFlow from Claude Code, Claude Desktop or any MCP client: setup, the single-writer note, the tools / prompts / resources, examples, safety |
 | [Keyboard shortcuts](guides/keyboard-shortcuts.md) | `j`/`k`/`o`/`t`/`a`/`s`/`x`/`/`/`?` on Jobs, and the keys elsewhere |
 | [LLM providers](guides/llm-providers.md) | Optional models, keys, default models, cost control, honesty rules |
+| [Videos: transcripts](guides/video-walkthrough.md) | The walkthrough, the trailer, the two video guides (getting started, MCP) and the reels: their narration with chapter times, as a text alternative to the videos |
 | [Troubleshooting](guides/troubleshooting.md) | A locked data directory, empty syncs and proxies, working without a model, PDFs that won't parse, Chromium, LaTeX, ports, resetting your data, logs |
 
 ## Reference

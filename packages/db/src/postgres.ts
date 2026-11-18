@@ -20,6 +20,7 @@ import type {
   Profile,
   SalaryBand,
   SalaryEstimate,
+  SyncRunRecord,
   SavedSearch,
   ScoreBreakdown,
   Session,
@@ -38,6 +39,8 @@ import type {
   SalaryCacheEntry,
   UpsertCompany,
 } from "./repository.js";
+import type { PostingNormalizedPatch } from "./repository.js";
+import { SYNC_RUNS_KEPT } from "./repository.js";
 import { pgPoolClient, sqlState, type SqlClient, type SqlRow } from "./sql.js";
 
 /**
@@ -183,8 +186,8 @@ export class PgRepository implements Repository {
          salary_min, salary_max, currency, salary_source, salary_confidence,
          experience_min, experience_max,
          apply_url, jd_embedding, dedup_key, posted_at, posted_by_agency, embed_key, salary_raw,
-         loc_countries, location_raw)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36)
+         loc_countries, location_raw, salary_period, salary_basis, salary_equity)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39)
        on conflict (ats_type, ats_job_id) do update set
          -- identity (id, company_id, source, tier, first_seen) stays with the first write;
          -- everything derived from the fetched posting is refreshed, the dedup key included:
@@ -199,7 +202,8 @@ export class PgRepository implements Repository {
          loc_countries = excluded.loc_countries, location_raw = excluded.location_raw,
          salary_min = excluded.salary_min, salary_max = excluded.salary_max, currency = excluded.currency,
          salary_source = excluded.salary_source, salary_confidence = excluded.salary_confidence,
-         salary_raw = excluded.salary_raw,
+         salary_raw = excluded.salary_raw, salary_period = excluded.salary_period,
+         salary_basis = excluded.salary_basis, salary_equity = excluded.salary_equity,
          -- salary_estimate is NOT touched: it belongs to the estimator's own pass (§11.4)
          experience_min = excluded.experience_min, experience_max = excluded.experience_max,
          apply_url = excluded.apply_url, jd_embedding = excluded.jd_embedding, embed_key = excluded.embed_key,
@@ -227,6 +231,7 @@ export class PgRepository implements Repository {
         p.applyUrl, p.jdEmbedding ? JSON.stringify(p.jdEmbedding) : null, p.dedupKey,
         p.postedAt ?? null, p.postedByAgency ?? false, p.embedKey ?? null, p.salaryRaw ?? null,
         p.location.countries ?? null, p.locationRaw ?? null,
+        p.salary.period ?? null, p.salary.basis ?? null, p.salary.equity ?? null,
       ],
     );
     return rowToPosting(rows[0]!);
@@ -253,19 +258,38 @@ export class PgRepository implements Repository {
   async updatePostingSalary(id: string, band: SalaryBand, salaryRaw?: string | null): Promise<void> {
     await this.q(
       `update posting set salary_min = $2, salary_max = $3, currency = $4, salary_source = $5, salary_confidence = $6,
-         salary_raw = case when $7::boolean then $8 else salary_raw end
+         salary_raw = case when $7::boolean then $8 else salary_raw end,
+         salary_period = $9, salary_basis = $10, salary_equity = $11
        where id = $1`,
-      [id, band.min, band.max, band.currency, band.source, band.confidence, salaryRaw !== undefined, salaryRaw ?? null],
+      [id, band.min, band.max, band.currency, band.source, band.confidence, salaryRaw !== undefined, salaryRaw ?? null,
+        band.period ?? null, band.basis ?? null, band.equity ?? null],
     );
   }
-  async updatePostingNormalized(id: string, patch: { location: ParsedLocation; postedByAgency: boolean }): Promise<void> {
+  async updatePostingNormalized(id: string, patch: PostingNormalizedPatch): Promise<void> {
     const l = patch.location;
-    await this.q(
-      `update posting set loc_mode = $2, loc_city = $3, loc_country = $4, loc_tz = $5, remote_geo = $6, sponsorship = $7,
-         location_confidence = $8, loc_countries = $9, posted_by_agency = $10
-       where id = $1`,
-      [id, l.mode, l.city, l.country, l.timezone, l.remoteGeo, l.sponsorship, l.confidence, l.countries ?? null, patch.postedByAgency],
-    );
+    const sets = [
+      "loc_mode = $2", "loc_city = $3", "loc_country = $4", "loc_tz = $5", "remote_geo = $6", "sponsorship = $7",
+      "location_confidence = $8", "loc_countries = $9", "posted_by_agency = $10",
+    ];
+    const params: unknown[] = [id, l.mode, l.city, l.country, l.timezone, l.remoteGeo, l.sponsorship, l.confidence, l.countries ?? null, patch.postedByAgency];
+    // the title / JD derivations only when given — omitted ones stay as stored
+    const opt = (col: string, v: unknown) => {
+      params.push(v);
+      sets.push(`${col} = $${params.length}`);
+    };
+    if (patch.title !== undefined) opt("title", patch.title);
+    if (patch.titleNorm !== undefined) opt("title_norm", patch.titleNorm);
+    if (patch.roleArchetype !== undefined) opt("role_archetype", patch.roleArchetype);
+    if (patch.levelBand !== undefined) opt("level_band", patch.levelBand);
+    if (patch.jdText !== undefined) opt("jd_text", patch.jdText);
+    if (patch.jdSkills !== undefined) opt("jd_skills", patch.jdSkills);
+    if (patch.requirements !== undefined) opt("requirements", JSON.stringify(patch.requirements));
+    if (patch.experience !== undefined) {
+      opt("experience_min", patch.experience.min);
+      opt("experience_max", patch.experience.max);
+    }
+    if (patch.dedupKey !== undefined) opt("dedup_key", patch.dedupKey);
+    await this.q(`update posting set ${sets.join(", ")} where id = $1`, params);
   }
   async saveSalaryEstimates(updates: Array<{ id: string; estimate: SalaryEstimate | null }>): Promise<number> {
     let n = 0;
@@ -522,13 +546,14 @@ export class PgRepository implements Repository {
     }
   }
   async listMatches(tenantId: string, limit = 50): Promise<Array<Match & { posting: Posting }>> {
-    // feed = rule-passing + active + non-invalidated/stale + not archived by this tenant
+    // feed = rule-passing + active + non-invalidated/stale + not archived by this tenant +
+    // a canonical posting (a match scored before its posting became a duplicate is stale)
     const { rows } = await this.q(
       `select m.*, row_to_json(p.*) as posting from match m
        join posting p on p.id = m.posting_id
        left join posting_user_state s on s.posting_id = p.id and s.tenant_id = m.tenant_id
        where m.tenant_id = $1 and m.rule_pass = true and p.is_active = true and p.status = 'active'
-         and coalesce(s.archived, false) = false
+         and p.canonical_id is null and coalesce(s.archived, false) = false
        order by m.score desc limit $2`,
       [tenantId, limit],
     );
@@ -1014,6 +1039,33 @@ export class PgRepository implements Repository {
     );
     return rows.map((r) => r.company_id);
   }
+
+  // ── sync runs ──
+  async saveSyncRun(run: SyncRunRecord): Promise<void> {
+    await this.q(
+      `insert into sync_run (id, trigger, origin, status, started_at, finished_at, summary)
+       values ($1, $2, $3, $4, $5, $6, $7)
+       on conflict (id) do update set
+         status = excluded.status, finished_at = excluded.finished_at, summary = excluded.summary`,
+      [run.id, run.trigger, run.origin, run.status, new Date(run.startedAt), run.finishedAt ? new Date(run.finishedAt) : null, JSON.stringify(run.summary)],
+    );
+    await this.q(
+      `delete from sync_run where id not in (select id from sync_run order by started_at desc limit $1)`,
+      [SYNC_RUNS_KEPT],
+    );
+  }
+  async listSyncRuns(limit = 20): Promise<SyncRunRecord[]> {
+    const { rows } = await this.q("select * from sync_run order by started_at desc limit $1", [limit]);
+    return rows.map((r) => ({
+      id: String(r.id),
+      trigger: r.trigger as SyncRunRecord["trigger"],
+      origin: r.origin as SyncRunRecord["origin"],
+      status: r.status as SyncRunRecord["status"],
+      startedAt: r.started_at as Date,
+      finishedAt: (r.finished_at as Date | null) ?? null,
+      summary: (typeof r.summary === "string" ? JSON.parse(r.summary) : r.summary) as SyncRunRecord["summary"],
+    }));
+  }
 }
 
 // ── LLM key at rest ──
@@ -1074,6 +1126,10 @@ function rowToPosting(r: SqlRow): Posting {
   const salary: SalaryBand = {
     min: num(r.salary_min), max: num(r.salary_max), currency: r.currency,
     source: r.salary_source, confidence: r.salary_confidence,
+    // how it was stated; absent on rows from before migration 0021 (= year, not said)
+    ...(r.salary_period ? { period: r.salary_period } : {}),
+    ...(r.salary_basis ? { basis: r.salary_basis } : {}),
+    ...(r.salary_equity != null ? { equity: !!r.salary_equity } : {}),
   };
   const experience: ExperienceRange = { min: num(r.experience_min), max: num(r.experience_max) };
   return {

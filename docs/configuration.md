@@ -14,7 +14,8 @@ not keep in a file (your LLM key, preferences, sources) are set with `jobflow co
 | `JOBFLOW_STORE` | `pglite` | `pglite` (durable, zero-setup Postgres-in-WASM under the data dir — the CLI and web app share it; one process writes at a time, so the web app runs the sync schedule and the queued maintenance jobs itself instead of a separate worker) · `memory` (nothing persists — demos and tests) · `postgres` (use `DATABASE_URL`; needed to run the worker alongside the web app). |
 | `DATABASE_URL` | _(blank)_ | Your own Postgres. Wins over `JOBFLOW_STORE`. For hosted Postgres append `?sslmode=require`. |
 | `JOBFLOW_SAMPLE_PROFILE` | _(off)_ | `1` starts new profiles as the fictional sample candidate instead of blank. |
-| `JOBFLOW_DEMO_DATA` | _(off)_ | `1` seeds an offline, fully fictional corpus (screenshots, UI work). |
+| `JOBFLOW_DEMO_DATA` | _(off)_ | `1` seeds an offline, fully fictional corpus (screenshots, videos, UI work). A sync then "fetches" that corpus with paced, fictional progress, and a search asks it instead of the live boards: nothing reaches the network. |
+| `JOBFLOW_DEMO_SYNC_PACE` | `1` | Demo mode only: scales the demo sync's pauses (`0` = instant, `2` = twice as slow). |
 | `JOBFLOW_AUTH` | `none` | `none`: single-user, answers only on localhost. `password`: accounts for a shared/hosted instance — see [guides/self-hosting.md](guides/self-hosting.md). |
 | `JOBFLOW_SECRET_KEY` | _(blank)_ | 32-byte base64 key; when set, stored LLM keys are encrypted at rest. Required for hosting. |
 | `JOBFLOW_SIGNUP` | `closed` | Hosted mode: `open` lets anyone create an account (the first account is always allowed and becomes admin). |
@@ -42,6 +43,7 @@ Grouped by what they unlock. Storage and accounts are covered above.
 |---|---|---|
 | `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` | optional | developer.adzuna.com (free). Unlocks country-aware salary estimates incl. India. **Without these, the cascade falls back to levels.fyi (US).** |
 | _(levels.fyi)_ | none | No key — free `.md` endpoint, attribution surfaced automatically. |
+| `JOBFLOW_FX_REFRESH` | default on | Exchange rates for pay conversion. JobFlow ships a dated table of ECB reference rates; a sync also fetches the day's rates from the free, keyless ECB feed (api.frankfurter.dev), caches them in your store with their date, and uses them when reachable. `0` = never fetch (the shipped table is used). Conversions always show the rate's date. |
 
 ### Local agent (Tier 3 + form-fill) — §7.1, all OFF by default
 | Var | Default | What it does |

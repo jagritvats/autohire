@@ -1,0 +1,700 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Style: CLASSIC — the "calm ledger" design system (JobFlow's look before Editorial).
+   A quiet, information-dense tool you open every day. Neutral surfaces (Radix slate), one
+   accent for action (indigo), cards with a score numeral and meter, one sans (Inter), and a
+   strict semantic palette for the honesty signals:
+     good  (green)  strong match / stated & verified
+     info  (blue)   neutral fact worth noticing (ATS-direct, fair match)
+     warn  (amber)  caution — read before you apply (flags, us-only remote, low trust)
+     bad   (red)    exclusions, invalidations, destructive actions
+   Dark is this style's base theme; light when the OS or the toggle asks for it.
+   Every selector is scoped to [data-style="classic"] with :where() (no added specificity);
+   the shared structure is app/globals.css. Spec + measured ratios: docs/internal/DESIGN.md.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* ── 1. tokens — dark is the base; light is the system default when the OS asks for it ── */
+:root:where([data-style="classic"]), :root [data-style-preview="classic"] {
+  color-scheme: dark;
+  --bg: #111113;
+  --surface: #18191b;
+  --surface-2: #212225;
+  --surface-3: #272a2d;
+  --border: #2e3135;
+  --border-strong: #363a3f;
+  --control-border: #696e77;
+  --text: #edeef0;
+  --text-2: #b0b4ba;
+  --text-3: #9a9ea6;
+
+  --accent-solid: #3e63dd;
+  --accent-solid-hover: #3358d4;
+  --accent-on: #ffffff;
+  --accent-text: #9eb1ff;
+  --accent-soft: #182449;
+  --accent-border: #3a4f97;
+
+  --good: #71d083;
+  --good-soft: #1b2a1e;
+  --good-border: #2d5736;
+  --good-solid: #46a758;
+  --info: #70b8ff;
+  --info-soft: #0d2847;
+  --info-border: #205d9e;
+  --warn: #ffca16;
+  --warn-soft: #302008;
+  --warn-border: #714f19;
+  --bad: #ff9592;
+  --bad-soft: #3b1219;
+  --bad-border: #8c333a;
+  --bad-solid: #e5484d;
+
+  --focus: #8da4ef;
+  --overlay: rgba(0, 0, 0, 0.6);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.55);
+  --header-bg: rgba(17, 17, 19, 0.85);
+  --paper: #f4f4f2; /* document previews are always paper-white */
+
+  /* type */
+  --font-sans: var(--font-inter, "Inter"), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: var(--font-jbmono, "JetBrains Mono"), ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-base: 14px;
+  --fs-md: 15px;
+  --fs-lg: 17px;
+  --fs-xl: 20px;
+  --fs-2xl: 26px;
+  --lh-tight: 1.25;
+  --lh: 1.5;
+
+  /* space (4px grid) */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --s-10: 40px;
+  --s-12: 48px;
+
+  /* shape */
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-full: 999px;
+
+  /* controls */
+  --h-sm: 28px;
+  --h-md: 34px;
+  --h-lg: 40px;
+
+  /* layout */
+  --header-h: 56px;
+  --gutter: 24px;
+  --content-max: 1080px;
+  --wide-max: 1400px;
+  --rail-w: 272px;
+
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --dur: 140ms;
+
+  /* Editorial's token names, in this style's terms — shared structure may use any token */
+  --rule: var(--border-strong);
+  --font-display: var(--font-sans);
+  --fs-2xs: 11px;
+  --fs-score: 22px;
+  --fs-score-lg: 40px;
+  --lh-read: 1.6;
+  --measure: 72ch;
+  --tracking-caps: 0.06em;
+  --s-16: 64px;
+  --read-max: 760px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:where([data-style="classic"]):not([data-theme="dark"]), :root:not([data-theme="dark"]) [data-style-preview="classic"] {
+    color-scheme: light;
+    --bg: #f7f7f9;
+    --surface: #ffffff;
+    --surface-2: #f0f0f3;
+    --surface-3: #e8e8ec;
+    --border: #e0e1e6;
+    --border-strong: #cdced6;
+    --control-border: #80838d;
+    --text: #1c2024;
+    --text-2: #50555d;
+    --text-3: #62666f;
+    --accent-solid: #3e63dd;
+    --accent-solid-hover: #3358d4;
+    --accent-on: #ffffff;
+    --accent-text: #3a5bc7;
+    --accent-soft: #edf2fe;
+    --accent-border: #abbdf9;
+    --good: #287a39;
+    --good-soft: #e9f6e9;
+    --good-border: #94ce9a;
+    --good-solid: #46a758;
+    --info: #0b68b8;
+    --info-soft: #e6f4fe;
+    --info-border: #8ec8f6;
+    --warn: #975700;
+    --warn-soft: #fefbe9;
+    --warn-border: #e9c162;
+    --bad: #b8262b;
+    --bad-soft: #feebec;
+    --bad-border: #f4a9aa;
+    --bad-solid: #dc3e42;
+    --focus: #3e63dd;
+    --overlay: rgba(17, 17, 19, 0.4);
+    --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+    --shadow-md: 0 6px 20px rgba(16, 24, 40, 0.08), 0 1px 3px rgba(16, 24, 40, 0.06);
+    --shadow-lg: 0 16px 48px rgba(16, 24, 40, 0.16);
+    --header-bg: rgba(255, 255, 255, 0.88);
+  }
+}
+/* explicit choice from the theme toggle (kept identical to the block above) */
+:root:where([data-style="classic"])[data-theme="light"], :root[data-theme="light"] [data-style-preview="classic"] {
+  color-scheme: light;
+  --bg: #f7f7f9;
+  --surface: #ffffff;
+  --surface-2: #f0f0f3;
+  --surface-3: #e8e8ec;
+  --border: #e0e1e6;
+  --border-strong: #cdced6;
+  --control-border: #80838d;
+  --text: #1c2024;
+  --text-2: #50555d;
+  --text-3: #62666f;
+  --accent-solid: #3e63dd;
+  --accent-solid-hover: #3358d4;
+  --accent-on: #ffffff;
+  --accent-text: #3a5bc7;
+  --accent-soft: #edf2fe;
+  --accent-border: #abbdf9;
+  --good: #287a39;
+  --good-soft: #e9f6e9;
+  --good-border: #94ce9a;
+  --good-solid: #46a758;
+  --info: #0b68b8;
+  --info-soft: #e6f4fe;
+  --info-border: #8ec8f6;
+  --warn: #975700;
+  --warn-soft: #fefbe9;
+  --warn-border: #e9c162;
+  --bad: #b8262b;
+  --bad-soft: #feebec;
+  --bad-border: #f4a9aa;
+  --bad-solid: #dc3e42;
+  --focus: #3e63dd;
+  --overlay: rgba(17, 17, 19, 0.4);
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-md: 0 6px 20px rgba(16, 24, 40, 0.08), 0 1px 3px rgba(16, 24, 40, 0.06);
+  --shadow-lg: 0 16px 48px rgba(16, 24, 40, 0.16);
+  --header-bg: rgba(255, 255, 255, 0.88);
+}
+:root:where([data-style="classic"])[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+@media (max-width: 640px) {
+  :root:where([data-style="classic"]), :root [data-style-preview="classic"] {
+    --gutter: 16px;
+    --header-h: 52px;
+  }
+}
+:where([data-style="classic"]) body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  line-height: var(--lh);
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+:where([data-style="classic"]) h1,
+:where([data-style="classic"]) h2,
+:where([data-style="classic"]) h3,
+:where([data-style="classic"]) h4 {
+  margin: 0;
+  line-height: var(--lh-tight);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+:where([data-style="classic"]) code {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+:where([data-style="classic"]) .skip-link {
+  position: absolute;
+  left: var(--s-3);
+  top: -100px;
+  z-index: 100;
+  background: var(--accent-solid);
+  color: var(--accent-on);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-md);
+  font-weight: 600;
+}
+:where([data-style="classic"]) .eyebrow {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+:where([data-style="classic"]) .brand__mark {
+  display: block;
+}
+:where([data-style="classic"]) .app-nav__link:hover {
+  color: var(--text);
+  background: var(--surface-2);
+  text-decoration: none;
+}
+:where([data-style="classic"]) .app-nav__link[aria-current="page"] {
+  color: var(--text);
+  background: var(--surface-3);
+  box-shadow: inset 0 -2px 0 var(--accent-solid);
+}
+
+@media (max-width: 900px) {
+  :where([data-style="classic"]) .app-nav__link {
+    display: flex;
+    height: 44px;
+  }
+  :where([data-style="classic"]) .app-nav__link[aria-current="page"] {
+    box-shadow: inset 3px 0 0 var(--accent-solid);
+  }
+}
+:where([data-style="classic"]) .page-header__text {
+  min-width: 0;
+}
+:where([data-style="classic"]) .page-title {
+  font-size: var(--fs-2xl);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+:where([data-style="classic"]) .count-pill {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--r-full);
+  background: var(--accent-solid);
+  color: var(--accent-on);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+:where([data-style="classic"]) .input:focus,
+:where([data-style="classic"]) .select:focus,
+:where([data-style="classic"]) .textarea:focus,
+:where([data-style="classic"]) .field input:focus,
+:where([data-style="classic"]) .field select:focus,
+:where([data-style="classic"]) .field textarea:focus,
+:where([data-style="classic"]) .field-row input:focus,
+:where([data-style="classic"]) .field-row select:focus,
+:where([data-style="classic"]) .add-row input:focus,
+:where([data-style="classic"]) .search-bar input:focus,
+:where([data-style="classic"]) .tokens-new input:focus,
+:where([data-style="classic"]) .auth-field input:focus,
+:where([data-style="classic"]) .ev-row input:focus,
+:where([data-style="classic"]) .ev-row textarea:focus,
+:where([data-style="classic"]) .reg-row select:focus,
+:where([data-style="classic"]) .crm-row select:focus,
+:where([data-style="classic"]) .crm-input:focus,
+:where([data-style="classic"]) .crm-date:focus,
+:where([data-style="classic"]) .big-text:focus,
+:where([data-style="classic"]) .answer-text:focus,
+:where([data-style="classic"]) .onb-paste:focus,
+:where([data-style="classic"]) .doc-src:focus {
+  outline: none;
+  border-color: var(--focus);
+  box-shadow: 0 0 0 1px var(--focus);
+}
+:where([data-style="classic"]) .banner--good,
+:where([data-style="classic"]) .tailor-app-msg {
+  border-color: var(--good-border);
+  background: var(--good-soft);
+}
+:where([data-style="classic"]) .banner--warn,
+:where([data-style="classic"]) .stale-banner,
+:where([data-style="classic"]) .worker-hint,
+:where([data-style="classic"]) .tailor-warn,
+:where([data-style="classic"]) .page-note {
+  border-color: var(--warn-border);
+  background: var(--warn-soft);
+}
+:where([data-style="classic"]) .banner--bad,
+:where([data-style="classic"]) .tailor-err,
+:where([data-style="classic"]) .auth-error {
+  border-color: var(--bad-border);
+  background: var(--bad-soft);
+}
+:where([data-style="classic"]) .panel--warn,
+:where([data-style="classic"]) .card-block.danger {
+  border-color: var(--warn-border);
+  box-shadow: inset 3px 0 0 var(--warn), var(--shadow-sm);
+}
+:where([data-style="classic"]) .panel--bad {
+  border-color: var(--bad-border);
+  box-shadow: inset 3px 0 0 var(--bad), var(--shadow-sm);
+}
+:where([data-style="classic"]) .empty__title {
+  font-weight: 600;
+  color: var(--text);
+  font-size: var(--fs-md);
+}
+:where([data-style="classic"]) .empty__body {
+  max-width: 52ch;
+  font-size: var(--fs-sm);
+}
+:where([data-style="classic"]) .gen-empty {
+  padding: var(--s-3) var(--s-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+:where([data-style="classic"]) .skeleton {
+  display: block;
+  height: 12px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 50%, var(--surface-2) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+:where([data-style="classic"]) .segmented__item,
+:where([data-style="classic"]) .view-tab,
+:where([data-style="classic"]) .variant-tabs .chip {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  cursor: pointer;
+}
+:where([data-style="classic"]) .segmented__item:hover,
+:where([data-style="classic"]) .view-tab:hover,
+:where([data-style="classic"]) .variant-tabs .chip:hover {
+  color: var(--text);
+}
+:where([data-style="classic"]) .segmented__item[aria-pressed="true"],
+:where([data-style="classic"]) .view-tab[data-on="true"],
+:where([data-style="classic"]) .view-tab[aria-pressed="true"],
+:where([data-style="classic"]) .variant-tabs .chip[data-on="true"],
+:where([data-style="classic"]) .variant-tabs .chip[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-sm), 0 0 0 1px var(--border-strong);
+}
+:where([data-style="classic"]) .table__row:hover,
+:where([data-style="classic"]) .reg-row:hover,
+:where([data-style="classic"]) .crm-row:hover {
+  background: var(--surface-2);
+}
+:where([data-style="classic"]) .section-nav__link:hover {
+  color: var(--text);
+  text-decoration: none;
+}
+:where([data-style="classic"]) .section-nav__link[aria-current="location"] {
+  color: var(--text);
+  font-weight: 600;
+  border-left-color: var(--accent-solid);
+}
+:where([data-style="classic"]) .toast,
+:where([data-style="classic"]) .saved-toast {
+  position: fixed;
+  bottom: var(--s-6);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  display: inline-flex;
+  gap: var(--s-2);
+  align-items: center;
+  max-width: calc(100vw - 2 * var(--gutter));
+  padding: 10px 16px;
+  border-radius: var(--r-md);
+  background: var(--text);
+  color: var(--bg);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  box-shadow: var(--shadow-lg);
+}
+:where([data-style="classic"]) .rail-group h4,
+:where([data-style="classic"]) .rail-group legend,
+:where([data-style="classic"]) .rail-group__label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  width: 100%;
+  padding: 0;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-2);
+  letter-spacing: 0;
+  text-transform: none;
+}
+:where([data-style="classic"]) .rail-group .chip {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: var(--fs-xs);
+}
+:where([data-style="classic"]) .slider-val {
+  color: var(--accent-text);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+:where([data-style="classic"]) .feed-count {
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+/* activity / command bar */
+:where([data-style="classic"]) .activity {
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  overflow: hidden;
+}
+:where([data-style="classic"]) .activity .worker-hint {
+  border-radius: 0;
+  border-width: 1px 0 0;
+}
+:where([data-style="classic"]) .match:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+}
+:where([data-style="classic"]) .match[data-invalid="true"] {
+  border-color: var(--bad-border);
+}
+:where([data-style="classic"]) .score-num {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  color: var(--text-2);
+}
+:where([data-style="classic"]) .score-meter {
+  width: 40px;
+  height: 4px;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+  overflow: hidden;
+}
+:where([data-style="classic"]) .score-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--text-3);
+}
+:where([data-style="classic"]) .match__score[data-band="hi"] .score-meter > span {
+  background: var(--good-solid);
+}
+:where([data-style="classic"]) .match__score[data-band="mid"] .score-meter > span {
+  background: var(--info);
+}
+:where([data-style="classic"]) .score-cap {
+  font-size: 11px;
+  color: var(--text-3);
+  font-weight: 500;
+}
+
+@media (max-width: 640px) {
+  :where([data-style="classic"]) .page {
+    padding-top: var(--s-5);
+  }
+  :where([data-style="classic"]) .page-title {
+    font-size: 22px;
+  }
+  :where([data-style="classic"]) .panel,
+  :where([data-style="classic"]) .card-block {
+    padding: var(--s-4);
+    border-radius: var(--r-md);
+  }
+  :where([data-style="classic"]) .score-num {
+    font-size: 20px;
+  }
+  :where([data-style="classic"]) .score-meter {
+    width: 32px;
+  }
+  :where([data-style="classic"]) .match__go {
+    width: 100%;
+  }
+}
+:where([data-style="classic"]) .inputs-strip:has(.in-warnings) {
+  border-color: var(--warn-border);
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+:where([data-style="classic"]) .match__title-link:hover {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+:where([data-style="classic"]) .match[data-selected="true"] {
+  border-color: var(--accent-solid);
+  box-shadow: 0 0 0 1px var(--accent-solid), var(--shadow-md);
+}
+
+/* Jobs: the get-started checklist */
+:where([data-style="classic"]) .ux-setup {
+  border-color: var(--accent-border);
+  background: linear-gradient(var(--accent-soft), var(--accent-soft)) top / 100% 3px no-repeat, var(--surface);
+}
+:where([data-style="classic"]) .ux-job .card-block + .card-block {
+  margin-top: 0;
+}
+:where([data-style="classic"]) .chip--code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+
+/* ── unified markup: the parts of the one component tree that Classic doesn't draw ── */
+/* (Editorial's dateline and lede; Spark's ring, band word, drawing, chips) */
+:where([data-style="classic"]) .score-ring__dial svg,
+:where([data-style="classic"]) .score-ring__word,
+:where([data-style="classic"]) .empty__art > svg,
+:where([data-style="classic"]) .feed-dateline,
+:where([data-style="classic"]) .feed-lede,
+:where([data-style="classic"]) .feed-hero__eyebrow,
+:where([data-style="classic"]) .feed-hero__extra {
+  display: none;
+}
+:where([data-style="classic"]) .score-ring,
+:where([data-style="classic"]) .score-ring__dial,
+:where([data-style="classic"]) .empty__art {
+  display: contents;
+}
+/* the wordmark: one weight in this style (the mark itself is the shared brand asset) */
+:where([data-style="classic"]) .brand__name em {
+  font-style: normal;
+}
+
+/* ── Appearance: the Classic preview — a neutral card, Inter, an indigo button ── */
+[data-style-preview="classic"] .style-preview__brand::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--accent-solid);
+}
+[data-style-preview="classic"] .style-preview__card {
+  box-shadow: var(--shadow-sm);
+}
+[data-style-preview="classic"] .style-preview__num {
+  font-weight: 650;
+}
+
+/* ── sync (header indicator, panel, Sources history): the calm-ledger reading ── */
+:where([data-style="classic"]) .sync-ind {
+  padding: 0 var(--s-2);
+  border-bottom: 0;
+  border-radius: var(--r-md);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+:where([data-style="classic"]) .sync-ind:hover {
+  background: var(--surface-2);
+}
+:where([data-style="classic"]) .sync-row__head,
+:where([data-style="classic"]) .sync-inflight__label,
+:where([data-style="classic"]) .sync-counts dt,
+:where([data-style="classic"]) .sync-table thead th {
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+:where([data-style="classic"]) .sync-row__head .num {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+:where([data-style="classic"]) .sync-bar {
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+}
+:where([data-style="classic"]) .sync-bar__fill {
+  border-radius: inherit;
+  background: var(--accent-solid);
+}
+:where([data-style="classic"]) .sync-drawer__head {
+  border-bottom-color: var(--border);
+}
+:where([data-style="classic"]) .sync-drawer__title {
+  font-size: var(--fs-lg);
+  font-weight: 650;
+}
+:where([data-style="classic"]) .sync-drawer__lead {
+  font-size: var(--fs-md);
+  line-height: 1.5;
+}
+:where([data-style="classic"]) .sync-drawer__lead b,
+:where([data-style="classic"]) .sync-subtitle {
+  font-weight: 600;
+}
+:where([data-style="classic"]) .sync-counts {
+  gap: var(--s-2);
+  border: 0;
+}
+:where([data-style="classic"]) .sync-counts > div,
+:where([data-style="classic"]) .sync-counts > div:nth-child(n) {
+  padding: var(--s-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+:where([data-style="classic"]) .sync-counts dd {
+  font-weight: 650;
+}
+:where([data-style="classic"]) .sync-table {
+  border-top: 1px solid var(--border);
+}
+:where([data-style="classic"]) .sync-table thead th {
+  background: var(--surface-2);
+}
+:where([data-style="classic"]) .sync-table th:first-child,
+:where([data-style="classic"]) .sync-table td:first-child {
+  padding-left: var(--s-3);
+}
+:where([data-style="classic"]) .sync-table th.num:last-child,
+:where([data-style="classic"]) .sync-table td.num:last-child {
+  padding-right: var(--s-3);
+}
+:where([data-style="classic"]) .sync-errors {
+  padding: var(--s-3);
+  border: 1px solid var(--warn-border);
+  border-radius: var(--r-md);
+  background: var(--warn-soft);
+}
+
+/* "Also posted for …" (sibling postings): the places read as links */
+:where([data-style="classic"]) .match__more {
+  margin-top: var(--s-1);
+}
+:where([data-style="classic"]) .match__more a {
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 2px;
+}
+:where([data-style="classic"]) .match__more a:hover {
+  color: var(--accent-text);
+  text-decoration-color: currentColor;
+}

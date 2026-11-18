@@ -28,6 +28,8 @@ export interface CustomSourceTarget {
   configKey: string;
   /** every DiscoverySource row (any tenant) this target serves — runs are recorded on each */
   sourceIds: string[];
+  /** the tenants those rows belong to (sync progress shows a custom source only to them) */
+  tenantIds?: string[];
 }
 
 /** one search-capable fetch, shared by every saved search that maps onto it. */
@@ -196,6 +198,7 @@ export async function resolveDiscoveryPlan(repo: Repository, opts: DiscoveryPlan
     const existing = byKey.get(src.configKey);
     if (existing) {
       existing.sourceIds.push(src.id);
+      if (!existing.tenantIds?.includes(src.tenantId)) (existing.tenantIds ??= []).push(src.tenantId);
       continue;
     }
     let entry: CustomSourceTarget | null = null;
@@ -205,6 +208,7 @@ export async function resolveDiscoveryPlan(repo: Repository, opts: DiscoveryPlan
           source: "rss",
           configKey: src.configKey,
           sourceIds: [src.id],
+          tenantIds: [src.tenantId],
           target: { limit: 200, params: { url: cfg.url, feedKey: feedKeyFor(cfg.url), ...(cfg.company ? { company: cfg.company } : {}) } },
         };
         rssTargets.push(entry);
@@ -214,6 +218,7 @@ export async function resolveDiscoveryPlan(repo: Repository, opts: DiscoveryPlan
           source: "json_feed",
           configKey: src.configKey,
           sourceIds: [src.id],
+          tenantIds: [src.tenantId],
           target: { limit: 500, params: { url: cfg.url, feedKey: feedKeyFor(cfg.url), mapping: JSON.stringify(cfg.mapping) } },
         };
         jsonTargets.push(entry);
@@ -223,6 +228,7 @@ export async function resolveDiscoveryPlan(repo: Repository, opts: DiscoveryPlan
           source: "hn_whoishiring",
           configKey: src.configKey,
           sourceIds: [src.id],
+          tenantIds: [src.tenantId],
           target: { limit: 300, ...(cfg.storyId ? { params: { storyId: cfg.storyId } } : {}) },
         };
         threads.push(entry);

@@ -4,6 +4,8 @@ import { cosine } from "../util/vector.js";
 import { EUROPE_CODES, cityKey, locationCountryCodes, postingDedupKey } from "../normalize/index.js";
 import { dedupTitleKey, normCompany } from "../normalize/titles.js";
 
+export * from "./siblings.js";
+
 /**
  * Deduper (§ Deduper). Same role surfaces via Greenhouse *and* an aggregator.
  * Two stages:

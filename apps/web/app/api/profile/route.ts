@@ -30,6 +30,14 @@ const Patch = z.object({
       homeCountry: z.string().regex(/^([A-Z]{2})?$/, "home country is a 2-letter code like US or DE").optional(),
       markets: z.array(z.string().regex(/^[A-Z]{2}$/, "markets are 2-letter country codes")).optional(),
       currency: z.string().optional(),
+      /** "show pay in": auto (home currency) | none | an ISO code; per year or month */
+      display: z
+        .object({
+          currency: z.string().regex(/^(auto|none|[A-Z]{3})$/, "display currency is auto, none or a 3-letter code like USD"),
+          period: z.enum(["year", "month"]),
+        })
+        .partial()
+        .optional(),
       stackProfile: z.array(z.string()).optional(),
       targetArchetypes: z.array(z.string()).optional(),
       remoteGeoOk: z.array(z.string()).optional(),
@@ -71,6 +79,7 @@ export async function PUT(req: Request) {
       ...current.prefs,
       ...(body.prefs ?? {}),
       contact: { ...current.prefs.contact, ...(body.prefs?.contact ?? {}) },
+      display: { ...current.prefs.display, ...(body.prefs?.display ?? {}) },
     } as Profile["prefs"],
   };
   await repo.saveProfile(next);

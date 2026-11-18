@@ -1,6 +1,7 @@
 import type { FeedCard } from "@/lib/feed";
 import { ageText, experienceText, locationText, payText, roleText } from "@/lib/cardText";
-import { Badge, Icon } from "@/components/ui";
+import { Badge, Icon, ScoreRing } from "@/components/ui";
+import { skillText } from "@jobflow/core";
 
 const TIER3 = new Set(["naukri", "ambitionbox", "glassdoor", "linkedin"]);
 
@@ -36,7 +37,6 @@ export function MatchCard({
   /** only in the "Reported" collection: restore a listing marked invalid */
   onInvalidate?: (card: FeedCard) => void;
 }) {
-  const band = !scored ? "none" : card.score >= 78 ? "hi" : card.score >= 60 ? "mid" : "lo";
   const geoBad = card.location.remoteGeo === "us_only" || card.location.remoteGeo === "eu_only";
   const locUncertain = card.location.confidence < 0.5;
   const locText = locationText(card);
@@ -54,23 +54,7 @@ export function MatchCard({
       data-card-id={card.id}
       data-invalid={card.invalidated || undefined}
     >
-      {scored ? (
-        <div className="match__score" data-band={band} aria-label={`Match score ${card.score} of 100`} role="img" title="How well this matches your profile (0–100)">
-          <span className="score-num" aria-hidden="true">
-            {card.score}
-          </span>
-          <span className="score-meter" aria-hidden="true">
-            <span style={{ width: `${Math.max(0, Math.min(100, card.score))}%` }} />
-          </span>
-        </div>
-      ) : (
-        <div className="match__score" data-band="none" title="Not scored — add your résumé to rank jobs for you">
-          <span className="score-num" aria-hidden="true">
-            —
-          </span>
-          <span className="sr-only">Not scored yet</span>
-        </div>
-      )}
+      <ScoreRing score={scored ? card.score : null} />
 
       <div className="match__body">
         <div className="match__head">
@@ -151,10 +135,9 @@ export function MatchCard({
           )}
           {card.comp && pay && (
             <Badge estimate={pay.estimate} className="tag comp" data-estimate={pay.estimate || undefined} title={pay.title}>
-              {pay.estimate ? "~" : ""}
               {card.comp.label}{" "}
               <span className="conf">
-                · {pay.estimate ? `est ${Math.round((card.comp.confidenceScore ?? 0) * 100)}%` : card.comp.confidence}
+                · {pay.estimate ? `${Math.round((card.comp.confidenceScore ?? 0) * 100)}%` : card.comp.confidence}
               </span>
             </Badge>
           )}
@@ -194,6 +177,18 @@ export function MatchCard({
           </ul>
         )}
 
+        {card.siblings?.length > 0 && (
+          <p className="match__more">
+            Also posted for{" "}
+            {card.siblings.map((sib, i) => (
+              <span key={sib.id}>
+                {i > 0 ? ", " : ""}
+                <a href={`/jobs/${sib.id}`}>{sib.place}</a>
+              </span>
+            ))}
+          </p>
+        )}
+
         {moreAtCompany > 0 && (
           <p className="match__more">
             <a href={`/company/${card.companyId}`}>
@@ -206,7 +201,7 @@ export function MatchCard({
           <div className="match__skills" aria-label="Skills in the posting">
             {card.skills.map((s) => (
               <span className="match__skill" key={s}>
-                {s.replace(/_/g, " ")}
+                {skillText(s)}
               </span>
             ))}
           </div>

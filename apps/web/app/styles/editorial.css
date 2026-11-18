@@ -1,0 +1,1297 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Style: EDITORIAL (the default) — Concept A, "Editorial light".
+   A daily reading tool, set like a good paper: warm paper ground, near-black ink, a
+   characterful display serif (Fraunces) for headlines and the score numerals, a newsroom
+   grotesk (Schibsted Grotesk) for everything you read and press, hairline rules instead of
+   boxes, and ONE confident accent — vermilion — that means "you can act here".
+   The semantic palette still carries the honesty signals, and only those:
+     good  (green)  strong match / stated & verified
+     info  (blue)   neutral fact worth noticing (ATS-direct, fair match)
+     warn  (amber)  caution — read before you apply (flags, us-only remote, low trust)
+     bad   (crimson) exclusions, invalidations, destructive actions
+   Every selector is scoped to [data-style="editorial"] with :where() (no added specificity);
+   the shared structure is app/globals.css. Spec + measured ratios: docs/internal/DESIGN.md.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* ── 1. tokens — light (paper) is the base; dark (night paper) when the OS or the toggle asks ── */
+:root:where([data-style="editorial"]), :root [data-style-preview="editorial"] {
+  color-scheme: light;
+  --bg: #f6f1e7; /* paper */
+  --surface: #fcfaf5; /* a fresh sheet: inputs, menus, the drawer */
+  --surface-2: #efe8da; /* a tint: hover, code, quiet fills */
+  --surface-3: #e6ddcc; /* pressed / selected neutral */
+  --border: #e2d9c8; /* hairline rules (decorative) */
+  --border-strong: #cdc2ad; /* chip/button edges, section rules */
+  --rule: #1c1915; /* the ink rule under a masthead / section head */
+  --control-border: #8c8170; /* input edges (≥ 3:1, WCAG 1.4.11) */
+  --text: #1c1915; /* ink */
+  --text-2: #4d473f;
+  --text-3: #645c51;
+
+  --accent-solid: #b8401c; /* vermilion */
+  --accent-solid-hover: #9f3615;
+  --accent-on: #ffffff;
+  --accent-text: #a83a19;
+  --accent-soft: #f8e3d6;
+  --accent-border: #e5ab92;
+
+  --good: #2c6a33;
+  --good-soft: #e3eedb;
+  --good-border: #9cc398;
+  --good-solid: #3f8a47;
+  --info: #205e86;
+  --info-soft: #dfeaf0;
+  --info-border: #94bcd3;
+  --warn: #895200;
+  --warn-soft: #f6e9c9;
+  --warn-border: #dcb56a;
+  --bad: #a31d3c;
+  --bad-soft: #f6dde0;
+  --bad-border: #e09aa8;
+  --bad-solid: #c0304f;
+
+  --focus: #b8401c;
+  --overlay: rgba(28, 25, 21, 0.38);
+  --shadow-sm: none;
+  --shadow-md: 0 1px 0 rgba(28, 25, 21, 0.04), 0 10px 30px -12px rgba(60, 40, 20, 0.18);
+  --shadow-lg: 0 24px 60px -20px rgba(60, 40, 20, 0.35);
+  --header-bg: rgba(246, 241, 231, 0.92);
+  --paper: #fdfcf8; /* document previews are always paper-white */
+
+  /* type — display serif for headlines + numerals, grotesk for reading and controls */
+  --font-display: var(--font-fraunces, "Fraunces"), "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --font-sans: var(--font-schibsted, "Schibsted Grotesk"), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: var(--font-jbmono, "JetBrains Mono"), ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --fs-2xs: 11px; /* small caps labels only */
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-base: 15px;
+  --fs-md: 16px;
+  --fs-lg: 20px; /* card headlines (serif) */
+  --fs-xl: 26px; /* section heads (serif) */
+  --fs-2xl: 44px; /* page title (serif) */
+  --fs-score: 46px; /* the score numeral on a card */
+  --fs-score-lg: 88px; /* the score numeral on the Job page */
+  --lh-tight: 1.15;
+  --lh: 1.55;
+  --lh-read: 1.7; /* long-form: the job description, the lede */
+  --measure: 68ch;
+  --tracking-caps: 0.08em;
+
+  /* space (4px grid) */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --s-10: 40px;
+  --s-12: 48px;
+  --s-16: 64px;
+
+  /* shape — print, not plastic: small radii on surfaces, pills only on things you press */
+  --r-sm: 3px;
+  --r-md: 4px;
+  --r-lg: 6px;
+  --r-full: 999px;
+
+  /* controls */
+  --h-sm: 30px;
+  --h-md: 36px;
+  --h-lg: 44px;
+
+  /* layout */
+  --header-h: 64px;
+  --gutter: 32px;
+  --content-max: 1120px;
+  --read-max: 720px;
+  --wide-max: 1440px;
+  --rail-w: 264px;
+
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --dur: 160ms;
+}
+
+/* night paper: warm charcoal, never blue-black; same roles, re-measured */
+@media (prefers-color-scheme: dark) {
+  :root:where([data-style="editorial"]):not([data-theme="light"]), :root:not([data-theme="light"]) [data-style-preview="editorial"] {
+    color-scheme: dark;
+    --bg: #161411;
+    --surface: #1d1a16;
+    --surface-2: #25221d;
+    --surface-3: #2e2a24;
+    --border: #35302a;
+    --border-strong: #4a433b;
+    --rule: #f2ede3;
+    --control-border: #80776a;
+    --text: #f2ede3;
+    --text-2: #cdc4b5;
+    --text-3: #a99f90;
+    --accent-solid: #ef7a4f;
+    --accent-solid-hover: #f58e67;
+    --accent-on: #1c1410;
+    --accent-text: #f59a74;
+    --accent-soft: #3a2016;
+    --accent-border: #8a4329;
+    --good: #86cf8c;
+    --good-soft: #1c2a1c;
+    --good-border: #3d6a3f;
+    --good-solid: #5fae66;
+    --info: #7fbde3;
+    --info-soft: #152530;
+    --info-border: #2f5d78;
+    --warn: #efc15a;
+    --warn-soft: #2f2310;
+    --warn-border: #7a5a1d;
+    --bad: #ff8fa0;
+    --bad-soft: #3a1720;
+    --bad-border: #8c3446;
+    --bad-solid: #e5536f;
+    --focus: #f59a74;
+    --overlay: rgba(0, 0, 0, 0.6);
+    --shadow-md: 0 12px 32px -12px rgba(0, 0, 0, 0.6);
+    --shadow-lg: 0 24px 60px -16px rgba(0, 0, 0, 0.7);
+    --header-bg: rgba(22, 20, 17, 0.92);
+  }
+}
+/* explicit choice from the theme toggle (kept identical to the block above) */
+:root:where([data-style="editorial"])[data-theme="dark"], :root[data-theme="dark"] [data-style-preview="editorial"] {
+  color-scheme: dark;
+  --bg: #161411;
+  --surface: #1d1a16;
+  --surface-2: #25221d;
+  --surface-3: #2e2a24;
+  --border: #35302a;
+  --border-strong: #4a433b;
+  --rule: #f2ede3;
+  --control-border: #80776a;
+  --text: #f2ede3;
+  --text-2: #cdc4b5;
+  --text-3: #a99f90;
+  --accent-solid: #ef7a4f;
+  --accent-solid-hover: #f58e67;
+  --accent-on: #1c1410;
+  --accent-text: #f59a74;
+  --accent-soft: #3a2016;
+  --accent-border: #8a4329;
+  --good: #86cf8c;
+  --good-soft: #1c2a1c;
+  --good-border: #3d6a3f;
+  --good-solid: #5fae66;
+  --info: #7fbde3;
+  --info-soft: #152530;
+  --info-border: #2f5d78;
+  --warn: #efc15a;
+  --warn-soft: #2f2310;
+  --warn-border: #7a5a1d;
+  --bad: #ff8fa0;
+  --bad-soft: #3a1720;
+  --bad-border: #8c3446;
+  --bad-solid: #e5536f;
+  --focus: #f59a74;
+  --overlay: rgba(0, 0, 0, 0.6);
+  --shadow-md: 0 12px 32px -12px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 24px 60px -16px rgba(0, 0, 0, 0.7);
+  --header-bg: rgba(22, 20, 17, 0.92);
+}
+:root:where([data-style="editorial"])[data-theme="light"] {
+  color-scheme: light;
+}
+
+@media (max-width: 640px) {
+  :root:where([data-style="editorial"]), :root [data-style-preview="editorial"] {
+    --gutter: 16px;
+    --header-h: 56px;
+    --fs-2xl: 34px;
+    --fs-score: 38px;
+    --fs-score-lg: 64px;
+  }
+}
+:where([data-style="editorial"]) body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  line-height: var(--lh);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+:where([data-style="editorial"]) h1,
+:where([data-style="editorial"]) h2,
+:where([data-style="editorial"]) h3,
+:where([data-style="editorial"]) h4 {
+  margin: 0;
+  line-height: var(--lh-tight);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+/* headlines are set in the display serif; h4 and smaller stay in the grotesk */
+:where([data-style="editorial"]) h1,
+:where([data-style="editorial"]) h2,
+:where([data-style="editorial"]) h3 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-variation-settings: "SOFT" 50;
+}
+:where([data-style="editorial"]) code {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+:where([data-style="editorial"]) .skip-link {
+  position: absolute;
+  left: var(--s-3);
+  top: -100px;
+  z-index: 100;
+  background: var(--accent-solid);
+  color: var(--accent-on);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-md);
+  font-weight: 600;
+}
+/* the editorial label: small caps in the grotesk, tracked out */
+:where([data-style="editorial"]) .eyebrow {
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+:where([data-style="editorial"]) .brand {
+  gap: 9px;
+  align-items: center;
+}
+/* the tile mark (brand/README.md); its colours come from tokens in AppShell's BrandMark */
+:where([data-style="editorial"]) .brand__mark {
+  display: block;
+  flex: none;
+}
+:where([data-style="editorial"]) .app-nav__link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: transparent;
+  transition: background var(--dur) var(--ease);
+}
+:where([data-style="editorial"]) .app-nav__link:hover {
+  color: var(--text);
+  text-decoration: none;
+}
+:where([data-style="editorial"]) .app-nav__link:hover::after {
+  background: var(--border-strong);
+}
+:where([data-style="editorial"]) .app-nav__link[aria-current="page"] {
+  color: var(--text);
+  font-weight: 600;
+}
+:where([data-style="editorial"]) .app-nav__link[aria-current="page"]::after {
+  background: var(--accent-solid);
+}
+:where([data-style="editorial"]) .app-nav__link:focus-visible {
+  outline-offset: -2px;
+}
+
+@media (max-width: 900px) {
+  :where([data-style="editorial"]) .app-nav__list li + li {
+    border-top: 1px solid var(--border);
+  }
+  /* the open menu reads like a contents page: big serif entries */
+  :where([data-style="editorial"]) .app-nav__link {
+    display: flex;
+    height: 56px;
+    font-family: var(--font-display);
+    font-size: 24px;
+    font-weight: 400;
+    color: var(--text);
+    font-variation-settings: "SOFT" 50, "opsz" 36;
+  }
+  :where([data-style="editorial"]) .app-nav__link::after {
+    display: none;
+  }
+  :where([data-style="editorial"]) .app-nav__link[aria-current="page"] {
+    font-weight: 500;
+    font-style: italic;
+    color: var(--accent-text);
+  }
+}
+:where([data-style="editorial"]) .page-header__text {
+  min-width: 0;
+  max-width: 64rem;
+}
+:where([data-style="editorial"]) .page-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-2xl);
+  font-weight: 400;
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+  font-variation-settings: "SOFT" 50, "opsz" 144;
+  overflow-wrap: anywhere;
+}
+:where([data-style="editorial"]) .count-pill {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--r-full);
+  background: var(--accent-solid);
+  color: var(--accent-on);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+:where([data-style="editorial"]) .input:focus,
+:where([data-style="editorial"]) .select:focus,
+:where([data-style="editorial"]) .textarea:focus,
+:where([data-style="editorial"]) .field input:focus,
+:where([data-style="editorial"]) .field select:focus,
+:where([data-style="editorial"]) .field textarea:focus,
+:where([data-style="editorial"]) .field-row input:focus,
+:where([data-style="editorial"]) .field-row select:focus,
+:where([data-style="editorial"]) .add-row input:focus,
+:where([data-style="editorial"]) .search-bar input:focus,
+:where([data-style="editorial"]) .tokens-new input:focus,
+:where([data-style="editorial"]) .auth-field input:focus,
+:where([data-style="editorial"]) .ev-row input:focus,
+:where([data-style="editorial"]) .ev-row textarea:focus,
+:where([data-style="editorial"]) .reg-row select:focus,
+:where([data-style="editorial"]) .crm-row select:focus,
+:where([data-style="editorial"]) .crm-input:focus,
+:where([data-style="editorial"]) .crm-date:focus,
+:where([data-style="editorial"]) .big-text:focus,
+:where([data-style="editorial"]) .answer-text:focus,
+:where([data-style="editorial"]) .onb-paste:focus,
+:where([data-style="editorial"]) .doc-src:focus {
+  outline: none;
+  border-color: var(--focus);
+  box-shadow: 0 0 0 1px var(--focus);
+}
+:where([data-style="editorial"]) .banner--good,
+:where([data-style="editorial"]) .tailor-app-msg {
+  border-left-color: var(--good);
+  background: var(--good-soft);
+}
+:where([data-style="editorial"]) .banner--warn,
+:where([data-style="editorial"]) .stale-banner,
+:where([data-style="editorial"]) .worker-hint,
+:where([data-style="editorial"]) .tailor-warn,
+:where([data-style="editorial"]) .page-note {
+  border-left-color: var(--warn);
+  background: var(--warn-soft);
+}
+:where([data-style="editorial"]) .banner--bad,
+:where([data-style="editorial"]) .tailor-err,
+:where([data-style="editorial"]) .auth-error {
+  border-left-color: var(--bad);
+  background: var(--bad-soft);
+}
+:where([data-style="editorial"]) .panel--warn,
+:where([data-style="editorial"]) .card-block.danger {
+  border-top: 2px solid var(--warn);
+}
+:where([data-style="editorial"]) .panel--bad {
+  border-top: 2px solid var(--bad);
+}
+:where([data-style="editorial"]) .empty__title {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 400;
+  color: var(--text);
+  font-size: 32px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-variation-settings: "SOFT" 100, "opsz" 96;
+  max-width: 24ch;
+}
+:where([data-style="editorial"]) .empty__body {
+  max-width: 56ch;
+  font-size: var(--fs-md);
+  line-height: var(--lh);
+}
+:where([data-style="editorial"]) .skeleton {
+  display: block;
+  height: 12px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 50%, var(--surface-2) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+:where([data-style="editorial"]) .segmented__item,
+:where([data-style="editorial"]) .view-tab,
+:where([data-style="editorial"]) .variant-tabs .chip {
+  position: relative;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 1px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-3);
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  font-weight: 500;
+  cursor: pointer;
+}
+:where([data-style="editorial"]) .segmented__item::after,
+:where([data-style="editorial"]) .view-tab::after,
+:where([data-style="editorial"]) .variant-tabs .chip::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: transparent;
+}
+:where([data-style="editorial"]) .segmented__item:hover,
+:where([data-style="editorial"]) .view-tab:hover,
+:where([data-style="editorial"]) .variant-tabs .chip:hover {
+  color: var(--text);
+  background: transparent;
+}
+:where([data-style="editorial"]) .segmented__item:hover::after {
+  background: var(--border-strong);
+}
+:where([data-style="editorial"]) .segmented__item[aria-pressed="true"],
+:where([data-style="editorial"]) .view-tab[data-on="true"],
+:where([data-style="editorial"]) .view-tab[aria-pressed="true"],
+:where([data-style="editorial"]) .variant-tabs .chip[data-on="true"],
+:where([data-style="editorial"]) .variant-tabs .chip[aria-pressed="true"] {
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: none;
+}
+:where([data-style="editorial"]) .segmented__item[aria-pressed="true"]::after,
+:where([data-style="editorial"]) .view-tab[data-on="true"]::after,
+:where([data-style="editorial"]) .view-tab[aria-pressed="true"]::after,
+:where([data-style="editorial"]) .variant-tabs .chip[data-on="true"]::after,
+:where([data-style="editorial"]) .variant-tabs .chip[aria-pressed="true"]::after {
+  background: var(--text);
+}
+:where([data-style="editorial"]) .segmented__item:focus-visible {
+  outline-offset: 0;
+}
+:where([data-style="editorial"]) .table__row:hover,
+:where([data-style="editorial"]) .reg-row:hover,
+:where([data-style="editorial"]) .crm-row:hover {
+  background: color-mix(in srgb, var(--surface-2) 55%, transparent);
+}
+:where([data-style="editorial"]) .section-nav__link:hover {
+  color: var(--text);
+  text-decoration: none;
+}
+:where([data-style="editorial"]) .section-nav__link[aria-current="location"] {
+  color: var(--accent-text);
+  font-weight: 600;
+}
+:where([data-style="editorial"]) .toast,
+:where([data-style="editorial"]) .saved-toast {
+  position: fixed;
+  bottom: var(--s-6);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  display: inline-flex;
+  gap: var(--s-2);
+  align-items: center;
+  max-width: calc(100vw - 2 * var(--gutter));
+  padding: 10px 18px;
+  border-radius: var(--r-full);
+  background: var(--text);
+  color: var(--bg);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  box-shadow: var(--shadow-lg);
+}
+:where([data-style="editorial"]) .rail-group .chip {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: var(--fs-xs);
+}
+:where([data-style="editorial"]) .slider-val {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: var(--fs-xs);
+}
+:where([data-style="editorial"]) .feed-count {
+  font-size: var(--fs-sm);
+  color: var(--text-3);
+  padding-bottom: 8px;
+}
+
+/* activity / command bar */
+:where([data-style="editorial"]) .activity {
+  border: 0;
+  border-top: 1px solid var(--border-strong);
+  border-radius: 0;
+  background: transparent;
+  overflow: hidden;
+}
+:where([data-style="editorial"]) .activity .worker-hint {
+  border-radius: 0;
+}
+:where([data-style="editorial"]) .match::before {
+  /* the keyboard-selection mark: a vermilion rule in the margin */
+  content: "";
+  position: absolute;
+  left: calc(-1 * var(--s-4));
+  top: var(--s-8);
+  bottom: var(--s-6);
+  width: 3px;
+  background: transparent;
+}
+:where([data-style="editorial"]) .match[data-invalid="true"] .match__title {
+  text-decoration: line-through;
+  text-decoration-color: var(--bad);
+  text-decoration-thickness: 1px;
+}
+:where([data-style="editorial"]) .score-num {
+  font-family: var(--font-display);
+  font-size: var(--fs-score);
+  font-weight: 350;
+  line-height: 0.82;
+  font-variant-numeric: lining-nums tabular-nums;
+  font-variation-settings: "SOFT" 30, "opsz" 144;
+  letter-spacing: -0.04em;
+  color: var(--text-3);
+}
+:where([data-style="editorial"]) .score-meter {
+  width: 56px;
+  height: 2px;
+  border-radius: 0;
+  background: var(--border);
+  overflow: hidden;
+}
+:where([data-style="editorial"]) .score-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: 0;
+  background: var(--text-3);
+}
+:where([data-style="editorial"]) .match__score[data-band="hi"] .score-meter > span {
+  background: var(--good-solid);
+}
+:where([data-style="editorial"]) .match__score[data-band="mid"] .score-meter > span {
+  background: var(--info);
+}
+:where([data-style="editorial"]) .score-cap {
+  font-size: var(--fs-2xs);
+  color: var(--text-3);
+  font-weight: 600;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+/* the separator hangs off the word before it, so a wrapped line never starts with a dot */
+:where([data-style="editorial"]) .match__skill:not(:last-child)::after {
+  content: "·";
+  margin: 0 8px;
+  color: var(--text-3);
+}
+
+@media (max-width: 640px) {
+  :where([data-style="editorial"]) .page {
+    padding-top: var(--s-8);
+  }
+  :where([data-style="editorial"]) .panel,
+  :where([data-style="editorial"]) .card-block {
+    padding: var(--s-5) 0 var(--s-2);
+  }
+  :where([data-style="editorial"]) .match::before {
+    left: calc(-1 * var(--s-3));
+  }
+  :where([data-style="editorial"]) .score-meter {
+    width: 36px;
+  }
+}
+:where([data-style="editorial"]) .inputs-strip:has(.in-warnings) {
+  border-color: var(--warn-border);
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+:where([data-style="editorial"]) .match__title-link:hover {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+:where([data-style="editorial"]) .match[data-selected="true"]::before {
+  background: var(--accent-solid);
+}
+
+/* Jobs: the get-started checklist */
+/* set as a boxed aside — the one framed thing on the page, because it's temporary */
+:where([data-style="editorial"]) .ux-setup {
+  border: 1px solid var(--border-strong);
+  border-top: 3px solid var(--accent-solid);
+  background: var(--surface);
+  padding: var(--s-5) var(--s-6) var(--s-4);
+}
+:where([data-style="editorial"]) .ux-setup .panel__title {
+  font-size: var(--fs-lg);
+}
+:where([data-style="editorial"]) .ux-job .card-block + .card-block {
+  margin-top: var(--s-10);
+}
+:where([data-style="editorial"]) .chip--code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+
+/* ── 13. Concept A — editorial surfaces (the Jobs masthead, the Job page as an article) ── */
+
+/* Jobs: the "today" masthead — dateline, the h1, a one-sentence lede, the figures */
+:where([data-style="editorial"]) .feed-toolbar__start {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  min-width: 0;
+  flex: 1 1 520px;
+}
+:where([data-style="editorial"]) .feed-dateline {
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--accent-text);
+  margin-bottom: var(--s-2);
+}
+:where([data-style="editorial"]) .feed-toolbar__start .page-title {
+  font-size: calc(var(--fs-2xl) + 8px);
+}
+:where([data-style="editorial"]) .feed-lede {
+  margin-top: var(--s-3);
+  max-width: 60ch;
+  font-family: var(--font-display);
+  font-size: 21px;
+  line-height: 1.4;
+  font-weight: 350;
+  font-variation-settings: "SOFT" 50, "opsz" 24;
+  color: var(--text-2);
+}
+:where([data-style="editorial"]) .feed-lede a:hover {
+  color: var(--accent-text);
+}
+:where([data-style="editorial"]) .feed-lede__score {
+  font-variant-numeric: lining-nums;
+  color: var(--text);
+}
+:where([data-style="editorial"]) .feed-toolbar__start .stats {
+  margin-top: var(--s-5);
+}
+:where([data-style="editorial"]) .feed-toolbar__start .stat {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+}
+:where([data-style="editorial"]) .feed-toolbar__start .stat__value {
+  font-size: 22px;
+}
+:where([data-style="editorial"]) .feed-tabs .btn--ghost {
+  margin-bottom: 3px;
+}
+:where([data-style="editorial"]) .ux-job > .card-block {
+  margin-top: var(--s-10);
+}
+:where([data-style="editorial"]) .ux-job > .ux-job-summary {
+  margin-top: 0;
+  border-top: 0;
+  padding-top: 0;
+}
+:where([data-style="editorial"]) .ux-job-facts {
+  gap: var(--s-6);
+  margin-bottom: var(--s-6);
+}
+:where([data-style="editorial"]) .ux-score {
+  flex: none;
+}
+:where([data-style="editorial"]) .ux-job-summary .match__score {
+  gap: 12px;
+}
+:where([data-style="editorial"]) .ux-job-summary .score-num {
+  font-size: var(--fs-score-lg);
+  font-weight: 300;
+  letter-spacing: -0.05em;
+}
+:where([data-style="editorial"]) .ux-job-summary .score-meter {
+  width: 100%;
+  min-width: 96px;
+}
+:where([data-style="editorial"]) .ux-job-summary .match__score::after {
+  content: "match for you";
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+:where([data-style="editorial"]) .ux-score--none {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: var(--fs-md);
+  font-weight: 400;
+}
+
+/* the fit section: why it fits is the lede; the rest are typeset sub-sections */
+:where([data-style="editorial"]) .ux-fit .ux-kv {
+  display: block;
+  font-size: var(--fs-base);
+}
+:where([data-style="editorial"]) .ux-fit .ux-kv dt {
+  margin-top: var(--s-6);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+:where([data-style="editorial"]) .ux-fit .ux-kv dd {
+  margin-top: var(--s-2);
+  line-height: var(--lh-read);
+  color: var(--text);
+  max-width: var(--measure);
+}
+:where([data-style="editorial"]) .ux-fit .ux-kv dt:first-of-type {
+  /* the lede carries itself; its label stays for the structure, quietly */
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+:where([data-style="editorial"]) .ux-fit .ux-kv dd:first-of-type {
+  font-family: var(--font-display);
+  font-size: 23px;
+  line-height: 1.45;
+  font-weight: 350;
+  font-variation-settings: "SOFT" 50, "opsz" 30;
+  letter-spacing: -0.005em;
+}
+:where([data-style="editorial"]) .ux-fit .ux-kv dt:has(+ dd .ux-list) {
+  color: var(--warn);
+  border-top: 2px solid var(--warn);
+}
+:where([data-style="editorial"]) .ux-fit .ux-list {
+  margin: 0;
+  padding-left: var(--s-5);
+}
+:where([data-style="editorial"]) .ux-fit .ux-list li + li {
+  margin-top: var(--s-1);
+}
+:where([data-style="editorial"]) .ux-fit .ux-list li::marker {
+  color: var(--warn);
+}
+
+/* apply: the checklist, then the three honest options as numbered entries */
+:where([data-style="editorial"]) .ux-checklist {
+  font-size: var(--fs-base);
+  gap: var(--s-3);
+}
+:where([data-style="editorial"]) .ux-checklist li {
+  padding-left: 30px;
+}
+:where([data-style="editorial"]) .ux-checklist li::before {
+  top: 2px;
+  width: 20px;
+  height: 20px;
+}
+:where([data-style="editorial"]) .ux-option {
+  padding: var(--s-5) 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+:where([data-style="editorial"]) .ux-copy code {
+  background: var(--surface);
+}
+
+/* the description reads as the body of the article — full length, no inner scroll */
+:where([data-style="editorial"]) .ux-jd {
+  max-height: none;
+  overflow: visible;
+  font-size: var(--fs-md);
+  line-height: var(--lh-read);
+  max-width: var(--measure);
+  padding-right: 0;
+  margin-top: var(--s-5);
+}
+:where([data-style="editorial"]) .ux-desc .match__skills {
+  margin-top: 0;
+}
+
+@media (min-width: 1100px) {
+  :where([data-style="editorial"]) .ux-job > .ux-job-summary {
+    grid-column: 2;
+    grid-row: 1 / span 8;
+    position: sticky;
+    top: calc(var(--header-h) + var(--s-8));
+    margin-top: 0;
+  }
+  :where([data-style="editorial"]) .ux-job > .card-block.ux-fit {
+    margin-top: 0;
+    border-top: 0;
+    padding-top: 0;
+  }
+  :where([data-style="editorial"]) .ux-job-summary .ux-job-facts {
+    flex-direction: column;
+    gap: var(--s-6);
+  }
+  /* the facts become a fact sheet: one per line, hairlines between */
+  :where([data-style="editorial"]) .ux-job-summary .match__tags {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    width: 100%;
+    border-top: 1px solid var(--rule);
+  }
+  :where([data-style="editorial"]) .ux-job-summary .match__tags .badge {
+    height: auto;
+    min-height: 38px;
+    padding: 8px 0;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    background: transparent;
+    white-space: normal;
+    line-height: 1.35;
+    font-size: var(--fs-sm);
+  }
+  :where([data-style="editorial"]) .ux-job-summary .match__tags .badge--estimate {
+    border-bottom: 1px dashed var(--control-border);
+  }
+  :where([data-style="editorial"]) .ux-job-summary .ux-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--s-2);
+  }
+  :where([data-style="editorial"]) .ux-job-summary .ux-actions > .btn--primary {
+    order: -1;
+    grid-column: 1 / -1;
+    --btn-h: var(--h-lg);
+    font-size: var(--fs-base);
+  }
+  :where([data-style="editorial"]) .ux-job-summary .ux-status {
+    grid-column: 1 / -1;
+    margin: var(--s-3) 0 0;
+    padding-top: var(--s-3);
+    border-top: 1px solid var(--border);
+  }
+  :where([data-style="editorial"]) .ux-job-summary .ux-status label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+  }
+  :where([data-style="editorial"]) .ux-job-summary .ux-status .select {
+    width: auto;
+  }
+}
+
+/* the page header's ink rule opens the page; the first section under it needs no second rule */
+:where([data-style="editorial"]) :is(.panel, .card-block):not(.ux-setup):first-child, :where([data-style="editorial"]) .page-header + :is(.panel, .card-block):not(.ux-setup) {
+  border-top: 0;
+  padding-top: 0;
+}
+/* long forms keep a reading width beside their contents column */
+:where([data-style="editorial"]) .settings-layout {
+  grid-template-columns: 200px minmax(0, 760px);
+  gap: var(--s-16);
+}
+:where([data-style="editorial"]) .card-block > p,
+:where([data-style="editorial"]) .panel > p,
+:where([data-style="editorial"]) .card-block > .hint {
+  max-width: var(--measure);
+}
+:where([data-style="editorial"]) input[type="file"]::file-selector-button {
+  height: var(--h-sm);
+  padding: 0 14px;
+  border-radius: var(--r-full);
+  background: transparent;
+}
+
+/* chips on: an ink frame and a tick, reversed nowhere — calm even when a dozen are on */
+:where([data-style="editorial"]) .chip[data-on="true"],
+:where([data-style="editorial"]) .chip[aria-pressed="true"] {
+  background: var(--surface);
+  border-color: var(--text);
+  color: var(--text);
+}
+:where([data-style="editorial"]) .chip[data-on="true"]::before,
+:where([data-style="editorial"]) .chip[aria-pressed="true"]::before {
+  content: "✓";
+  font-size: 0.9em;
+  font-weight: 700;
+  margin-left: -2px;
+}
+:where([data-style="editorial"]) .chip--warn[data-on="true"],
+:where([data-style="editorial"]) .chip.amber[data-on="true"] {
+  background: var(--warn-soft);
+  border-color: var(--warn);
+  color: var(--warn);
+}
+:where([data-style="editorial"]) .variant-tabs .chip::before {
+  content: none;
+}
+
+/* Jobs: the get-started checklist, compact — it's scaffolding, not content */
+:where([data-style="editorial"]) .ux-setup {
+  padding: var(--s-4) var(--s-6) var(--s-3);
+}
+:where([data-style="editorial"]) .ux-setup .panel__head {
+  margin-bottom: var(--s-2);
+}
+:where([data-style="editorial"]) .ux-setup li {
+  padding: 6px 0;
+}
+
+/* Applications: the funnel as a row of figures, each group a kicker + headline table */
+:where([data-style="editorial"]) .funnel {
+  gap: 0;
+  margin: 0 0 var(--s-8);
+}
+:where([data-style="editorial"]) .funnel-stage {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 0 var(--s-8) 0 0;
+  margin-right: var(--s-8);
+  border: 0;
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+:where([data-style="editorial"]) .funnel-stage:last-child {
+  border-right: 0;
+}
+:where([data-style="editorial"]) .crm-group {
+  font-size: var(--fs-xl);
+  font-weight: 450;
+  margin: var(--s-10) 0 var(--s-3);
+}
+:where([data-style="editorial"]) .crm-head,
+:where([data-style="editorial"]) .crm-row {
+  grid-template-columns: minmax(0, 1.8fr) 150px minmax(0, 1.3fr) 150px 190px;
+  padding: 12px 0;
+}
+:where([data-style="editorial"]) .crm-row:hover {
+  background: transparent;
+}
+:where([data-style="editorial"]) .crm-role {
+  gap: 2px;
+}
+:where([data-style="editorial"]) .crm-role > a:first-child {
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+:where([data-style="editorial"]) .crm-role .crm-title,
+:where([data-style="editorial"]) .crm-role a.crm-title {
+  order: 2;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: 0;
+  text-transform: none;
+  font-variation-settings: "SOFT" 50, "opsz" 24;
+  color: var(--text);
+}
+
+/* Onboarding: the steps as a numbered running head, the current one ruled in vermilion */
+:where([data-style="editorial"]) .onb-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--s-4);
+  margin-bottom: var(--s-4);
+}
+:where([data-style="editorial"]) .onb-steps li {
+  display: block;
+  padding: var(--s-3) 0 0;
+  border: 0;
+  border-top: 2px solid var(--border-strong);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-3);
+  font-size: var(--fs-sm);
+}
+:where([data-style="editorial"]) .onb-steps li[data-on="true"],
+:where([data-style="editorial"]) .onb-steps li[aria-current="step"] {
+  border-top-color: var(--accent-solid);
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* presets: entries in a directory, not tiles — a serif name over a rule; on = vermilion rule */
+:where([data-style="editorial"]) .onb-presets {
+  gap: var(--s-6) var(--s-6);
+}
+:where([data-style="editorial"]) .onb-preset {
+  padding: var(--s-4) 0 var(--s-2);
+  border: 0;
+  border-top: 2px solid var(--border-strong);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-2);
+}
+:where([data-style="editorial"]) .onb-preset:hover {
+  border-top-color: var(--text-3);
+}
+:where([data-style="editorial"]) .onb-preset[data-on="true"],
+:where([data-style="editorial"]) .onb-preset[aria-pressed="true"] {
+  border-top-color: var(--accent-solid);
+  background: transparent;
+  box-shadow: none;
+}
+:where([data-style="editorial"]) .onb-preset[data-on="true"]::after,
+:where([data-style="editorial"]) .onb-preset[aria-pressed="true"]::after {
+  top: var(--s-4);
+  right: 0;
+}
+:where([data-style="editorial"]) .onb-preset:focus-visible {
+  outline-offset: 4px;
+}
+
+/* Tailor: the grounding strip is a ruled slip; the warnings make it amber */
+:where([data-style="editorial"]) .inputs-strip {
+  border: 0;
+  border-left: 3px solid var(--border-strong);
+  border-radius: 0;
+  background: var(--surface);
+  padding: var(--s-3) var(--s-5);
+}
+:where([data-style="editorial"]) .inputs-strip:has(.in-warnings) {
+  border-left-color: var(--warn);
+  box-shadow: none;
+}
+:where([data-style="editorial"]) .tailor-role {
+  font-family: var(--font-display);
+  font-weight: 450;
+  font-size: var(--fs-xl);
+}
+
+/* the company page's figures in the display serif too */
+:where([data-style="editorial"]) .comp-median,
+:where([data-style="editorial"]) .rating-big {
+  font-family: var(--font-display);
+  font-weight: 350;
+  font-variation-settings: "SOFT" 50, "opsz" 96;
+}
+
+@media (max-width: 1100px) {
+  :where([data-style="editorial"]) .settings-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s-4);
+  }
+}
+@media (max-width: 960px) {
+  :where([data-style="editorial"]) .feed-layout {
+    column-gap: 0;
+  }
+  :where([data-style="editorial"]) .filter-bar {
+    padding: var(--s-5) 0 0;
+  }
+  :where([data-style="editorial"]) .filter-rail {
+    padding: var(--s-5) var(--s-5) 0;
+    background: var(--bg);
+  }
+  :where([data-style="editorial"]) .filter-rail__foot {
+    background: var(--bg);
+  }
+  :where([data-style="editorial"]) .feed-main {
+    padding-top: var(--s-5);
+  }
+}
+@media (max-width: 760px) {
+  :where([data-style="editorial"]) .crm-head,
+  :where([data-style="editorial"]) .crm-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    padding: var(--s-4) 0;
+  }
+  :where([data-style="editorial"]) .onb-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  :where([data-style="editorial"]) .funnel {
+    row-gap: var(--s-4);
+  }
+  :where([data-style="editorial"]) .funnel-stage {
+    padding-right: var(--s-5);
+    margin-right: var(--s-5);
+  }
+}
+@media (max-width: 640px) {
+  :where([data-style="editorial"]) .feed-toolbar__start .page-title {
+    font-size: var(--fs-2xl);
+  }
+  :where([data-style="editorial"]) .feed-lede {
+    font-size: 19px;
+  }
+  :where([data-style="editorial"]) .feed-toolbar .feed-toolbar__start .stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2) var(--s-5);
+  }
+  :where([data-style="editorial"]) .feed-toolbar__start .stat__label {
+    white-space: nowrap;
+  }
+  :where([data-style="editorial"]) .ux-setup {
+    padding: var(--s-4) var(--s-4) var(--s-2);
+  }
+  :where([data-style="editorial"]) .ux-job-summary .ux-job-facts {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+  :where([data-style="editorial"]) .ux-job-summary .score-meter {
+    min-width: 0;
+  }
+  :where([data-style="editorial"]) .ux-job-summary .ux-actions > .btn--primary {
+    flex: 1;
+  }
+  :where([data-style="editorial"]) .onb-presets {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 1099px) {
+  :where([data-style="editorial"]) .ux-job-summary .match__tags {
+    min-width: 0;
+  }
+  :where([data-style="editorial"]) .ux-job-summary .match__tags .badge {
+    white-space: normal;
+    height: auto;
+    min-height: 22px;
+    padding-top: 3px;
+    padding-bottom: 3px;
+    line-height: 1.3;
+  }
+}
+@media (max-width: 640px) {
+  :where([data-style="editorial"]) .ux-job .card-block + .card-block {
+    margin-top: var(--s-8);
+  }
+  :where([data-style="editorial"]) .ux-job-summary .score-num {
+    font-size: 56px;
+  }
+}
+
+/* card rhythm: one step between the dateline facts, the notes, the skills and the actions */
+:where([data-style="editorial"]) .match__tags,
+:where([data-style="editorial"]) .match__notes,
+:where([data-style="editorial"]) .match__flags,
+:where([data-style="editorial"]) .match__skills {
+  margin-top: 14px;
+}
+:where([data-style="editorial"]) .match__foot {
+  margin-top: var(--s-4);
+}
+@media (max-width: 640px) {
+  /* notes stack: the small-caps label sits over its sentence on a phone */
+  :where([data-style="editorial"]) .match__notes {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+  :where([data-style="editorial"]) .match__notes dd + dt {
+    margin-top: var(--s-2);
+  }
+}
+
+/* ── unified markup: the parts of the one component tree that Editorial doesn't draw ── */
+/* (Spark's ring + band word + drawing, the "today" eyebrow and chips) */
+:where([data-style="editorial"]) .score-ring__dial svg,
+:where([data-style="editorial"]) .score-ring__word,
+:where([data-style="editorial"]) .empty__art > svg,
+:where([data-style="editorial"]) .feed-hero__eyebrow,
+:where([data-style="editorial"]) .feed-hero__extra {
+  display: none;
+}
+:where([data-style="editorial"]) .score-ring,
+:where([data-style="editorial"]) .score-ring__dial,
+:where([data-style="editorial"]) .empty__art {
+  display: contents;
+}
+
+/* ── Appearance: the Editorial preview — paper, ink rules, a serif numeral over its band rule ── */
+[data-style-preview="editorial"] .style-preview__bar {
+  background: var(--bg);
+  border-bottom: 1px solid var(--rule);
+}
+[data-style-preview="editorial"] .style-preview__brand {
+  gap: 1px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 14px;
+  font-variation-settings: "SOFT" 100, "opsz" 48;
+}
+[data-style-preview="editorial"] .style-preview__brand em {
+  font-style: italic;
+  font-weight: 400;
+}
+[data-style-preview="editorial"] .style-preview__brand::after {
+  content: "";
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent-solid);
+  align-self: flex-end;
+  margin-bottom: 3px;
+}
+[data-style-preview="editorial"] .style-preview__nav {
+  background: var(--border-strong);
+  height: 3px;
+}
+[data-style-preview="editorial"] .style-preview__card {
+  margin: 4px 10px 10px;
+  padding: 10px 0 2px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+[data-style-preview="editorial"] .style-preview__num {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 350;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+[data-style-preview="editorial"] .style-preview__meter {
+  width: 100%;
+  height: 2px;
+  border-radius: 0;
+  background: var(--good-solid);
+}
+[data-style-preview="editorial"] .style-preview__title {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+[data-style-preview="editorial"] .style-preview__tag {
+  border-color: var(--border-strong);
+  border-radius: var(--r-sm);
+}
+[data-style-preview="editorial"] .style-preview__btn {
+  border-radius: var(--r-full);
+}

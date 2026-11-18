@@ -1,0 +1,82 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>terminal</title>
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
+<style>
+  body { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .head { width: var(--w); display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 22px; position: relative; z-index: 1; }
+  .head h1 { margin: 0; font: 600 44px/1.05 var(--display); letter-spacing: -0.01em; }
+  .head h1 code { font-family: var(--mono); font-size: .8em; font-weight: 600; color: var(--vermilion); }
+  .head .kicker { font-size: 17px; margin-bottom: 10px; }
+  .win { width: var(--w); background: #1c1915; border-radius: 14px; box-shadow: 0 30px 60px -20px rgba(28,25,21,.45), 0 0 0 1px rgba(28,25,21,.6); overflow: hidden; position: relative; z-index: 1; }
+  .bar { height: 42px; display: flex; align-items: center; gap: 9px; padding: 0 18px; background: #2a2520; color: #a99d8a; font: 500 16px var(--text); }
+  .bar i { width: 13px; height: 13px; border-radius: 50%; background: #4a423a; display: inline-block; }
+  .bar span { margin-left: 12px; }
+  .term { padding: 18px 22px 22px; }
+  .xterm-viewport { overflow: hidden !important; }
+  .foot { width: var(--w); margin-top: 18px; display: flex; justify-content: space-between; color: var(--ink-3); font: 500 17px var(--text); position: relative; z-index: 1; }
+  .head, .foot { opacity: 1; }
+  .hidden { visibility: hidden; }
+  /* a still for docs/screenshots: just the window on paper */
+  body.shot { justify-content: center; }
+  body.shot .head, body.shot .foot { display: none; }
+</style>
+</head>
+<body>
+<div class="head"><div><div class="kicker" id="kicker"></div><h1 id="title"></h1></div><div id="badge"></div></div>
+<div class="win"><div class="bar"><i></i><i></i><i></i><span id="bartitle">~/jobflow</span></div><div class="term" id="term"></div></div>
+<div class="foot"><span id="footl"></span><span id="footr"></span></div>
+<script>
+// Deterministic playback: window.__data = { cols, rows, fontSize, title, kicker, badge, writes: [[t, text]], heads: [[t, {title,kicker}]] }
+// window.__frame(t) writes everything due by t and resolves true when the screen changed.
+const D = window.__data;
+document.documentElement.style.setProperty("--w", D.width + "px");
+document.body.classList.toggle("shot", !!D.shot);
+document.getElementById("bartitle").textContent = D.barTitle || "~/jobflow";
+if (D.badge) document.getElementById("badge").innerHTML = `<span class="badge">${D.badge}</span>`;
+document.getElementById("footl").textContent = D.footLeft || "";
+document.getElementById("footr").textContent = D.footRight || "";
+const setHead = (h) => {
+  document.getElementById("title").innerHTML = h.title || "";
+  document.getElementById("kicker").textContent = h.kicker || "";
+};
+setHead(D.heads?.[0]?.[1] || {});
+let term;
+window.__ready = (async () => {
+  await document.fonts.load(`${D.fontSize}px "JetBrains Mono"`);
+  await document.fonts.load(`600 44px Fraunces`);
+  await document.fonts.ready;
+  term = new Terminal({
+    cols: D.cols, rows: D.rows, fontFamily: '"JetBrains Mono", monospace', fontSize: D.fontSize, lineHeight: 1.18,
+    cursorBlink: false, cursorStyle: "block", allowProposedApi: true, scrollback: 0, convertEol: false,
+    theme: {
+      background: "#1c1915", foreground: "#eee5d4", cursor: "#e0673f", cursorAccent: "#1c1915", selectionBackground: "#4a423a",
+      black: "#1c1915", red: "#e0673f", green: "#9cbf7a", yellow: "#e2b85c", blue: "#86a9d6", magenta: "#d39ac0", cyan: "#7fc4bd", white: "#d9cfbd",
+      brightBlack: "#857a6a", brightRed: "#f08560", brightGreen: "#b5d98f", brightYellow: "#f0cc78", brightBlue: "#a3c2ea", brightMagenta: "#e6b2d5", brightCyan: "#9adbd3", brightWhite: "#fbf6ec",
+    },
+  });
+  term.open(document.getElementById("term"));
+  window.__term = term;
+  await new Promise((r) => setTimeout(r, 50));
+})();
+let wi = 0, hi = 1;
+window.__frame = async (t) => {
+  let changed = false;
+  while (hi < (D.heads || []).length && D.heads[hi][0] <= t) { setHead(D.heads[hi][1]); hi++; changed = true; }
+  let buf = "";
+  while (wi < D.writes.length && D.writes[wi][0] <= t) { buf += D.writes[wi][1]; wi++; }
+  if (buf) {
+    await new Promise((r) => term.write(buf, r));
+    // xterm paints on the next animation frames: wait, or a big write is captured half-drawn
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    changed = true;
+  }
+  return changed;
+};
+</script>
+</body>
+</html>

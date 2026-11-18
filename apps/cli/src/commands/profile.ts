@@ -95,7 +95,7 @@ export const FIELDS: Record<string, FieldDef> = {
     set: (p, v) => prefs(p, { stackMustHaves: editList(p.prefs.stackMustHaves, v, (s) => parseSkills(s).skills) }),
   },
   roles: {
-    help: "target role types: backend,platform,fullstack,infra_devops,data_ml,frontend,mobile,sre",
+    help: "target role types: backend,platform,fullstack,infra_devops,data_ml,data_analytics,frontend,mobile,sre (data_ml alone also covers analytics roles)",
     rerank: true,
     set: (p, v) => prefs(p, { targetArchetypes: editList(p.prefs.targetArchetypes, v, archetypes) as Profile["prefs"]["targetArchetypes"] }),
   },

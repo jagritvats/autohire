@@ -1,0 +1,66 @@
+{
+  "id": "guide-start",
+  "title": "Get started in 5 minutes",
+  "voice": "JBFqnCBsd6RMkjVDRZzb",
+  "music": "calm",
+  "scenes": [
+    {
+      "id": "title",
+      "chapter": "Get started in 5 minutes",
+      "lines": ["Here's how to get JobFlow running in about five minutes, from the terminal."]
+    },
+    {
+      "id": "install",
+      "chapter": "Clone, install, build",
+      "lines": [
+        { "text": "You need Node 20 or newer, and pnpm.", "say": "You need Node twenty or newer, and p-n-p-m." },
+        "Clone the repository, install the dependencies, and build. No account, no server, and no API key."
+      ]
+    },
+    {
+      "id": "init",
+      "chapter": "jobflow init",
+      "lines": [
+        { "text": "Next, your profile. jobflow init reads your résumé and asks you to confirm what it found.", "say": "Next, your profile. jobflow in-it reads your résumé, and asks you to confirm what it found." },
+        { "text": "To look around first, init --sample loads a fictional candidate. That's what we'll use here.", "say": "To look around first, in-it, dash dash sample, loads a fictional candidate. That's what we'll use here." }
+      ]
+    },
+    {
+      "id": "sync",
+      "chapter": "jobflow sync",
+      "lines": [
+        "jobflow sync checks the job boards in your discovery preset, with live progress: the step it's on, boards checked, jobs fetched, and time left.",
+        "This is demo mode, so the boards are fictional. When one doesn't answer, the summary says so, and it's tried again next sync."
+      ]
+    },
+    {
+      "id": "feed",
+      "chapter": "jobflow feed",
+      "lines": [
+        "jobflow feed is your ranked list. Each row has a score, the pay if it's known, and a line on why it fits.",
+        "Caveats, like a post from a staffing agency, get a line of their own."
+      ]
+    },
+    {
+      "id": "show",
+      "chapter": "jobflow show",
+      "lines": [
+        "jobflow show opens one job in full: how you fit, what to check, and an apply checklist with a fix for each gap."
+      ]
+    },
+    {
+      "id": "serve",
+      "chapter": "jobflow serve",
+      "lines": [
+        "When you'd rather use a browser, jobflow serve opens the web app on the same data, on your machine only."
+      ]
+    },
+    {
+      "id": "next",
+      "chapter": "Next steps",
+      "lines": [
+        "From here, try jobflow search, tailor a résumé, and read the applying guide. Everything is in the docs folder."
+      ]
+    }
+  ]
+}

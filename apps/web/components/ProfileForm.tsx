@@ -12,7 +12,7 @@ const SKILL_SUGGESTIONS = [
   "microservices", "distributed_systems", "docker", "kubernetes", "aws", "gcp", "azure", "terraform",
   "ci_cd", "spark", "airflow", "ml",
 ];
-const ARCHETYPES = ["backend", "platform", "infra_devops", "fullstack", "data_ml", "sre", "frontend", "mobile"];
+const ARCHETYPES = ["backend", "platform", "infra_devops", "fullstack", "data_ml", "data_analytics", "sre", "frontend", "mobile"];
 const GEOS: Array<{ id: string; label: string }> = [
   { id: "worldwide", label: "anywhere (worldwide)" },
   { id: "us_only", label: "US-only roles" },

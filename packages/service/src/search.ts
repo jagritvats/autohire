@@ -4,6 +4,7 @@ import { SearchQuery, effectiveMarkets, normCompany, scorePosting, type Match, t
 import type { SourceAdapter } from "@jobflow/adapters";
 import { adhocSearch, isOnboarded, loadProfile, runSavedSearch, type AdhocSearchResult } from "@jobflow/pipeline";
 import { corpusEmbedder } from "./embedder.js";
+import { demoMode, demoSearchAdapters } from "./demo-corpus.js";
 import { rankTenant, toCards, type FeedCard } from "./feed.js";
 import { ensureTenant } from "./tenant.js";
 
@@ -32,7 +33,7 @@ export async function searchJobs(
     ingest?: boolean;
     limit?: number;
     sources?: SourceKind[];
-    sort?: "score" | "relevance";
+    sort?: "score" | "relevance" | "pay";
     withPostings?: boolean;
     /** ask these adapters instead of the registry's (tests, offline clients) — the pipeline still keeps only Tier 1–2 */
     adapters?: SourceAdapter[];
@@ -49,7 +50,8 @@ export async function searchJobs(
     limit: opts.limit ?? 30,
     sources: opts.sources,
     sort: opts.sort,
-    adapters: opts.adapters,
+    // demo mode asks the offline fictional boards, never the live ones
+    adapters: opts.adapters ?? (demoMode() ? demoSearchAdapters() : undefined),
   });
   // ingested results join the feed: re-rank so they show up there with stored matches
   if (opts.ingest && r.results.length) await rankTenant(repo, tenantId);
@@ -121,6 +123,11 @@ export async function runSearchNow(repo: Repository, tenantId: string, id: strin
   const search = await repo.getSavedSearch(tenantId, id);
   if (!search) throw new Error("No such saved search.");
   const profile = await loadProfile(repo, tenantId);
+  // demo mode never reaches the live boards: the fictional corpus is already stored
+  if (demoMode()) {
+    await rankTenant(repo, tenantId);
+    return { fetched: 0, upserted: 0, bySource: {}, errors: [] };
+  }
   const r = await runSavedSearch(repo, search, { embedder: corpusEmbedder(), markets: effectiveMarkets(profile.prefs), yoe: profile.yoe });
   await rankTenant(repo, tenantId);
   return r;

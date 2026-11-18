@@ -1,0 +1,124 @@
+/* JobFlow brand — shared tokens and type for every rendered asset (posters, social, sheet).
+   Mirrors the app's Concept A "Editorial" tokens (docs/internal/DESIGN.md). Fonts come from
+   brand/.fonts (scripts/fetch-fonts.sh); a glyph they lack (₹) falls back to DejaVu/Inter. */
+@font-face { font-family: "Fraunces"; src: url("../.fonts/Fraunces-VF.woff2") format("woff2"); font-weight: 100 900; font-style: normal; }
+@font-face { font-family: "Fraunces"; src: url("../.fonts/Fraunces-Italic-VF.woff2") format("woff2"); font-weight: 100 900; font-style: italic; }
+@font-face { font-family: "Schibsted Grotesk"; src: url("../.fonts/SchibstedGrotesk-VF.woff2") format("woff2"); font-weight: 400 900; }
+@font-face { font-family: "JetBrains Mono"; src: url("../.fonts/JetBrainsMono-VF.woff2") format("woff2"); font-weight: 100 800; }
+
+:root {
+  --paper: #f6f1e7;
+  --paper-2: #efe8da;
+  --paper-3: #e6ddcc;
+  --surface: #fcfaf5;
+  --hair: #e2d9c8;
+  --hair-strong: #cdc2ad;
+  --ink: #1c1915;
+  --ink-2: #4d473f;
+  --ink-3: #645c51;
+  --vermilion: #b8401c;
+  --vermilion-text: #a83a19;
+  --night: #161411;
+  --night-2: #1d1a16;
+  --night-ink: #f2ede3;
+  --night-ink-2: #cdc4b5;
+  --night-ink-3: #a99f90;
+  --night-hair: #35302a;
+  --ember: #ef7a4f;
+  --ember-text: #f59a74;
+  --good: #2c6a33;
+
+  --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --sans: "Schibsted Grotesk", "Inter", system-ui, sans-serif;
+  --mono: "JetBrains Mono", "DejaVu Sans Mono", ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+  font-kerning: normal;
+}
+
+/* ---- type ---- */
+.kicker {
+  font-family: var(--sans);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--vermilion-text);
+}
+.display {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-variation-settings: "SOFT" 50, "opsz" 144, "WONK" 0;
+  letter-spacing: -0.025em;
+  line-height: 0.98;
+  margin: 0;
+  text-wrap: balance;
+}
+.display em {
+  font-style: italic;
+  font-variation-settings: "SOFT" 100, "opsz" 144, "WONK" 1;
+  color: var(--vermilion);
+}
+.lede {
+  font-family: var(--serif);
+  font-weight: 350;
+  font-variation-settings: "SOFT" 50, "opsz" 36;
+  line-height: 1.32;
+  color: var(--ink-2);
+  margin: 0;
+  text-wrap: pretty;
+}
+.body { line-height: 1.5; color: var(--ink-2); margin: 0; text-wrap: pretty; }
+.caps {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-3);
+}
+code, .mono { font-family: var(--mono); font-variant-ligatures: none; }
+
+/* ---- rules ---- */
+.rule-ink { height: 0; border: 0; border-top: 2px solid var(--ink); margin: 0; }
+.rule-hair { height: 0; border: 0; border-top: 1px solid var(--hair-strong); margin: 0; }
+
+/* ---- a product capture: a clipping on the page, framed by a hairline ---- */
+.plate {
+  display: block;
+  background: var(--paper);
+  border: 1px solid var(--hair-strong);
+  box-shadow: 0 1px 0 rgba(28, 25, 21, 0.04), 0 24px 60px -28px rgba(60, 40, 20, 0.35);
+  overflow: hidden;
+}
+.plate img { display: block; width: 100%; height: auto; }
+
+/* ---- terminal (real CLI output, ANSI converted by the renderer) ---- */
+.term {
+  background: var(--night);
+  color: var(--night-ink);
+  border-radius: 10px;
+  font-family: var(--mono);
+  font-variant-ligatures: none;
+  white-space: pre;
+  overflow: hidden;
+  box-shadow: 0 30px 70px -30px rgba(20, 14, 8, 0.55);
+}
+.term .t-bar { display: flex; gap: 8px; align-items: center; padding: 0.9em 1.2em; border-bottom: 1px solid var(--night-hair); color: var(--night-ink-3); }
+.term .t-bar i { width: 0.8em; height: 0.8em; border-radius: 50%; background: var(--night-hair); display: inline-block; }
+.term .t-body { padding: 1.1em 1.4em 1.3em; line-height: 1.55; }
+.term .a-b { font-weight: 700; color: #fffaf0; }
+.term .a-d { color: var(--night-ink-3); }
+.term .a-g { color: #86cf8c; }
+.term .a-c { color: #7fbde3; }
+.term .a-y { color: #efc15a; }
+.term .a-r { color: #ff8fa0; }
+.term .prompt { color: var(--ember); }
+
+/* ---- the logo, inline ---- */
+.logo { display: block; height: auto; }

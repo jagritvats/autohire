@@ -62,6 +62,45 @@ Everything else is a weighted signal with a flag.
 Views (saved-search filters) are separate from ranking: they hide only on known values, never
 change a score, and always report what they hid.
 
+### Titles, levels and skills
+
+`parseTitle` (`core/normalize/titles.ts`) reads a title into a role type, a level band and a
+title family. Role types: `backend`, `platform`, `fullstack`, `infra_devops`, `data_ml` (data
+engineering, data science, ML), `data_analytics` (analyst, BI and analytics-engineering roles),
+`frontend`, `mobile`, `sre`, and `other` (not engineering). The role NOUN decides: an
+"Executive Assistant - Developer Platform", a "Customer Support Developer" or a "Developer
+Success Engineer" is `other`, whatever tech word sits beside it. A profile that targets
+`data_ml` alone (the only data choice before `data_analytics` existed) is read as targeting
+both; pick `data_analytics` alone to narrow to analyst roles.
+
+**Level bands.** Explicit words ("Senior", "Intern", "Staff", "Principal") decide first.
+Numbered rungs and company ladder codes mean different things at different employers, so each
+maps to the common reading with a lower confidence, and a level the source itself states wins
+over a code the title only implies:
+
+| Title says | Band | Confidence |
+|---|---|---|
+| I / 1, II / 2, III / 3, IV / 4 or V / 5 after a role noun ("Engineer II", "Data Scientist 3", "SDE-2") | junior, mid, senior, staff, staff | 0.6–0.7 |
+| L3, L4, L5, L6–L7, L8+ | junior, mid, senior, staff, principal | 0.55–0.6 |
+| E3, E4, E5, E6, E7+ (beside a role noun or as a tag only: "E5" alone is a pay grade) | junior, mid, senior, staff, principal | 0.5–0.55 |
+| IC1, IC2, IC3–IC4, IC5, IC6+ · Apple ICT2–ICT6 | junior, mid, senior, staff, principal · junior … principal | 0.5 |
+| SMTS, LMTS, PMTS | senior, staff, principal | 0.7 |
+| a bare "Member of Technical Staff" | none — the JD's years decide | — |
+
+**Skills.** `extractSkills` (`core/normalize/skills.ts`) matches a canonical dictionary with
+aliases, whole words only. Skills whose names are also ordinary words or letters are matched
+only in their cased or contextual form: "React" / "Vue" / "Swift" / "Excel" capitalised (not
+"react to", SWIFT payments, "excel at"), R and SAS beside another analytics language, C as
+"C/C++", "Embedded C" or "C programming", Go with a language cue. Domains ("fintech") are
+context on the card, never a missing skill. Stored postings pick up a dictionary or title
+change through the re-normalize pass (`NORMALIZE_VERSION`), which also cleans JD markup.
+
+**Sibling postings.** A company that posts the same role once per country (same title once
+place words are dropped, same level, near-identical JD, different place) shows as one card —
+the sibling that scores best for you — with "Also posted for …" linking the others
+(`core/dedup/siblings.ts`). They are separate reqs, so the deduper never merges them, scores
+are untouched, and the folded count is reported.
+
 ### Generation
 
 Tailored résumés, answers and cover letters are generated only from your base résumé, Evidence

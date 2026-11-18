@@ -4,12 +4,12 @@
 ranks them against *your* résumé with honest match cards, tailors your documents from your
 own material, and pre-fills applications — then stops so you can review and submit.
 
-![The ranked feed](https://raw.githubusercontent.com/jagritvats/autohire/v0.1.0/docs/screenshots/feed.png)
+![The ranked feed](https://raw.githubusercontent.com/jagritvats/jobflow/v0.1.0/docs/screenshots/feed.png)
 
 ## Get started
 
 ```bash
-git clone https://github.com/jagritvats/autohire.git jobflow && cd jobflow
+git clone https://github.com/jagritvats/jobflow.git && cd jobflow
 pnpm install && pnpm -r build
 pnpm jobflow init                                 # your résumé + preferences, reviewed by you
 pnpm jobflow search "backend engineer" --remote   # live search, scored against you
@@ -34,8 +34,8 @@ No account, no server and no API keys needed. Data stays in `~/.jobflow`.
 - A **CLI**, a **web app**, a scheduled **worker**, a **local agent** for logged-in sites and a
   **browser extension**. Optional multi-user hosting mode.
 
-See the [CHANGELOG](https://github.com/jagritvats/autohire/blob/v0.1.0/CHANGELOG.md) for the
-full list and the [docs](https://github.com/jagritvats/autohire/tree/v0.1.0/docs) to dig in.
+See the [CHANGELOG](https://github.com/jagritvats/jobflow/blob/v0.1.0/CHANGELOG.md) for the
+full list and the [docs](https://github.com/jagritvats/jobflow/tree/v0.1.0/docs) to dig in.
 
 ## Licence
 

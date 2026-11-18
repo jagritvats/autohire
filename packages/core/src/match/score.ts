@@ -2,10 +2,13 @@ import type { Posting, Profile, ScoreBreakdown } from "../schema/entities.js";
 import { LevelBandOrder, type LevelBand, type RemoteGeo, type RoleArchetype } from "../schema/enums.js";
 import { cosine, clamp } from "../util/vector.js";
 import { convertCurrency, formatSalary } from "../salary/fx.js";
-import { skillText, stackAdjacency, transfer, type StackAdjacencyResult } from "./stack.js";
+import { comparablePay, statedCeilingBelow } from "../salary/compare.js";
+import { PERIOD_WORD } from "../salary/period.js";
+import { canonicalStack, isDomainSkill, skillText, stackAdjacency, transfer, type StackAdjacencyResult } from "./stack.js";
 import { countryDisplayName, inEurope, locationInCountry, primaryRemoteGeo, remoteGeosForCountry } from "../normalize/location.js";
 import { effectiveHomeCountry, effectiveMarkets, effectiveRemoteGeos } from "./region.js";
 import { placeCountries } from "./display.js";
+import { parseTitle } from "../normalize/titles.js";
 import { EVERGREEN_TITLE_RE, REDATED_SOURCES, TALENT_POOL_JD_RE, scoreSourceTrust } from "./trust.js";
 
 /**
@@ -98,9 +101,11 @@ export function scorePosting(
 
   // ── stretch flag for "X required" must-haves you don't have (never an exclusion) ──
   // only where nothing you know transfers to it (a Java dev isn't "missing" Kotlin)
+  // (a domain such as fintech is the company's business, not a skill you lack)
+  const ownedSkills = canonicalStack(profile.prefs.stackProfile);
   const missingMust = posting.requirements
-    .filter((r) => r.strength === "must_have" && !profile.prefs.stackProfile.includes(r.skill))
-    .filter((r) => !profile.prefs.stackProfile.some((o) => transfer(o, r.skill) >= 0.7))
+    .filter((r) => r.strength === "must_have" && !isDomainSkill(r.skill) && !ownedSkills.includes(r.skill))
+    .filter((r) => !ownedSkills.some((o) => transfer(o, r.skill) >= 0.7))
     .map((r) => skillText(r.skill));
   if (missingMust.length && redFlags.length < 4) {
     const shown = missingMust.slice(0, 3);
@@ -183,45 +188,65 @@ const ENG_ARCHETYPES = new Set<RoleArchetype>([
 ]);
 
 /**
- * How well a role of one engineering archetype suits someone targeting another, [0,1].
+ * How well a role of one archetype suits someone targeting another, [0,1].
  * Directional and per target (2026-11 feed review): one flat 0.65 let a frontend
  * developer's top 50 fill with data-engineering, ML and SRE roles, and a backend-centric
- * "frontend/mobile are far" rule never applied the other way round.
+ * "frontend/mobile are far" rule never applied the other way round. `data_analytics`
+ * (analyst / BI roles) is far from software engineering in both directions, but next to
+ * data science / data engineering.
  */
 const ARCHETYPE_ADJACENCY: Readonly<Partial<Record<RoleArchetype, Partial<Record<RoleArchetype, number>>>>> = {
-  backend: { platform: 0.75, fullstack: 0.7, infra_devops: 0.6, sre: 0.6, data_ml: 0.5, frontend: 0.4, mobile: 0.35 },
-  platform: { infra_devops: 0.8, sre: 0.8, backend: 0.75, fullstack: 0.5, data_ml: 0.45, frontend: 0.3, mobile: 0.3 },
-  infra_devops: { sre: 0.85, platform: 0.8, backend: 0.55, data_ml: 0.4, fullstack: 0.4, frontend: 0.25, mobile: 0.25 },
-  sre: { infra_devops: 0.85, platform: 0.8, backend: 0.55, fullstack: 0.4, data_ml: 0.35, frontend: 0.25, mobile: 0.25 },
-  fullstack: { frontend: 0.8, backend: 0.5, mobile: 0.35, platform: 0.45, data_ml: 0.35, infra_devops: 0.35, sre: 0.35 },
-  frontend: { fullstack: 0.8, mobile: 0.4, backend: 0.35, platform: 0.25, data_ml: 0.2, infra_devops: 0.2, sre: 0.2 },
-  mobile: { frontend: 0.6, fullstack: 0.55, backend: 0.35, platform: 0.25, data_ml: 0.2, infra_devops: 0.2, sre: 0.2 },
-  data_ml: { backend: 0.45, platform: 0.4, infra_devops: 0.35, fullstack: 0.3, sre: 0.3, frontend: 0.15, mobile: 0.15 },
+  backend: { platform: 0.75, fullstack: 0.7, infra_devops: 0.6, sre: 0.6, data_ml: 0.5, frontend: 0.4, mobile: 0.35, data_analytics: 0.15 },
+  platform: { infra_devops: 0.8, sre: 0.8, backend: 0.75, fullstack: 0.5, data_ml: 0.45, frontend: 0.3, mobile: 0.3, data_analytics: 0.12 },
+  infra_devops: { sre: 0.85, platform: 0.8, backend: 0.55, data_ml: 0.4, fullstack: 0.4, frontend: 0.25, mobile: 0.25, data_analytics: 0.1 },
+  sre: { infra_devops: 0.85, platform: 0.8, backend: 0.55, fullstack: 0.4, data_ml: 0.35, frontend: 0.25, mobile: 0.25, data_analytics: 0.1 },
+  fullstack: { frontend: 0.8, backend: 0.5, mobile: 0.35, platform: 0.45, data_ml: 0.35, infra_devops: 0.35, sre: 0.35, data_analytics: 0.12 },
+  frontend: { fullstack: 0.8, mobile: 0.4, backend: 0.35, platform: 0.25, data_ml: 0.2, infra_devops: 0.2, sre: 0.2, data_analytics: 0.1 },
+  mobile: { frontend: 0.6, fullstack: 0.55, backend: 0.35, platform: 0.25, data_ml: 0.2, infra_devops: 0.2, sre: 0.2, data_analytics: 0.1 },
+  data_ml: { data_analytics: 0.75, backend: 0.45, platform: 0.4, infra_devops: 0.35, fullstack: 0.3, sre: 0.3, frontend: 0.15, mobile: 0.15 },
+  data_analytics: { data_ml: 0.5, backend: 0.25, fullstack: 0.2, platform: 0.2, infra_devops: 0.15, sre: 0.15, frontend: 0.15, mobile: 0.1 },
 };
 
 /**
- * Data / analytics titles the title normalizer files under "other" ("Data Analyst",
- * "Analytics Engineer", "Senior Data Scientist, People Analytics"): for someone targeting
- * data roles they ARE the target, not a non-engineering role at 0.08 (2026-11: 76 of 82
- * analyst-titled roles in a US corpus were "other", so a data analyst's feed held none).
+ * The archetypes a profile's targets stand for. `data_ml` was the only data choice before
+ * `data_analytics` existed, so a profile that targets it alone — saved then, or set by a
+ * user who means "data" — keeps meaning both; pick `data_analytics` alone to narrow to
+ * analyst / BI roles.
  */
-const DATA_TITLE_RE = /\b(data|analytics|bi|business intelligence|reporting|insights?|product|marketing|growth)\s+(analyst|scientist)s?\b|\b(data|analytics|bi)\s+(engineer|developer)s?\b|\bdata science\b|\bmachine learning (engineer|scientist)s?\b/i;
-/** "Data Center Operations Engineer" is facilities work, not a data role */
-const NOT_DATA_TITLE_RE = /\bdata\s*cent(er|re)s?\b/i;
+export function effectiveTargets(targets: readonly RoleArchetype[]): RoleArchetype[] {
+  return targets.includes("data_ml") && !targets.includes("data_analytics") ? [...targets, "data_analytics"] : [...targets];
+}
+
+/**
+ * The archetype to score a posting as. A row stored as `other` before the title normalizer
+ * knew its role ("Data Analyst" before `data_analytics`) is re-read from its title with the
+ * same normalizer — one source of truth (`parseTitle`); the re-normalize pass then rewrites
+ * the stored value.
+ */
+function archetypeOf(stored: RoleArchetype, title: string): RoleArchetype {
+  return stored === "other" && title ? parseTitle(title).roleArchetype : stored;
+}
 
 function scoreArchetype(
   jd: RoleArchetype,
-  targets: RoleArchetype[],
+  targetsIn: RoleArchetype[],
   title = "",
 ): { score: number; flag: string | null } {
-  if (targets.includes(jd)) return { score: 1, flag: null };
-  const effective: RoleArchetype =
-    jd === "other" && targets.includes("data_ml") && DATA_TITLE_RE.test(title) && !NOT_DATA_TITLE_RE.test(title) ? "data_ml" : jd;
+  const targets = effectiveTargets(targetsIn);
+  const effective = archetypeOf(jd, title);
   if (targets.includes(effective)) return { score: 1, flag: null };
+  const dataTarget = targets.includes("data_ml") || targets.includes("data_analytics");
+  // an analytics role for a software engineer, or the other way round: far, and said so
+  if (effective === "data_analytics" && targets.length) {
+    const fits = targets.map((t) => ARCHETYPE_ADJACENCY[t]?.data_analytics ?? 0.1);
+    return { score: Math.max(...fits), flag: dataTarget ? null : "An analytics role (SQL / BI), not software engineering" };
+  }
   // adjacent engineering archetypes still transfer (a backend dev can do platform/sre)
   if (ENG_ARCHETYPES.has(effective)) {
     const fits = targets.map((t) => ARCHETYPE_ADJACENCY[t]?.[effective] ?? (ENG_ARCHETYPES.has(t) ? 0.4 : 0.65));
-    return { score: fits.length ? Math.max(...fits) : 0.65, flag: null };
+    const score = fits.length ? Math.max(...fits) : 0.65;
+    const analystOnly = targets.length > 0 && targets.every((t) => t === "data_analytics");
+    return { score, flag: analystOnly && effective !== "data_ml" ? "A software engineering role, not analytics" : null };
   }
   // "other" = non-engineering (sales, ops, design, AE) — a JD picked up by boilerplate
   return { score: 0.08, flag: "Not an engineering role (sales, ops, support or similar)" };
@@ -531,15 +556,17 @@ export function scoreSalary(posting: Posting, profile: Profile): { score: number
   const want = profile.prefs.currency;
   const s = posting.salary;
 
-  const stated = s.source !== "none" ? (s.max ?? s.min) : null;
-  if (stated != null) {
-    const top = convertCurrency(stated, s.currency, want);
-    if (top == null) return { score: SALARY_NEUTRAL, flag: null };
-    const score = SALARY_NEUTRAL + STATED_TRUST[s.confidence] * (floorFit(top, floor) - SALARY_NEUTRAL);
+  if (s.source !== "none" && (s.max != null || s.min != null)) {
+    // annual, in your currency; a converted band counts one confidence step lower
+    const c = comparablePay(s, want);
+    const top = c ? (c.max ?? c.min) : null;
+    if (!c || top == null) return { score: SALARY_NEUTRAL, flag: null };
+    const score = SALARY_NEUTRAL + STATED_TRUST[c.confidence] * (floorFit(top, floor) - SALARY_NEUTRAL);
     // only a stated CEILING can be below the floor; a "from ₹X" says nothing about the top
+    const how = c.converted ? ` (converted at ${c.rateDate} rates)` : s.period && s.period !== "year" && s.period !== "month" ? ` (annualised from ${PERIOD_WORD[s.period]})` : "";
     const flag =
-      s.max != null && top < floor * 0.8
-        ? `Posted pay tops out at ~${formatSalary(top, want)}, below your floor (${formatSalary(floor, want)})`
+      c.max != null && top < floor * 0.8
+        ? `Posted pay tops out at ~${formatSalary(top, want)}${how}, below your floor (${formatSalary(floor, want)})`
         : null;
     return { score, flag };
   }
@@ -564,20 +591,17 @@ function floorFit(top: number, floor: number): number {
 
 // ── the only two hard exclusions (§11.3) ────────────────────────────────────
 function hardExclude(posting: Posting, profile: Profile): string | null {
-  // 1. salary genuinely below floor — only a HIGH-confidence STATED ceiling, in your own
-  //    currency (no FX guesswork at a hard gate). A floor-only band ("from ₹X") never
-  //    qualifies, and an estimate lives in `salaryEstimate`, never here.
+  // 1. salary genuinely below floor — only a HIGH-confidence STATED annual/monthly ceiling.
+  //    In another currency it is converted, and must stay below the line even after the
+  //    rate's full uncertainty is added (`statedCeilingBelow`) — no FX guesswork at a hard
+  //    gate. A floor-only band ("from ₹X") never qualifies, nor an hourly rate annualised on
+  //    an assumption, and an estimate lives in `salaryEstimate`, never here.
   const floor = profile.prefs.salaryFloor;
-  const top = posting.salary.max;
-  if (
-    floor > 0 &&
-    top != null &&
-    posting.salary.source !== "none" &&
-    posting.salary.confidence === "high" &&
-    posting.salary.currency === profile.prefs.currency &&
-    top < floor * 0.7
-  ) {
-    return `Comp ${top} ${posting.salary.currency} is well below your floor (${floor})`;
+  const below = statedCeilingBelow(posting.salary, floor, profile.prefs.currency, 0.7);
+  if (below.below && below.top != null) {
+    const want = profile.prefs.currency;
+    const conv = below.converted ? ` (${formatSalary(posting.salary.max!, posting.salary.currency)} at ${below.rateDate} rates)` : "";
+    return `Comp tops out at ${formatSalary(below.top, want)}${conv}, well below your floor (${formatSalary(floor, want)})`;
   }
 
   // 2. genuinely impossible location: onsite abroad, no sponsorship, you can't relocate.
