@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { JOB_RUNTIME } from "@jobflow/core";
-import { getRepo } from "@/lib/repo";
+import { getRepo, wakeJobRunner } from "@/lib/repo";
 import { guard } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +9,8 @@ export const dynamic = "force-dynamic";
  * Remove older entries. Body: `{ olderThanDays, field?: 'lastSeen'|'firstSeen', hard? }`.
  * Soft-deletes (marks stale) by default; `hard: true` deletes the rows. Invalidated
  * postings are never touched (a manual decision outranks age). ENQUEUES a cloud `purge`
- * job for the worker to drain rather than executing synchronously.
+ * job (the worker, or this server's runner on the local store) rather than executing
+ * synchronously.
  */
 export async function POST(req: Request) {
   const auth = await guard(req, { admin: true });
@@ -27,5 +28,6 @@ export async function POST(req: Request) {
     runtime: JOB_RUNTIME["purge"],
     payload: { olderThanDays, field, hard: !!body?.hard },
   });
+  wakeJobRunner();
   return NextResponse.json({ queued: true, job });
 }

@@ -1,4 +1,4 @@
-import type { RawPosting } from "@jobflow/core";
+import { countryCodeFromText, type RawPosting } from "@jobflow/core";
 import { htmlToText, httpJson, httpStatus, liveFromStatus, type FetchTarget, type SourceAdapter, type LivenessTarget } from "../types.js";
 
 /**
@@ -15,9 +15,16 @@ interface GhJob {
   first_published?: string;
   absolute_url?: string;
   location?: { name?: string };
+  /** with ?content=true: the req's offices; `location` is the full "City, Region, Country" */
+  offices?: GhOffice[];
   content?: string; // HTML, only with ?content=true
   company_name?: string;
   metadata?: unknown;
+}
+export interface GhOffice {
+  id?: number;
+  name?: string;
+  location?: string | null;
 }
 interface GhResponse {
   jobs: GhJob[];
@@ -53,7 +60,7 @@ export class GreenhouseAdapter implements SourceAdapter {
         title: j.title,
         jdText,
         jdHtml: j.content ?? null,
-        locationRaw: j.location?.name ?? null,
+        locationRaw: greenhouseLocation(j.location?.name, j.offices),
         applyUrl: j.absolute_url ?? null,
         salaryRaw: null,
         // updated_at is bulk-bumped on board edits (every Stripe req shared one timestamp),
@@ -64,4 +71,45 @@ export class GreenhouseAdapter implements SourceAdapter {
       } satisfies RawPosting;
     });
   }
+}
+
+/** a location that is only a work mode: "Hybrid", "In-Office", "Distributed; Hybrid"… */
+const MODE_WORD = /^(hybrid|in[- ]?office|office[- ]based|on[- ]?site|onsite|distributed|remote|flexible|anywhere)$/i;
+
+/**
+ * Some boards (Cloudflare: 476 of 483 roles, 2026-11) put the WORK MODE in `location.name`
+ * and the places in `offices[]`. Read the offices then, so the role counts in its markets,
+ * and keep the mode as a prefix the location parser understands ("Hybrid - Austin, TX…").
+ * A real place in `location.name` is kept as it is.
+ */
+export function greenhouseLocation(name: string | undefined, offices: GhOffice[] | undefined): string | null {
+  const raw = name?.trim() || null;
+  if (!raw) return officePlaces(offices);
+  const modes = raw.split(/\s*[;,/|]\s*/).filter(Boolean);
+  if (!modes.every((m) => MODE_WORD.test(m))) return raw;
+  // a bare "Remote" stays as it is: its office is often just the HQ, and reading it as
+  // "Remote - San Francisco" would narrow a role that may be open anywhere
+  if (modes.every((m) => /^(remote|anywhere)$/i.test(m))) return raw;
+  const places = officePlaces(offices);
+  if (!places) return raw;
+  const has = (re: RegExp) => modes.some((m) => re.test(m));
+  // a mixed "Distributed; Hybrid" reads as hybrid: claiming fully remote would overreach
+  const prefix = has(/hybrid|flexible/i) ? "Hybrid - " : has(/distributed|remote|anywhere/i) ? "Remote - " : "";
+  return `${prefix}${places}`;
+}
+
+/**
+ * Each office's label: its short `name` when that already places it in a country ("London,
+ * United Kingdom", "Remote India", "Austin, TX"), else the full `location` ("AMER" →
+ * "United States", "Remote Sweden" stays).
+ */
+function officePlaces(offices: GhOffice[] | undefined): string | null {
+  const labels = new Set<string>();
+  for (const o of offices ?? []) {
+    const short = o.name?.trim();
+    const full = o.location?.trim();
+    const label = short && (countryCodeFromText(short) || !full) ? short : full || short;
+    if (label) labels.add(label);
+  }
+  return labels.size ? [...labels].join("; ") : null;
 }

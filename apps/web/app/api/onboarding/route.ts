@@ -38,6 +38,9 @@ export async function POST(req: Request) {
   if (auth instanceof Response) return auth;
   const parsed = Body.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid onboarding data." }, { status: 400 });
+  if (!parsed.data.draft && !parsed.data.stackProfile?.length) {
+    return NextResponse.json({ error: "Add your résumé or at least one skill — there's nothing to rank jobs against otherwise." }, { status: 400 });
+  }
   const repo = await getRepo();
   // a stored file must be this tenant's own upload
   if (parsed.data.file && !parsed.data.file.key.startsWith(`tenants/${auth.tenantId}/`)) {

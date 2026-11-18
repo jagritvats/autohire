@@ -7,6 +7,7 @@ export * from "./generate.js";
 export * from "./latex.js";
 export * from "./markdown.js";
 export { redactSecrets } from "./redact.js";
+export { DEFAULT_MODELS } from "./models.js";
 export * from "./extract.js";
 
 import { localEmbed } from "@jobflow/core";

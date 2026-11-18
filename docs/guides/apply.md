@@ -4,6 +4,39 @@ JobFlow helps you apply well — tailored, grounded documents and a pre-filled f
 **stops**. You review every field and click submit yourself. That isn't a missing feature;
 it's the point: what goes out in your name should be something you've read.
 
+## From the web app
+
+Every job has a **Job page**. Click its title, or press `o` on the Jobs page (`a` jumps
+straight to the Apply panel). Its **Apply** panel is a checklist: your name, your email, a
+résumé file to attach, and an optional cover letter. Anything missing gets a fix link. Below
+the checklist, a line says what the pre-filler would type and what it leaves for you. Then
+there are three options:
+
+![The Apply panel on a Job page](../screenshots/job-apply.png)
+
+1. **Open the application form**: apply in your browser yourself.
+2. **Pre-fill it on this computer**: shows the exact `pnpm jobflow apply <id> --fill` command
+   to run, with a copy button. Stop `jobflow serve` first, because the local database takes one
+   writer at a time. If the local agent is running (below), this is a **Pre-fill with the local
+   agent** button instead.
+3. **Done? Record it**: **I submitted it — mark applied**. Then add a next step and a
+   follow-up date; it appears under Applications when it's due.
+
+**Tailor** (from a card, the Job page, or `t` on Jobs) drafts a résumé (Markdown, LaTeX or
+bullet variants), a cover letter, and answers to "Why do you want to work here?" and "An
+interesting problem you've solved". A **grounded on** strip shows what the drafts can draw on.
+Each draft says where it came from: *from your résumé (template)* without a model, or
+*written by <model>*.
+
+- **use for autofill** attaches the résumé you made to this job's application.
+- **Save to application** attaches your letter, answers and chosen bullets, so the
+  form-filler types them.
+- **Next: apply →** takes you back to the Apply panel.
+
+![Tailor](../screenshots/tailor.png)
+
+See the [web app tour](web-app-tour.md#tailor) for every Tailor control.
+
 ## From the CLI
 
 ```bash
@@ -16,6 +49,12 @@ pnpm jobflow apply '#1' --fill              # fill it in a local browser, then s
 pnpm jobflow track status '#1' applied      # once YOU have submitted
 ```
 
+The dry run lists anything to fix first (no email, no résumé file…) with the command that
+fixes it, and moves the job forward in your tracker: **ready** when nothing is missing,
+otherwise **drafting**. Letters and answers from `tailor` are saved onto the job's
+application (unless `--no-attach`), so `--fill` types them. `--pdf` attaches the compiled PDF
+to this application only.
+
 `--fill` needs Playwright once:
 
 ```bash
@@ -27,9 +66,16 @@ Form filling is off by default; switch it on once with `pnpm jobflow config set 
 
 It opens the form in a persistent browser profile under `~/.jobflow/browser-profile`
 (log in to sites there once if they need it), types only the contact details and answers
-you stored, attaches your tailored résumé (or base résumé), and waits. Greenhouse, Lever,
+you stored, attaches your tailored résumé (or base résumé), and waits. You check every field
+and press submit yourself, then press Enter in the terminal. It asks whether you submitted,
+and only a "yes" marks the application **applied**. If it won't start, see
+[Troubleshooting](troubleshooting.md#apply---fill-wont-start). Greenhouse, Lever,
 Ashby, Workable and Workday forms have dedicated field maps; anything else gets a cautious
 generic map.
+
+![jobflow apply — the dry run](../screenshots/cli-apply.png)
+
+![The filled form, stopped before submit](../screenshots/apply-review-gate.png)
 
 ### Guarantees
 
@@ -44,41 +90,28 @@ generic map.
 ## Tracking
 
 ```bash
-pnpm jobflow track list
+pnpm jobflow track                                   # next actions first; row numbers are refs
 pnpm jobflow track add '#3'
 pnpm jobflow track status '#3' interviewing --note "Onsite next week"
 pnpm jobflow track next '#3' "Send thank-you" --due 2026-12-01
 ```
 
-The feed marks postings you've already tracked or applied to (don't-double-apply).
+In the web app, **Applications** groups everything into To apply, In progress and Closed,
+with a status, next step and date on each row. **Follow-ups due** sits on top.
 
-## The local agent (Tier-3 sources + filling from the web app)
+![Applications](../screenshots/applications.png)
 
-The agent is the only part that touches your logged-in sessions, so turning it on is intentional and spans env + UI + a running process. **Do all of these; any one missing keeps it off.**
+The feed marks postings you've already tracked or applied to, so you don't apply twice. The
+whole loop is in [Daily workflow](daily-workflow.md).
 
-1. **Install Playwright + Chromium** (heavy download, do it when ready):
-   ```bash
-   pnpm --filter @jobflow/agent exec playwright install chromium
-   # (or: cd apps/agent && npx playwright install chromium)
-   ```
-2. **Set the machine-level gates** in `.env`:
-   ```
-   JOBFLOW_BROWSER=on
-   JOBFLOW_BROWSER_MODE=fill          # only if you want form-fill; else leave 'capture'
-   JOBFLOW_BROWSER_PROFILE=~/jobflow-chrome   # a profile logged into LinkedIn/Naukri
-   ```
-3. **Opt in from the UI:** Settings → Automation → toggle "browser automation (master)" on, and select the Tier-3 sources you want (`naukri`, `linkedin`, `peerlist`, `wellfound`, `darwinbox`, …). Save.
-4. **Run the agent:** `pnpm --filter @jobflow/agent start`. It heartbeats every 30s → the feed's "local agent" pill goes green and shows the enabled sources.
-5. **Use it:** the feed/CRM "fill" buttons enqueue `form_fill` (the agent opens the form in your browser, fills it, **stops at review** — you submit); Settings "browse {source}" buttons enqueue `tier3_poll`, which runs the good-paying-India-SWE sweep (query × tech-hub × CTC floor) in your session and then enqueues a `rank` so the new postings surface in the feed. Override the sweep per-run via the job payload (`queries`, `locations`, `minLpa`, `limit`, `maxTargets`) or globally via the `JOBFLOW_TIER3_*` env vars above. `local_board_poll` (payload `{}` for every local-only board, or `{ "companyId": "…" }` for one) polls the Darwinbox boards.
-6. **Unattended (optional):** leave the agent running. Every `JOBFLOW_LOCAL_POLL_EVERY_HOURS` (default 12), it enqueues one job per opted-in source whose last run is older than that, skipping sources that already have a job queued. Each run of jobs ends with a single `rank`. Set `0` to keep it click-only.
+## The local agent
 
-**Honest caveats:**
-- Tier-3 site selectors (Naukri/LinkedIn/Glassdoor/AmbitionBox) are **best-effort and need tuning** for your session/locale — the framework (your-session fetch, flag-guard, normalize→upsert) is built; the per-site parsing is the part to refine on your machine.
-- **Naukri "posted" dates:** a Naukri job id starts with `DDMMYY`, reportedly the date the job was *first* posted. A "refreshed" listing then shows a recent date but keeps its old id. When the id date is a real date, is within the last year, and is more than 2 days older than the displayed date, it's used as `postedAt` (both are kept in `raw` for audit). Search-index data supports the id format. The refresh behaviour itself was **not** verified live: Naukri answered `403 Access Denied` to an automated browser, and we stopped rather than work around it. If you see odd dates, check `raw.displayedPostedAt`.
-- **Naukri consultancy flag:** `postedByAgency` is set only when a tuple carries an explicit boolean (`consultant` / `isConsultant` / …). The exact key in search results is unverified, so check a few in your session.
-- The anti-bot sources (Darwinbox, Peerlist, Wellfound) use no stealth tricks. If a site challenges your browser, that run returns nothing and the next scheduled run tries again. Solve challenges yourself in the agent's browser if you like; the agent never does.
-- Form-fill **never submits** — there is no code path that clicks submit (`assertNeverSubmits`), and `JOBFLOW_AUTOSUBMIT` is hard-false.
-- This runs against your real accounts at human pace; it's your risk to accept, which is why it's off by default and isolated.
+The optional **local agent** runs on your machine, in your browser profile. While it's
+online, the Job page's Apply panel gets a **Pre-fill with the local agent** button. It's also
+the only part of JobFlow that reads logged-in sites (LinkedIn, Naukri, Glassdoor,
+AmbitionBox). It's off by default, and turning it on takes Postgres (the Docker stack is
+enough), environment flags, a Settings opt-in and a running process. See **[The local agent](local-agent.md)** for the steps and the
+caveats.
 
 ## Browser extension
 

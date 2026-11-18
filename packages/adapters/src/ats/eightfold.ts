@@ -1,5 +1,5 @@
 import type { RawPosting } from "@jobflow/core";
-import { COUNTRY_NAMES, DETAIL_CAP, pickForDetail, htmlToText, httpJson, mapPool, type FetchTarget, type SourceAdapter } from "../types.js";
+import { adapterNotice, COUNTRY_NAMES, DETAIL_CAP, markPartial, pickForDetail, htmlToText, httpJsonPolite, mapPool, type FetchTarget, type SourceAdapter } from "../types.js";
 
 /**
  * Eightfold careers APIs (Tier 2: the JSON the careers site calls, no auth). Two
@@ -62,7 +62,11 @@ interface EfV2Detail {
 
 /** the API ignores larger `num` — pages are always 10. */
 const PAGE = 10;
-/** most recent N (sorted by timestamp); older reqs age out of the window → markStale. */
+/**
+ * most recent N (sorted by timestamp). A board with more is listed PARTIALLY: an older
+ * req past the window may still be open, so it is left to the lastSeen TTL sweep rather
+ * than diffed away by markStale (invariant #5).
+ */
 const MAX_LIST = 200;
 
 /** One listing, whichever API it came from. */
@@ -87,13 +91,15 @@ export class EightfoldAdapter implements SourceAdapter {
     const country = target.location ? COUNTRY_NAMES[target.location.toUpperCase()] ?? target.location : "";
     const headers = { Referer: `https://${host}/careers?domain=${domain}` };
 
-    const rows = s.api === "v2" ? await listV2(host, domain, country, headers) : await listPcsx(host, domain, country, headers);
+    const listed = s.api === "v2" ? await listV2(host, domain, country, headers) : await listPcsx(host, domain, country, headers);
     // a failed page mid-list would make the tail look closed to markStale — all or nothing
-    if (!rows) return [];
+    if (!listed) return [];
+    // a req posted mid-poll shifts the timestamp-sorted pages, so a row can repeat
+    const rows = [...new Map(listed.rows.map((r) => [r.id, r])).values()];
 
     const needDetail = pickForDetail(rows.filter((r) => !target.known?.has(String(r.id))), (r) => r.title, target.limit ?? DETAIL_CAP);
     const details = new Map<number, { html?: string; url?: string } | null>();
-    await mapPool(needDetail, 3, async (r) => {
+    await mapPool(needDetail, 2, async (r) => {
       if (s.api === "v2") {
         const d = await getPolitely<EfV2Detail>(`https://${host}/api/apply/v2/jobs/${r.id}?domain=${domain}`, headers);
         details.set(r.id, d ? { html: d.job_description, url: d.canonicalPositionUrl } : null);
@@ -103,7 +109,7 @@ export class EightfoldAdapter implements SourceAdapter {
       }
     });
 
-    return rows.map((r) => {
+    const out = rows.map((r) => {
       const d = details.get(r.id);
       const mode = r.mode === "remote" ? "Remote - " : r.mode === "hybrid" ? "Hybrid - " : "";
       return {
@@ -124,20 +130,29 @@ export class EightfoldAdapter implements SourceAdapter {
         raw: r.raw as Record<string, unknown>,
       } satisfies RawPosting;
     });
+    return rows.length < listed.total ? markPartial(out) : out;
   }
 }
 
-async function listPcsx(host: string, domain: string, country: string, headers: Record<string, string>): Promise<EfRow[] | null> {
+interface EfListing {
+  rows: EfRow[];
+  /** the board's own count for the query (what a complete list would hold) */
+  total: number;
+}
+
+async function listPcsx(host: string, domain: string, country: string, headers: Record<string, string>): Promise<EfListing | null> {
   const positions: EfPosition[] = [];
+  let total = 0;
   for (let start = 0; start < MAX_LIST; start += PAGE) {
     const qs = new URLSearchParams({ domain, query: "", location: country, start: String(start), num: String(PAGE), sort_by: "timestamp" });
     const res = await getPolitely<EfSearch>(`https://${host}/api/pcsx/search?${qs}`, headers);
     if (!res) return null;
     const batch = res.data?.positions ?? [];
     positions.push(...batch);
-    if (batch.length < PAGE || positions.length >= (res.data?.count ?? 0)) break;
+    total = res.data?.count ?? positions.length;
+    if (batch.length < PAGE || positions.length >= total) break;
   }
-  return positions.map((p) => ({
+  const rows = positions.map((p) => ({
     id: p.id,
     title: p.name,
     where: [...(p.standardizedLocations ?? []), ...(p.locations ?? [])].join("; "),
@@ -146,18 +161,29 @@ async function listPcsx(host: string, domain: string, country: string, headers: 
     url: p.positionUrl ? `https://${host}${p.positionUrl}` : null,
     raw: p,
   }));
+  return { rows, total };
 }
 
-async function listV2(host: string, domain: string, country: string, headers: Record<string, string>): Promise<EfRow[] | null> {
+async function listV2(host: string, domain: string, country: string, headers: Record<string, string>): Promise<EfListing | null> {
   const positions: EfV2Position[] = [];
+  let total = 0;
   for (let start = 0; start < MAX_LIST; start += PAGE) {
     const qs = new URLSearchParams({ domain, location: country, start: String(start), num: String(PAGE), sort_by: "timestamp" });
     const res = await getPolitely<EfV2Search>(`https://${host}/api/apply/v2/jobs?${qs}`, headers);
-    if (!res || !Array.isArray(res.positions)) return null;
+    if (!res) return null;
+    // v2 answers its whole page config ({domain, branding, facets, …, positions, count}); a
+    // reply with no `positions` list at all is a changed API, not an empty board — say so.
+    // (Bayer, 2026-11: `positions: []`, `count: 0` for every location, and its own careers
+    // page renders the same 0 — the board is empty, which is not an adapter failure.)
+    if (!Array.isArray(res.positions)) {
+      adapterNotice("eightfold", `${domain}: /api/apply/v2 answered without a positions list; the tenant may have moved to PCSX (use the "{host}/{domain}" slug)`);
+      return null;
+    }
     positions.push(...res.positions);
-    if (res.positions.length < PAGE || positions.length >= (res.count ?? 0)) break;
+    total = res.count ?? positions.length;
+    if (res.positions.length < PAGE || positions.length >= total) break;
   }
-  return positions.map(v2Row);
+  return { rows: positions.map(v2Row), total };
 }
 
 /** v2 listing → row. `t_create` is when the posting went up (not re-stamped by edits —
@@ -176,15 +202,14 @@ export function v2Row(p: EfV2Position): EfRow {
 }
 
 /**
- * Microsoft's tenant rate-limits bursts (429). Pace requests and retry once after a
- * pause rather than hammering; a second failure degrades to null (adapter returns less).
+ * Microsoft's tenant rate-limits bursts: measured 2026-11, about one request in four is a
+ * 429 even at 2 s spacing, and it sends no Retry-After. The old single 4 s retry lost the
+ * whole India list (0 postings). Pace every call, and back off 5 s → 10 s → 20 s on a
+ * 429/503; any other failure degrades to null at once (the list is then all-or-nothing).
  */
 async function getPolitely<T>(url: string, headers: Record<string, string>): Promise<T | null> {
-  await sleep(300);
-  const first = await httpJson<T>(url, { headers });
-  if (first) return first;
-  await sleep(4000);
-  return httpJson<T>(url, { headers });
+  await sleep(500);
+  return httpJsonPolite<T>(url, { headers }, { retries: 3, baseDelayMs: 5000 });
 }
 
 function sleep(ms: number): Promise<void> {

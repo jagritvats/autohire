@@ -18,9 +18,12 @@ pnpm jobflow config set llm.model claude-opus-5-5 # optional: override the stron
 pnpm jobflow doctor                               # sends a 1-token test
 ```
 
-Or in the web app: Settings → Generation model (with a "test" button). The key is stored in
-your own database (encrypted at rest when `JOBFLOW_SECRET_KEY` is set), is never shown back
-in the UI, and is redacted from error messages and logs.
+Or in the web app: **Settings → Writing model**. Pick a provider, paste the key, optionally
+name a model, **Save**, then **Test connection**. "In use now" shows what drafts use. The key
+is stored in your own database (encrypted at rest when `JOBFLOW_SECRET_KEY` is set), is never
+shown back in the UI, and is redacted from error messages and logs.
+
+![Settings → Writing model](../screenshots/settings.png)
 
 Environment variables work too and act as the default for everyone on the machine:
 `LLM_PROVIDER`, `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `XAI_API_KEY`, `LLM_MODEL_STRONG`,
@@ -30,7 +33,10 @@ Environment variables work too and act as the default for everyone on the machin
 |---|---|
 | `anthropic` | `claude-opus-5-5` / `claude-haiku-5-5` |
 | `openai` | `gpt-5` / `gpt-5-mini` |
-| `grok` | the provider's current defaults (see `packages/llm/src/factory.ts`) |
+| `grok` | `grok-4` / `grok-3-mini` |
+
+Without a model, everything except prose still works: see
+[What works without a model](troubleshooting.md#what-works-without-a-model-echo).
 
 ## Cost control
 

@@ -12,6 +12,7 @@
     "enrich": "tsx src/orchestrator.ts enrich",
     "salary": "tsx src/orchestrator.ts salary",
     "salary-backtest": "tsx src/orchestrator.ts salary-backtest",
+    "renormalize": "tsx src/orchestrator.ts renormalize",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -24,5 +25,6 @@
   },
   "devDependencies": {
     "tsx": "^4.19.2"
-  }
+  },
+  "license": "AGPL-3.0-only"
 }

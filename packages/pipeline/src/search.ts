@@ -118,6 +118,12 @@ export interface AdhocSearchOptions {
   now?: number;
   /** adapters to use instead of the registry's (tests) — still tier-checked */
   adapters?: SourceAdapter[];
+  /**
+   * apply the scorer's hard exclusions (salary floor / impossible location). Default true.
+   * Pass false for a profile that isn't set up yet: a blank profile has no floor and no
+   * location, so excluding against it would be inventing preferences.
+   */
+  hardExclude?: boolean;
 }
 
 /** an id for a transient posting: stable per (atsType, scoped id), uuid-shaped. */
@@ -227,7 +233,7 @@ export async function adhocSearch(
       };
     }
     const match = scorePosting(posting, profile);
-    if (!match.rulePass) {
+    if (!match.rulePass && opts.hardExclude !== false) {
       excluded++;
       continue;
     }

@@ -35,10 +35,10 @@ const LOWER_QUAL = /(?:minimum|min\.?|at\s*least|atleast|over|more than|upwards?
 const UPPER_QUAL = /(?:up\s*to|under|less than|no more than|max(?:imum)?|at most|<=?)\s*(?:of\s+)?$/i;
 // Context before the number that means it is NOT a requirement.
 const REJECT_BEFORE =
-  /(?:past|last|next|previous|prior|coming|for the|in the|over the|within(?:\s+the)?\s+last|every|(?:bond|agreement|contract|commitment|lock[- ]?in|tenure|degree|course|program(?:me)?|warranty|guarantee)\s+(?:of|for)|legacy of|history of|track record of)\s*$/i;
+  /(?:past|last|next|previous|prior|coming|for the|in the|over the|after|within(?:\s+the)?\s+last|every|(?:bond|agreement|contract|commitment|lock[- ]?in|tenure|degree|course|program(?:me)?|warranty|guarantee)\s+(?:of|for)|legacy of|history of|track record of|(?:innovating|revolutionizing|revolutionising|pioneering|been around|existed|in business)\b[^.\n]{0,20}\bfor(?:\s+(?:more than|over|nearly|almost|about|close to))?)\s*$/i;
 // Trailing context that means age / history / a contract term, not a requirement.
 const REJECT_AFTER =
-  /^\s*(?:ago|old|older|of age|or older|(?:of\s+)?(?:full[- ]time\s+|regular\s+|formal\s+)?(?:education|schooling)\b|(?:bond|contract|commitment|lock[- ]?in|tenure|term|degree|course|program|warranty|guarantee)\b|[^.\n]{0,12}\b(?:history|legacy|in business|of (?:excellence|innovation|growth|trust|service|operations?|existence|success)))/i;
+  /^\s*(?:ago|old|older|of age|or older|(?:of\s+)?(?:full[- ]time\s+|regular\s+|formal\s+)?(?:education|schooling)\b|(?:bond|contract|commitment|lock[- ]?in|tenure|term|degree|course|program|warranty|guarantee)\b|(?:of\s+)?track record|[^.\n]{0,12}\b(?:history|legacy|in business|of (?:excellence|innovation|growth|trust|service|operations?|existence|success)))/i;
 // The sentence states a preference, not a requirement.
 const SOFT_CONTEXT = /\b(prefer(?:red|ably)?|nice[- ]to[- ]have|good[- ]to[- ]have|bonus|a plus|ideally|desirable|would be (?:great|nice)|advantageous)\b/i;
 
@@ -49,6 +49,13 @@ const WORD_NUMBERS: Record<string, number> = {
 const WORD_NUMBER_RE = /\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen)\b/gi;
 
 const MAX_PLAUSIBLE_YEARS = 40;
+/**
+ * No real JD asks more than this as a FLOOR; above it, a "N years" is the employer's age
+ * ("for more than 25 years", "We're 40 years, 20+ countries"). On a live corpus every
+ * 25/30/40-year "requirement" was company boilerplate (Cisco, PayPal, Nvidia, Cadence…,
+ * ~200 postings read as "not your role yet" — audit 2026-11).
+ */
+const MAX_PLAUSIBLE_FLOOR = 20;
 
 interface Mention {
   lo: number | null;
@@ -73,7 +80,7 @@ export function parseExperience(jdText: string): ExperienceRange {
       let n1 = Number(m[1]);
       let n2 = m[2] != null ? Number(m[2]) : null;
       const plus = m[3] != null || /^\s*\+/.test(after); // "5+ years" or "5 years+"
-      if (!Number.isFinite(n1) || n1 < 0 || n1 > MAX_PLAUSIBLE_YEARS) continue;
+      if (!Number.isFinite(n1) || n1 < 0 || n1 > MAX_PLAUSIBLE_FLOOR) continue;
       if (n2 != null && (!Number.isFinite(n2) || n2 > MAX_PLAUSIBLE_YEARS)) n2 = null;
       if (n2 != null && n2 < n1) [n1, n2] = [n2, n1]; // tolerate "5-3 years"
 

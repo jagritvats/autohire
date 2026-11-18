@@ -16,5 +16,6 @@
   "dependencies": {
     "@jobflow/core": "workspace:*",
     "zod": "^3.24.1"
-  }
+  },
+  "license": "AGPL-3.0-only"
 }

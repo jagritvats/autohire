@@ -2,7 +2,7 @@
   "name": "@jobflow/cli",
   "version": "0.1.0",
   "private": true,
-  "description": "jobflow — the local-first JobFlow command line: search, rank, tailor, and fill applications up to the review screen.",
+  "description": "jobflow \u2014 the local-first JobFlow command line: search, rank, tailor, and fill applications up to the review screen.",
   "type": "module",
   "bin": {
     "jobflow": "./bin/jobflow.mjs"
@@ -21,6 +21,7 @@
     "@jobflow/core": "workspace:*",
     "@jobflow/db": "workspace:*",
     "@jobflow/llm": "workspace:*",
+    "@jobflow/mcp": "workspace:*",
     "@jobflow/pipeline": "workspace:*",
     "@jobflow/resume-io": "workspace:*",
     "@jobflow/service": "workspace:*",
@@ -31,5 +32,6 @@
   "devDependencies": {
     "@types/node": "^22.10.2",
     "vitest": "^2.1.8"
-  }
+  },
+  "license": "AGPL-3.0-only"
 }

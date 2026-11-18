@@ -3,8 +3,8 @@ import { LevelBandOrder, type LevelBand, type RemoteGeo, type RoleArchetype } fr
 import { cosine, clamp } from "../util/vector.js";
 import { convertCurrency, formatSalary } from "../salary/fx.js";
 import { stackAdjacency, type StackAdjacencyResult } from "./stack.js";
-import { countryDisplayName, parsedCountryMatches, primaryRemoteGeo, remoteGeosForCountry } from "../normalize/location.js";
-import { effectiveHomeCountry, effectiveRemoteGeos } from "./region.js";
+import { countryDisplayName, locationInCountry, primaryRemoteGeo, remoteGeosForCountry } from "../normalize/location.js";
+import { effectiveHomeCountry, effectiveMarkets, effectiveRemoteGeos } from "./region.js";
 import { EVERGREEN_TITLE_RE, REDATED_SOURCES, TALENT_POOL_JD_RE, scoreSourceTrust } from "./trust.js";
 
 /**
@@ -268,6 +268,7 @@ const GEO_PENALTY: Record<RemoteGeo, number> = {
   us_eu: 0.4,
   eu_only: 0.35,
   us_only: 0.25,
+  country_only: 0.3, // residents of another country (the caller opens it for home / markets)
   unknown: 0.7,
 };
 
@@ -282,6 +283,7 @@ const GEO_PENALTY_ELSEWHERE: Record<RemoteGeo, number> = {
   us_eu: 0.4,
   eu_only: 0.35,
   us_only: 0.25,
+  country_only: 0.3,
   unknown: 0.7,
 };
 /** home unknown: a restricted geo may or may not be open — mildly below an open one. */
@@ -292,6 +294,7 @@ const GEO_PENALTY_UNKNOWN_HOME: Record<RemoteGeo, number> = {
   us_eu: 0.6,
   eu_only: 0.6,
   us_only: 0.6,
+  country_only: 0.6,
   unknown: 0.7,
 };
 
@@ -328,11 +331,26 @@ function scoreLocation(
     // plus the geos open from home decide which count as open; the penalty table covers
     // the rest.
     const geoOk = [...(profile.prefs.remoteGeoOk ?? []), ...homeGeos];
-    const geo = geoOk.includes(loc.remoteGeo) ? 1 : geoPenalty(home, loc.remoteGeo);
+    let geo = geoOk.includes(loc.remoteGeo) ? 1 : geoPenalty(home, loc.remoteGeo);
     const primary = home ? primaryRemoteGeo(home) : null;
     const openBonus = loc.remoteGeo === "worldwide" || (primary !== null && loc.remoteGeo === primary) ? 0.1 : 0;
+    // "Remote - Brazil" / "Remote Singapore": remote WITHIN named countries (`country_only`;
+    // rows parsed before it existed read `unknown` + a country). Open from there or one of
+    // your markets; from anywhere else it usually needs residency — as closed as a geo named
+    // for somewhere else (soft, §11.3; the hard rule needs ≥0.85 confidence, see hardExclude).
+    const countryOnly =
+      loc.remoteGeo === "country_only" || (loc.remoteGeo === "unknown" && loc.country != null && loc.country !== "Europe" && home !== "");
+    const where = countryOnly ? remoteCountriesLabel(loc) : "";
+    if (countryOnly) {
+      const places = [home, ...effectiveMarkets(profile.prefs)].filter(Boolean);
+      if (places.some((c) => locationInCountry(loc, c) === true)) geo = 1;
+      else if (home) {
+        geo = GEO_PENALTY_ELSEWHERE.country_only;
+        flags.push(`"Remote" within ${where} — usually requires living there`);
+      }
+    }
     score = clamp(labelScore * geo + openBonus);
-    note = `Remote (${loc.remoteGeo}).`;
+    note = countryOnly ? `Remote (${where}).` : `Remote (${loc.remoteGeo}).`;
     // restricted geos not open from home get an honest flag (home unknown: say what it is)
     const closed = !homeGeos.includes(loc.remoteGeo);
     if (loc.remoteGeo === "us_only" && closed) {
@@ -347,8 +365,9 @@ function scoreLocation(
     }
   } else if (loc.mode === "hybrid" || loc.mode === "onsite") {
     // onsite/hybrid in your own country is workable — a small honest boost, not a filter.
-    // true = in your country, false = definitely elsewhere, null = can't tell / home unknown
-    const where = home ? parsedCountryMatches(loc.country, home) : null;
+    // true = an office in your country, false = every office definitely elsewhere,
+    // null = can't tell / home unknown
+    const where = home ? locationInCountry(loc, home) : null;
     const atHome = where === true;
     score = clamp(atHome ? labelScore + HOME_ONSITE_BOOST : labelScore);
     // onsite abroad needs a work visa. Explicit sponsorship keeps it viable; silence is
@@ -521,7 +540,7 @@ function hardExclude(posting: Posting, profile: Profile): string | null {
     (posting.location.mode === "onsite" || posting.location.mode === "hybrid") &&
     posting.location.country != null &&
     home !== "" &&
-    parsedCountryMatches(posting.location.country, home) === false &&
+    locationInCountry(posting.location, home) === false && // abroad = NO office is home
     posting.location.sponsorship === false &&
     !profile.prefs.relocate
   ) {
@@ -543,6 +562,15 @@ function hardExclude(posting: Posting, profile: Profile): string | null {
     return `Remote restricted to ${GEO_LABEL[loc.remoteGeo]} — outside your remote-geo prefs`;
   }
 
+  // 2c. remote for residents of named countries (`country_only`), same bar: explicit (≥0.85)
+  //     and none of the countries is your home or a market — every one definitely elsewhere.
+  if (loc.mode === "remote" && loc.remoteGeo === "country_only" && loc.confidence >= RESTRICTION_CONFIDENCE) {
+    const places = [home, ...effectiveMarkets(profile.prefs)].filter(Boolean);
+    if (places.length && places.every((c) => locationInCountry(loc, c) === false)) {
+      return `Remote restricted to residents of ${remoteCountriesLabel(loc)} — not your home or a market`;
+    }
+  }
+
   return null;
 }
 
@@ -550,6 +578,12 @@ const RESTRICTED_GEOS = new Set<RemoteGeo>(["us_only", "eu_only", "us_eu"]);
 /** the parser reports ≥0.85 for an explicit location field or explicit JD restriction. */
 const RESTRICTION_CONFIDENCE = 0.85;
 const GEO_LABEL: Partial<Record<RemoteGeo, string>> = { us_only: "US/Americas", eu_only: "EU/UK", us_eu: "US/EU" };
+
+/** "Canada", "Canada / Brazil": the countries a country-scoped remote role names. */
+function remoteCountriesLabel(loc: Posting["location"]): string {
+  const names = (loc.countries ?? []).map(countryDisplayName);
+  return names.length ? names.slice(0, 3).join(" / ") + (names.length > 3 ? " …" : "") : (loc.country ?? "one country");
+}
 
 function cap(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
