@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { Badge, Banner } from "./ui";
 
 interface Job {
   id: string;
@@ -71,42 +72,47 @@ export function ActivityPanel() {
   const stale = jobs.find((j) => j.status === "queued" && Date.now() - new Date(j.createdAt).getTime() > 12_000);
 
   return (
-    <div className="activity">
-      <div className="activity-bar">
-        <span className="activity-label">command</span>
+    <section className="activity" aria-label="Commands and background jobs">
+      <div className="activity-bar" role="toolbar" aria-label="Commands">
+        <span className="activity-label" aria-hidden="true">
+          command
+        </span>
         {COMMANDS.map((c) => (
-          <button key={c.type} className="cmd" disabled={busy === c.type} onClick={() => enqueue(c.type)}>
+          <button key={c.type} type="button" className="btn btn--secondary btn--sm" disabled={busy === c.type} onClick={() => enqueue(c.type)}>
             {busy === c.type ? "…" : c.label}
           </button>
         ))}
         <span className="spacer" />
-        <span className="agent-pill" data-on={agentOnline}>
+        <Badge tone={agentOnline ? "good" : "neutral"}>
+          <span className="badge__dot" aria-hidden="true" />
           local agent {agentOnline ? "online" : "offline"}
           {agentOnline && agent?.flags ? ` · browser ${agent.flags.browserOn ? "on" : "off"}` : ""}
           {agentOnline && (agent?.enabledSources?.length ?? 0) > 0 ? ` · ${agent!.enabledSources!.join(",")}` : ""}
-        </span>
-        {pending > 0 && <span className="pending">{pending} active</span>}
+        </Badge>
+        <span aria-live="polite">{pending > 0 && <span className="pending">{pending} active</span>}</span>
       </div>
 
       {stale && (
-        <div className="worker-hint">
-          ⚠ jobs are queued but nothing is draining — run <code>pnpm --filter @jobflow/worker runner</code>
-        </div>
+        <Banner tone="warn" live className="worker-hint">
+          jobs are queued but nothing is draining — run <code>pnpm --filter @jobflow/worker runner</code>
+        </Banner>
       )}
 
       {jobs.length > 0 && (
-        <div className="job-list">
+        <ul className="job-list" aria-label="Recent jobs">
           {jobs.slice(0, 6).map((j) => (
-            <div className="job" key={j.id}>
-              <span className={`jstatus s-${j.status}`}>{statusDot(j.status)}</span>
+            <li className="job" key={j.id}>
+              <span className={`jstatus s-${j.status}`} aria-label={j.status} title={j.status}>
+                {statusDot(j.status)}
+              </span>
               <span className="jtype">{j.type}</span>
               <span className="jresult">{summary(j)}</span>
               <span className="jtime">{ago(j.finishedAt ?? j.createdAt)}</span>
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
-    </div>
+    </section>
   );
 }
 
