@@ -113,7 +113,9 @@ describe("DOCX", () => {
       ["Software Engineer", "Sample Retail Co", "2020-06", "2022-12", false, 1],
     ]);
     expect(d.skills.canonical).toEqual(expect.arrayContaining(["java", "javascript", "kafka"]));
-    expect(d.skills.unrecognized).toEqual(["Figma"]);
+    // Figma is a dictionary skill now (taxonomy pass)
+    expect(d.skills.canonical).toContain("figma");
+    expect(d.skills.unrecognized).toEqual([]);
     expect(d.evidence[0]!.metric).toBe("2M transactions/day; 480ms; 120ms");
   });
 });

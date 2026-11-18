@@ -39,6 +39,7 @@ import type {
   SalaryCacheEntry,
   UpsertCompany,
 } from "./repository.js";
+import type { PostingNormalizedPatch } from "./repository.js";
 import { SYNC_RUNS_KEPT } from "./repository.js";
 import { pgPoolClient, sqlState, type SqlClient, type SqlRow } from "./sql.js";
 
@@ -264,14 +265,31 @@ export class PgRepository implements Repository {
         band.period ?? null, band.basis ?? null, band.equity ?? null],
     );
   }
-  async updatePostingNormalized(id: string, patch: { location: ParsedLocation; postedByAgency: boolean }): Promise<void> {
+  async updatePostingNormalized(id: string, patch: PostingNormalizedPatch): Promise<void> {
     const l = patch.location;
-    await this.q(
-      `update posting set loc_mode = $2, loc_city = $3, loc_country = $4, loc_tz = $5, remote_geo = $6, sponsorship = $7,
-         location_confidence = $8, loc_countries = $9, posted_by_agency = $10
-       where id = $1`,
-      [id, l.mode, l.city, l.country, l.timezone, l.remoteGeo, l.sponsorship, l.confidence, l.countries ?? null, patch.postedByAgency],
-    );
+    const sets = [
+      "loc_mode = $2", "loc_city = $3", "loc_country = $4", "loc_tz = $5", "remote_geo = $6", "sponsorship = $7",
+      "location_confidence = $8", "loc_countries = $9", "posted_by_agency = $10",
+    ];
+    const params: unknown[] = [id, l.mode, l.city, l.country, l.timezone, l.remoteGeo, l.sponsorship, l.confidence, l.countries ?? null, patch.postedByAgency];
+    // the title / JD derivations only when given — omitted ones stay as stored
+    const opt = (col: string, v: unknown) => {
+      params.push(v);
+      sets.push(`${col} = $${params.length}`);
+    };
+    if (patch.title !== undefined) opt("title", patch.title);
+    if (patch.titleNorm !== undefined) opt("title_norm", patch.titleNorm);
+    if (patch.roleArchetype !== undefined) opt("role_archetype", patch.roleArchetype);
+    if (patch.levelBand !== undefined) opt("level_band", patch.levelBand);
+    if (patch.jdText !== undefined) opt("jd_text", patch.jdText);
+    if (patch.jdSkills !== undefined) opt("jd_skills", patch.jdSkills);
+    if (patch.requirements !== undefined) opt("requirements", JSON.stringify(patch.requirements));
+    if (patch.experience !== undefined) {
+      opt("experience_min", patch.experience.min);
+      opt("experience_max", patch.experience.max);
+    }
+    if (patch.dedupKey !== undefined) opt("dedup_key", patch.dedupKey);
+    await this.q(`update posting set ${sets.join(", ")} where id = $1`, params);
   }
   async saveSalaryEstimates(updates: Array<{ id: string; estimate: SalaryEstimate | null }>): Promise<number> {
     let n = 0;
@@ -528,13 +546,14 @@ export class PgRepository implements Repository {
     }
   }
   async listMatches(tenantId: string, limit = 50): Promise<Array<Match & { posting: Posting }>> {
-    // feed = rule-passing + active + non-invalidated/stale + not archived by this tenant
+    // feed = rule-passing + active + non-invalidated/stale + not archived by this tenant +
+    // a canonical posting (a match scored before its posting became a duplicate is stale)
     const { rows } = await this.q(
       `select m.*, row_to_json(p.*) as posting from match m
        join posting p on p.id = m.posting_id
        left join posting_user_state s on s.posting_id = p.id and s.tenant_id = m.tenant_id
        where m.tenant_id = $1 and m.rule_pass = true and p.is_active = true and p.status = 'active'
-         and coalesce(s.archived, false) = false
+         and p.canonical_id is null and coalesce(s.archived, false) = false
        order by m.score desc limit $2`,
       [tenantId, limit],
     );

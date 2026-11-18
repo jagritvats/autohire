@@ -54,7 +54,7 @@ export function remoteGeos(v: string): RemoteGeo[] {
 }
 
 export function archetypes(v: string): RoleArchetype[] {
-  const alias: Record<string, string> = { devops: "infra_devops", infra: "infra_devops", data: "data_ml", ml: "data_ml", "full-stack": "fullstack", "full_stack": "fullstack" };
+  const alias: Record<string, string> = { devops: "infra_devops", infra: "infra_devops", data: "data_ml", ml: "data_ml", analytics: "data_analytics", analyst: "data_analytics", bi: "data_analytics", "full-stack": "fullstack", "full_stack": "fullstack" };
   const ok = RoleArchetype.options as readonly string[];
   const out = csv(v).map((r) => {
     const k = r.toLowerCase().replace(/\s+/g, "_");

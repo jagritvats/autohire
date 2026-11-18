@@ -92,6 +92,49 @@ describe("feed cards (one plain-language card for every surface)", () => {
   });
 });
 
+describe("the same role posted per country is one card (taxonomy pass)", () => {
+  const SRE_JD = "Example Grafanaish runs observability for thousands of teams. Java, Kafka, PostgreSQL, distributed systems, microservices; on-call for ingestion. 2-5 years of experience. ".repeat(4);
+  async function siblingFeed(groupSiblings?: boolean, also?: (feed: Awaited<ReturnType<typeof getFeed>>) => Promise<void>) {
+    const repo = new InMemoryRepository();
+    const t = await repo.createTenant({ name: "t" });
+    const rows: Array<[string, string, string, string]> = [
+      ["Example Grafanaish", "Backend Engineer, Ingestion", "Bengaluru, India", SRE_JD],
+      ["Example Grafanaish", "Backend Engineer, Ingestion", "London, United Kingdom", SRE_JD],
+      ["Example Grafanaish", "Backend Engineer, Ingestion", "Berlin, Germany", SRE_JD],
+      ["Example Grafanaish", "Backend Engineer, Ingestion", "Austin, TX", SRE_JD],
+      ["Example Other", "Backend Engineer", "Bengaluru, India", JD],
+    ];
+    for (const [i, [company, title, loc, jd]] of rows.entries()) await seed(repo, company, title, loc, jd, i);
+    await loadSampleProfile(repo, t.id);
+    await rankTenant(repo, t.id);
+    const feed = await getFeed(repo, t.id, { bootstrap: false, groupSiblings });
+    if (also) await also(await getFeed(repo, t.id, { bootstrap: false, groupSiblings: !groupSiblings }));
+    return feed;
+  }
+
+  it("shows the sibling that fits the user best, says where else it's posted, and counts the fold", async () => {
+    const feed = await siblingFeed();
+    const cards = feed.cards.filter((c) => c.company === "Example Grafanaish");
+    expect(cards).toHaveLength(1);
+    // the fictional sample persona lives in India: the Bengaluru req is the best fit
+    expect(cards[0]!.location.label).toMatch(/Bengaluru/);
+    expect(cards[0]!.siblings.map((s) => s.place).sort()).toEqual(["Germany", "UK", "US"]);
+    expect(cards[0]!.alsoPosted).toMatch(/^Also posted for /);
+    expect(feed.stats.siblingsFolded).toBe(3);
+    expect(feed.cards.find((c) => c.company === "Example Other")!.siblings).toEqual([]);
+  });
+
+  it("scores are untouched and grouping can be switched off (every req is its own card)", async () => {
+    let on!: Awaited<ReturnType<typeof getFeed>>;
+    const off = await siblingFeed(false, async (f) => void (on = f));
+    const all = off.cards.filter((c) => c.company === "Example Grafanaish");
+    expect(all).toHaveLength(4);
+    const lead = on.cards.find((c) => c.company === "Example Grafanaish")!;
+    expect(lead.score).toBe(Math.max(...all.map((c) => c.score)));
+    for (const s of lead.siblings) expect(s.score).toBe(all.find((c) => c.id === s.id)!.score);
+  });
+});
+
 describe("the offline demo corpus reads cleanly", () => {
   it("no empty location line, no doubled place, no internal ids in the notes", async () => {
     const repo = new InMemoryRepository();

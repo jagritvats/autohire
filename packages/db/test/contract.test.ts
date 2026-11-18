@@ -512,6 +512,13 @@ describe.each(stores)("Repository contract — %s", (name, open) => {
     await repo.saveMatches([m]);
     expect((await repo.listMatches(t)).map((x) => x.postingId)).toEqual([p.id]);
     expect(await repo.listMatches(await newTenant())).toEqual([]);
+    // a posting that became a duplicate keeps its old match row, but the feed doesn't list it
+    const co2 = await repo.upsertCompany({ name: "Acme Two", nameNorm: `acme2-${randomUUID()}`, atsType: "greenhouse", atsSlug: "acme2" });
+    const other = await repo.upsertPosting({ ...np, companyId: co2.id, atsJobId: `${np.atsJobId}-canon` });
+    await repo.setCanonical(p.id, other.id);
+    expect(await repo.listMatches(t)).toEqual([]);
+    await repo.setCanonical(p.id, null);
+    expect((await repo.listMatches(t)).map((x) => x.postingId)).toEqual([p.id]);
 
     await repo.invalidatePosting(p.id, "spam");
     expect((await repo.getPosting(p.id))?.status).toBe("invalidated");
@@ -594,6 +601,35 @@ describe.each(stores)("Repository contract — %s", (name, open) => {
     // a location with no countries reads back without the field (older rows alike)
     await repo.updatePostingNormalized(p.id, { location: { ...p.location, countries: undefined }, postedByAgency: false });
     expect((await repo.getPosting(p.id))?.location.countries).toBeUndefined();
+  });
+
+  it("updatePostingNormalized rewrites the title / JD derivations when given, and leaves omitted ones", async () => {
+    const co = await repo.upsertCompany({ name: "Acme", nameNorm: `acme-${randomUUID()}`, atsType: "greenhouse", atsSlug: "acme" });
+    const p = await repo.upsertPosting({ ...postingFor(co.id), atsJobId: `tax-${randomUUID()}` });
+    const lastSeen = (await repo.getPosting(p.id))!.lastSeen;
+    await repo.updatePostingNormalized(p.id, {
+      location: p.location,
+      postedByAgency: false,
+      title: "Data Analyst & Reporting",
+      titleNorm: "data-analyst-reporting",
+      roleArchetype: "data_analytics",
+      levelBand: null,
+      jdText: "SQL & Tableau, 3+ years.",
+      jdSkills: ["sql", "tableau"],
+      requirements: [{ skill: "sql", strength: "must_have" }],
+      experience: { min: 3, max: null },
+      dedupKey: "acme|x~analyst-data|onsite:na",
+    });
+    const got = (await repo.getPosting(p.id))!;
+    expect(got).toMatchObject({
+      title: "Data Analyst & Reporting", titleNorm: "data-analyst-reporting", roleArchetype: "data_analytics", levelBand: null,
+      jdText: "SQL & Tableau, 3+ years.", jdSkills: ["sql", "tableau"], requirements: [{ skill: "sql", strength: "must_have" }],
+      experience: { min: 3, max: null }, dedupKey: "acme|x~analyst-data|onsite:na",
+    });
+    expect(got.lastSeen).toEqual(lastSeen);
+    // omitted fields stay as stored
+    await repo.updatePostingNormalized(p.id, { location: p.location, postedByAgency: true });
+    expect((await repo.getPosting(p.id))!).toMatchObject({ title: "Data Analyst & Reporting", jdSkills: ["sql", "tableau"], postedByAgency: true });
   });
 
   it("keeps sync-run history: upsert by id, newest first, pruned to the newest SYNC_RUNS_KEPT", async () => {

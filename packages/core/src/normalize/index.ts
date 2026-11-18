@@ -7,7 +7,7 @@ import type {
   ExecutionTier,
 } from "../schema/enums.js";
 import type { ExperienceRange, ParsedLocation, Requirement, SalaryBand } from "../schema/entities.js";
-import { dedupTitleKey, normCompany, parseTitle, slugify } from "./titles.js";
+import { dedupTitleKey, normCompany, parseTitle, slugify, type TitleParse } from "./titles.js";
 import { extractSkills, parseRequirements } from "./skills.js";
 import { locationCountryCodes, parseLocation } from "./location.js";
 import { parseExperience } from "./experience.js";
@@ -25,6 +25,7 @@ export * from "./chat.js";
 export * from "./reposts.js";
 export * from "./jd.js";
 export * from "./version.js";
+export * from "./markup.js";
 
 /**
  * The canonical fields derived from a RawPosting. The persistence layer combines
@@ -95,7 +96,7 @@ export function normalizePosting(raw: RawPosting): NormalizedPosting {
     title: raw.title.trim(),
     titleNorm: title.titleNorm,
     roleArchetype: title.roleArchetype,
-    levelBand: title.levelBand ?? raw.levelHint ?? null, // title wins; the source's bucket fills a gap
+    levelBand: titleLevel(title, raw.levelHint ?? null),
     jdText: jd,
     jdSkills: skills,
     requirements,
@@ -110,6 +111,16 @@ export function normalizePosting(raw: RawPosting): NormalizedPosting {
     postedByAgency: raw.postedByAgency ?? looksLikeAgency({ companyName: raw.companyName, jdText: jd }),
     dedupKey: canonicalKey(companyNameNorm, dedupTitleKey(raw.title), location),
   };
+}
+
+/**
+ * The posting's level: the title's band wins, the source's own bucket fills a gap — except
+ * that a company ladder code the title merely implies ("L5", "E5", "IC4": confidence < 0.6,
+ * their meaning varies by employer) yields to a bucket the source states.
+ */
+export function titleLevel(title: Pick<TitleParse, "levelBand" | "levelConfidence">, levelHint: LevelBand | null): LevelBand | null {
+  if (title.levelBand && (title.levelConfidence >= 0.6 || !levelHint)) return title.levelBand;
+  return levelHint ?? title.levelBand ?? null;
 }
 
 /**
@@ -208,6 +219,7 @@ const CITY_ALIASES: Readonly<Record<string, string>> = {
   sf: "san-francisco",
   "bay-area": "san-francisco",
   "sf-bay-area": "san-francisco",
+  "san-francisco-bay-area": "san-francisco",
 };
 
 export function cityKey(city: string): string {

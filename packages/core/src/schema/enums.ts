@@ -238,6 +238,13 @@ export const JOB_RUNTIME: Record<z.infer<typeof JobType>, z.infer<typeof JobRunt
   local_board_poll: "local",
 };
 
+/**
+ * `data_analytics` (analyst / BI / analytics-engineering roles) was added after `data_ml`
+ * (data engineering, data science, ML): before it existed, "Data Analyst" titles were filed
+ * under `other`. A profile that targets `data_ml` without `data_analytics` was saved when
+ * `data_ml` was the only data choice, so it is read as targeting both (`effectiveTargets`,
+ * match/score.ts) — appended at the end so stored values keep their meaning.
+ */
 export const RoleArchetype = z.enum([
   "backend",
   "platform",
@@ -248,6 +255,7 @@ export const RoleArchetype = z.enum([
   "mobile",
   "sre",
   "other",
+  "data_analytics",
 ]);
 export type RoleArchetype = z.infer<typeof RoleArchetype>;
 

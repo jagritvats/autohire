@@ -69,8 +69,8 @@ describe("renormalizePostings (stored rows, no re-poll)", () => {
     async updatePostingNormalized(id: string, patch: RenormalizedFields) {
       this.writes.push({ id, patch });
       const p = this.rows.find((r) => r.id === id)!;
-      p.location = patch.location;
-      p.postedByAgency = patch.postedByAgency;
+      // every derived field the patch carries (title / JD derivations, dedup key) — as the repos do
+      for (const [k, v] of Object.entries(patch)) if (v !== undefined) (p as unknown as Record<string, unknown>)[k] = v;
     }
   }
 
@@ -85,7 +85,8 @@ describe("renormalizePostings (stored rows, no re-poll)", () => {
       stored({ id: "e", source: "naukri", tier: "tier3", companyName: "Example Placements", postedByAgency: false, locationRaw: "Pune", location: parseLocation("Pune") }),
     ]);
     const s1 = await renormalizePostings(store);
-    expect(s1).toMatchObject({ scanned: 5, changed: 4, locations: 2, multiCountry: 1, placed: 1, agencyFlagged: 2, agencyCleared: 0, noRaw: 1 });
+    // "e" changes only its stale fixture dedup key ("k" → the key its fields derive)
+    expect(s1).toMatchObject({ scanned: 5, changed: 5, locations: 2, multiCountry: 1, placed: 1, agencyFlagged: 2, agencyCleared: 0, noRaw: 1 });
     const byId = (id: string) => store.rows.find((r) => r.id === id)!;
     expect(byId("a").location).toMatchObject({ country: "Germany", countries: ["DE"], city: "München" });
     expect(byId("b").location.countries).toEqual(["US", "GB"]);

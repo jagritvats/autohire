@@ -1,4 +1,4 @@
-import { EUROPE_CODES, effectiveHomeCountry, effectiveMarkets, isWorkableIn, normCompany, type Posting, type ProfilePrefs, type SourceKind } from "@jobflow/core";
+import { EUROPE_CODES, effectiveHomeCountry, effectiveMarkets, isWorkableIn, locationCountryCodes, locationInCountry, normCompany, type Posting, type ProfilePrefs, type SourceKind } from "@jobflow/core";
 import type { DiscoveryPreset } from "./types.js";
 import { INDIA_PRESET } from "./india.js";
 import { US_PRESET } from "./us.js";
@@ -66,32 +66,40 @@ function indexPresets(): Map<string, PresetIndex> {
 }
 
 /**
- * The presets a posting belongs to:
- *  - its company is in the preset's company list, or
- *  - it came from a feed only that preset uses, or
- *  - it came from a feed SEVERAL presets share (HN, Remotive…) and its location fits the
- *    preset's markets (a market-less preset like global-remote takes remote roles open
- *    worldwide) — so a shared feed doesn't stamp every tag on every posting.
+ * The presets a posting belongs to — where the role is WORKABLE, not just which feed or
+ * company list found it:
+ *  - its company is in the preset's company list, or it came from a feed the preset uses, and
+ *  - when its location is known, the location fits the preset's markets (a market-less preset
+ *    like global-remote takes remote roles open worldwide). A posting whose place we can't
+ *    read keeps the tag its company / feed gives it.
+ * A US-only remote analyst role found by an India feed was tagged `#india`, and a Mountain
+ * View office of an India-list company too (2026-11 feed review); a shared feed (HN,
+ * Remotive…) already had to fit — now every path does.
  */
 export function presetsForPosting(posting: Pick<Posting, "companyName" | "source"> & Partial<Pick<Posting, "location">>): string[] {
   const co = normCompany(posting.companyName);
   const ix = indexPresets();
-  const sharing = [...ix.values()].filter((x) => x.sources.has(posting.source)).length;
+  const known = posting.location && locationKnown(posting.location) ? posting.location : null;
   const out: string[] = [];
   for (const p of PRESETS) {
     const entry = ix.get(p.id)!;
-    if (co && entry.companies.has(co)) {
-      out.push(p.id);
-      continue;
-    }
-    if (!entry.sources.has(posting.source)) continue;
-    if (sharing <= 1 || !posting.location || fitsPreset(posting.location, p)) out.push(p.id);
+    if (!(co && entry.companies.has(co)) && !entry.sources.has(posting.source)) continue;
+    if (!known || fitsPreset(known, p)) out.push(p.id);
   }
   return out;
 }
 
+/** a location we can judge workability by: a placed office, or a remote role with a stated region */
+function locationKnown(loc: Posting["location"]): boolean {
+  if (loc.mode === "remote") return loc.remoteGeo !== "unknown" || locationCountryCodes(loc).length > 0;
+  if (loc.mode === "onsite" || loc.mode === "hybrid") return locationCountryCodes(loc).length > 0 || !!loc.country;
+  return false;
+}
+
 function fitsPreset(loc: Posting["location"], p: DiscoveryPreset): boolean {
   if (!p.markets.length) return loc.mode === "remote" && (loc.remoteGeo === "worldwide" || loc.remoteGeo === "unknown");
+  // remote within named countries, or remote with only a country named: open when one is a market
+  if (loc.mode === "remote" && (loc.remoteGeo === "country_only" || loc.remoteGeo === "unknown")) return p.markets.some((m) => locationInCountry(loc, m) === true);
   return isWorkableIn(loc, p.markets);
 }
 

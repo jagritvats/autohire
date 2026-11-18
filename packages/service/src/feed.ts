@@ -14,7 +14,7 @@ import {
   type RecheckStats,
 } from "@jobflow/pipeline";
 import type { Match, Posting, SearchQueryInput, ViewHiddenReason } from "@jobflow/core";
-import { applyView, companyDisplayName, describeLocation, describePay, diversifyByCompany, diversifyKey, payDisplayOptions, postingAgeDays, scoreSourceTrust, workableFor, type FormatPayOptions, type ProfilePrefs } from "@jobflow/core";
+import { alsoPostedText, applyView, companyDisplayName, describeLocation, describePay, diversifyByCompany, diversifyKey, foldSiblings, payDisplayOptions, postingAgeDays, scoreSourceTrust, siblingPlace, workableFor, type FormatPayOptions, type ProfilePrefs } from "@jobflow/core";
 import { ensureTenant } from "./tenant.js";
 import { corpusEmbedder } from "./embedder.js";
 import { corpusSyncing, startCorpusSync } from "./sync.js";
@@ -102,6 +102,14 @@ export interface FeedCard {
   invalidReason: string | null;
   /** discovery-preset tags (india / us / eu-uk / global-remote) — filterable in the feed */
   presets: string[];
+  /**
+   * The same role posted by the same company for other countries (separate reqs, same title
+   * and JD — `foldSiblings`): folded under this card, which is the sibling that scores best
+   * for you. Each keeps its own id (its Job page), place and score. Empty when there are none.
+   */
+  siblings: Array<{ id: string; place: string; score: number }>;
+  /** "Also posted for UK and Germany" — "" when the role has no siblings */
+  alsoPosted: string;
 }
 
 export interface FeedData {
@@ -125,6 +133,8 @@ export interface FeedData {
     /** when a view was applied: how many cards it hid, per reason (never silent). */
     hidden?: Record<ViewHiddenReason, number>;
     hiddenTotal?: number;
+    /** cards folded under a sibling's card ("also posted for …"), counted, never hidden silently */
+    siblingsFolded?: number;
   };
 }
 
@@ -153,6 +163,12 @@ export interface FeedOptions {
    * deployments leave syncing to the worker and pass false.
    */
   bootstrap?: boolean;
+  /**
+   * one card per role a company posts for several countries (default true): the sibling that
+   * scores best for you, with "also posted for …" and the others reachable from it. Order and
+   * grouping only — scores untouched, the folded count reported (`stats.siblingsFolded`).
+   */
+  groupSiblings?: boolean;
 }
 
 /** What one sync polls: `full` (every due board and slow feed, no time box) or the default sweep. */
@@ -241,32 +257,64 @@ export async function getFeed(repo: Repository, tenantId: string, opts: FeedOpti
   const profile = await repo.getProfile(tenantId);
   const onboarded = isOnboarded(profile);
   const spread = opts.diversify !== false;
+  const group = opts.groupSiblings !== false;
   if (!onboarded) {
-    const browse = await browsePostings(repo, limit);
+    const fetched = await browsePostings(repo, group ? limit * 2 : limit);
+    const folded = group ? foldSiblings(fetched, (p) => p) : null;
+    const browse = (folded ? folded.shown : fetched).slice(0, limit);
     if (browse.length === 0 && opts.bootstrap !== false) void startCorpusSync(repo, undefined, undefined, { trigger: "first_run" });
-    return shapeBrowse(repo, tenantId, spread ? diversifyByCompany(browse, (p) => diversifyKey(p.companyName)) : browse);
+    const sibs = new Map(browse.map((p) => [p.id, (folded?.siblings.get(p) ?? []).map((s) => ({ posting: s, score: 0 }))]));
+    return shapeBrowse(repo, tenantId, spread ? diversifyByCompany(browse, (p) => diversifyKey(p.companyName)) : browse, sibs);
   }
-  let matches = await repo.listMatches(tenantId, limit);
+  // fetch past the page when grouping, so a folded sibling's place doesn't take a slot
+  const fetchLimit = group ? Math.min(limit * 3, Math.max(limit, 600)) : limit;
+  let matches = await repo.listMatches(tenantId, fetchLimit);
   if (matches.length === 0 && opts.bootstrap !== false) {
     const corpus = await repo.listActivePostings();
     if (corpus.length === 0) void startCorpusSync(repo, async () => void (await rankTenant(repo, tenantId)), undefined, { trigger: "first_run" });
     else {
       await rankTenant(repo, tenantId);
-      matches = await repo.listMatches(tenantId, limit);
+      matches = await repo.listMatches(tenantId, fetchLimit);
     }
   }
   if (opts.workableOnly && profile) matches = matches.filter((m) => workableFor(m.posting.location, profile.prefs) !== false);
   // the spread runs on what is SHOWN (after the view), so its windows are the page's
   const order = (ms: typeof matches) => (spread ? diversifyByCompany(ms, (m) => diversifyKey(m.posting.companyName), { scoreOf: (m) => m.score }) : ms);
+  // sibling groups fold AFTER the view (a hidden sibling isn't "also posted"), before the page cut
+  const page = async (ms: typeof matches) => {
+    const folded = group ? foldSiblings(ms, (m) => m.posting) : null;
+    const shown = (folded ? folded.shown : ms).slice(0, limit);
+    const sibs = new Map(shown.map((m) => [m.posting.id, (folded?.siblings.get(m) ?? []).map((s) => ({ posting: s.posting, score: s.score }))]));
+    const data = await shape(repo, tenantId, order(shown), sibs);
+    const siblingsFolded = [...sibs.values()].reduce((n, xs) => n + xs.length, 0);
+    return group ? { ...data, stats: { ...data.stats, siblingsFolded } } : data;
+  };
   if (opts.view) {
     const query = typeof opts.view === "string" ? (await repo.getSavedSearch(tenantId, opts.view))?.query : opts.view;
     if (query) {
       const v = applyView(matches, query, { presetsOf: presetsForPosting });
-      const data = await shape(repo, tenantId, order(v.shown));
+      const data = await page(v.shown);
       return { ...data, stats: { ...data.stats, hidden: v.hidden, hiddenTotal: v.hiddenTotal } };
     }
   }
-  return shape(repo, tenantId, order(matches));
+  return page(matches);
+}
+
+/** folded siblings per shown posting id (`getFeed`) */
+type SiblingsById = Map<string, Array<{ posting: Posting; score: number }>>;
+
+/** a card's siblings + its "also posted for …" line */
+function withSiblings(card: FeedCard, lead: Posting, sibs: SiblingsById | undefined): FeedCard {
+  const list = sibs?.get(card.id) ?? [];
+  if (!list.length) return card;
+  const own = siblingPlace(lead.location);
+  // a sibling in the lead's own country is named by its city ("Austin" next to a New York lead)
+  const placeOf = (q: Posting) => {
+    const pl = siblingPlace(q.location);
+    return pl === own ? describeLocation(q.location).place || pl : pl;
+  };
+  const siblings = list.map((s) => ({ id: s.posting.id, place: placeOf(s.posting), score: s.score }));
+  return { ...card, siblings, alsoPosted: alsoPostedText(siblings.map((s) => s.place)) };
 }
 
 /** Cards for arbitrary postings (+ optional scores) — e.g. ad-hoc search results. */
@@ -304,12 +352,13 @@ async function browsePostings(repo: Repository, limit: number): Promise<Posting[
     .slice(0, limit);
 }
 
-async function shapeBrowse(repo: Repository, tenantId: string, postings: Posting[]): Promise<FeedData> {
+async function shapeBrowse(repo: Repository, tenantId: string, postings: Posting[], sibs?: SiblingsById): Promise<FeedData> {
   const data = await shape(repo, tenantId, []);
   const ctx = await cardCtx(repo, tenantId);
+  const cards = postings.map((p) => withSiblings(buildCard(p, null, ctx), p, sibs));
   return {
-    cards: postings.map((p) => buildCard(p, null, ctx)),
-    stats: { ...data.stats, ranked: 0, mode: "browse", needsOnboarding: true },
+    cards,
+    stats: { ...data.stats, ranked: 0, mode: "browse", needsOnboarding: true, siblingsFolded: cards.reduce((n, c) => n + c.siblings.length, 0) },
   };
 }
 
@@ -401,13 +450,15 @@ function buildCard(
     invalidated: p.status === "invalidated",
     invalidReason: p.invalidReason ?? null,
     presets: presetsForPosting(p),
+    siblings: [],
+    alsoPosted: "",
   };
 }
 
-async function shape(repo: Repository, tenantId: string, matches: Awaited<ReturnType<Repository["listMatches"]>>): Promise<FeedData> {
+async function shape(repo: Repository, tenantId: string, matches: Awaited<ReturnType<Repository["listMatches"]>>, sibs?: SiblingsById): Promise<FeedData> {
   const companies = await repo.listCompanies();
   const ctx = await cardCtx(repo, tenantId, companies);
-  const cards: FeedCard[] = matches.map((m) => buildCard(m.posting, m, ctx));
+  const cards: FeedCard[] = matches.map((m) => withSiblings(buildCard(m.posting, m, ctx), m.posting, sibs));
   const allActive = await repo.listActivePostings();
   const polled = companies.map((c) => (c.lastPolled ? new Date(c.lastPolled as string | Date).getTime() : 0));
   const lastPolled = Math.max(0, ...polled);

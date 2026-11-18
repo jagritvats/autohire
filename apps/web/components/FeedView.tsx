@@ -12,7 +12,7 @@ import { DIVERSIFY_WINDOW, diversifyByCompany, diversifyKey, moreBelow } from "@
 import { onSyncFinished, startSync, useSyncStatus } from "@/lib/syncClient";
 import { runHeadline } from "./SyncDetails";
 
-const ARCHETYPES = ["backend", "platform", "infra_devops", "fullstack", "data_ml", "sre", "frontend", "mobile"];
+const ARCHETYPES = ["backend", "platform", "infra_devops", "fullstack", "data_ml", "data_analytics", "sre", "frontend", "mobile"];
 const MODES = ["remote", "hybrid", "onsite"];
 /** remote-region chips; only the regions present in YOUR jobs are offered (region-neutral). */
 const GEOS: Array<{ id: string; label: string }> = [
@@ -642,6 +642,13 @@ export function FeedView({
             <Button size="sm" variant="ghost" onClick={() => setFilters(NO_FILTERS)}>
               clear filters
             </Button>
+          </p>
+        )}
+        {(data.stats.siblingsFolded ?? 0) > 0 && (
+          <p className="ux-hidden-report" role="status">
+            <span>
+              <b>{data.stats.siblingsFolded}</b> more posted for other countries — shown once, under “Also posted for” on their role. Scores are unchanged.
+            </span>
           </p>
         )}
         {cards.length > 0 && (

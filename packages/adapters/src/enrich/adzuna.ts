@@ -35,6 +35,7 @@ const ARCHETYPE_QUERY: Record<RoleArchetype, string> = {
   frontend: "frontend engineer",
   mobile: "mobile engineer",
   data_ml: "machine learning engineer",
+  data_analytics: "data analyst",
   other: "software engineer",
 };
 

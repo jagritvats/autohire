@@ -13,6 +13,10 @@ import type {
   ConnectedContext,
   Evidence,
   ParsedLocation,
+  ExperienceRange,
+  LevelBand,
+  Requirement,
+  RoleArchetype,
   Generation,
   GenerationKind,
   Job,
@@ -68,10 +72,11 @@ export interface Repository {
    */
   updatePostingSalary(id: string, band: SalaryBand, salaryRaw?: string | null): Promise<void>;
   /**
-   * Rewrite a posting's derived location + agency flag (a re-normalize after a parser fix,
-   * `renormalizePostings`). Never touches lifecycle columns (lastSeen, status…).
+   * Rewrite a posting's derived fields (a re-normalize after a parser fix,
+   * `renormalizePostings`): location + agency flag always; the title / JD derivations when
+   * given (omitted ones stay as stored). Never touches lifecycle columns (lastSeen, status…).
    */
-  updatePostingNormalized(id: string, patch: { location: ParsedLocation; postedByAgency: boolean }): Promise<void>;
+  updatePostingNormalized(id: string, patch: PostingNormalizedPatch): Promise<void>;
   /** set (or clear, with null) the modeled salary on many postings in one write. */
   saveSalaryEstimates(updates: Array<{ id: string; estimate: SalaryEstimate | null }>): Promise<number>;
   /** soft-delete postings not seen in this poll of a company (role filled/pulled). */
@@ -241,6 +246,24 @@ export interface Repository {
   saveSyncRun(run: SyncRunRecord): Promise<void>;
   /** newest first */
   listSyncRuns(limit?: number): Promise<SyncRunRecord[]>;
+}
+
+/** what a re-normalize rewrites on a stored posting (`updatePostingNormalized`). */
+export interface PostingNormalizedPatch {
+  location: ParsedLocation;
+  postedByAgency: boolean;
+  /** the title as a person reads it (entities decoded) and what it derives */
+  title?: string;
+  titleNorm?: string;
+  roleArchetype?: RoleArchetype;
+  levelBand?: LevelBand | null;
+  /** the JD as plain text (markup / entities cleaned) and what it derives */
+  jdText?: string;
+  jdSkills?: string[];
+  requirements?: Requirement[];
+  experience?: ExperienceRange;
+  /** the stage-1 dedup key recomputed from the above (the don't-double-apply guard reads it) */
+  dedupKey?: string;
 }
 
 /** sync-run history kept in the store (older rows are pruned on save) */

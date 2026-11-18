@@ -274,6 +274,7 @@ const ARCHETYPE_TO_FAMILY: Record<RoleArchetype, string[]> = {
   frontend: ["Software Engineer"],
   mobile: ["Software Engineer"],
   data_ml: ["Data Scientist", "Software Engineer"],
+  data_analytics: ["Data Analyst", "Data Scientist"],
   other: ["Software Engineer"],
 };
 
