@@ -14,8 +14,9 @@ import { dedupTitleKey, normCompany } from "../normalize/titles.js";
  * point at it via canonicalId.
  */
 
-// richest → poorest, for picking the canonical winner in a dup cluster
-const SOURCE_RICHNESS: SourceKind[] = [
+// richest → poorest, for picking the canonical winner in a dup cluster. Every source with a
+// SOURCE_TRUST prior is ranked (test/dedup-richness); an unranked one loses every tie.
+export const SOURCE_RICHNESS: readonly SourceKind[] = [
   "greenhouse",
   "lever",
   "ashby",
@@ -60,6 +61,9 @@ const SOURCE_RICHNESS: SourceKind[] = [
   "jsearch",
   "linkedin_guest",
   "hn_whoishiring",
+  // user-configured feeds: unknown provenance, often a re-post of a board's listing
+  "rss",
+  "json_feed",
 ];
 
 function richness(s: SourceKind): number {
