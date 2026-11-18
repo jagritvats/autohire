@@ -31,6 +31,10 @@ you stored, attaches your tailored résumé (or base résumé), and waits. Green
 Ashby, Workable and Workday forms have dedicated field maps; anything else gets a cautious
 generic map.
 
+![jobflow apply — the dry run](../screenshots/cli-apply.png)
+
+![The filled form, stopped before submit](../screenshots/apply-review-gate.png)
+
 ### Guarantees
 
 - There is **no submit option** and no code path that clicks submit, presses Enter on a

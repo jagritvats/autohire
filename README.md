@@ -22,6 +22,8 @@ pnpm jobflow apply '#1' --fill                    # pre-fill the form; you revie
 
 No account, no server, no API keys needed. Your data stays in `~/.jobflow`.
 
+![jobflow search in the terminal](docs/screenshots/cli-search.png)
+
 ---
 
 ## Why JobFlow
@@ -51,6 +53,12 @@ experience. JobFlow takes the opposite bet:
 | **Configurable discovery** — start from a preset (India, Global remote, US, Europe & UK) and add your own companies, CSV lists, RSS/JSON feeds, Telegram channels and HN threads | ![Discovery](docs/screenshots/discovery.png) |
 | **Tailoring** — résumé variants, LaTeX/Markdown rewrites with PDF preview, cover letters, application answers | ![Tailor](docs/screenshots/tailor.png) |
 | **Pipeline** — track applications from saved to offer, with next actions and a don't-double-apply guard | ![Pipeline](docs/screenshots/applications.png) |
+
+**The review gate.** `jobflow apply --fill` opens the real application form in a local
+browser, types only what you stored, attaches your résumé — and stops. A browser test fills a
+form like this one and asserts the server received zero submissions.
+
+![A form filled by JobFlow, stopped before submit](docs/screenshots/apply-review-gate.png)
 
 Also: salary estimates with confidence (stated pay is never mixed with estimates), freshness
 and liveness checks, a browser extension with an inline match panel, and an optional local

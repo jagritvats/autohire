@@ -737,3 +737,4 @@ a.company:hover { color: var(--signal); }
 /* AGPL §13 source link */
 .site-footer { position: relative; z-index: 1; text-align: center; padding: 18px 16px 26px; font-size: 10px; color: var(--ink-faint); letter-spacing: 0.04em; }
 .site-footer a { color: var(--ink-dim); }
+.onb-inline input[type="checkbox"] { width: auto !important; padding: 0 !important; margin: 2px 0 0; flex: none; }

@@ -34,6 +34,8 @@ const FIX: Record<string, string> = {
     "forms want a PDF/Word file, not your .md/.tex/.txt source — `jobflow tailor <ref> --kind resume-md --pdf`, or `jobflow profile set resume-path ./resume.pdf`",
 };
 
+const LABEL: Record<string, string> = { resumeFormat: "résumé file", applyUrl: "apply link" };
+
 export function register(program: Command, ctx: Ctx): void {
   program
     .command("apply")
@@ -113,7 +115,7 @@ function printPlan(ctx: Ctx, ap: ApplyPlan, ref: string, status: string, opened:
   if (ap.missing.length) {
     out.line();
     out.line(out.yellow("Fix before filling:"));
-    for (const m of ap.missing) out.line(`  ${m.padEnd(9)} → ${FIX[m] ?? m}`);
+    for (const m of ap.missing) out.line(`  ${(LABEL[m] ?? m).padEnd(11)} → ${FIX[m] ?? m}`);
   }
   out.line();
   if (opened) out.ok("Opened the form in your browser.");

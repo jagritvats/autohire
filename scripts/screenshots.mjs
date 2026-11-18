@@ -7,7 +7,7 @@
 //
 // Writes docs/screenshots/*.png. Needs Playwright + Chromium (`npx playwright install chromium`).
 import { spawn } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -58,7 +58,12 @@ async function waitUp() {
 const shots = [];
 try {
   await waitUp();
-  const browser = await chromium.launch();
+  // Playwright's own Chromium, else JOBFLOW_CHROMIUM / a preinstalled build
+  let executablePath;
+  try {
+    if (!existsSync(chromium.executablePath())) executablePath = [process.env.JOBFLOW_CHROMIUM, "/opt/pw-browsers/chromium"].find((p) => p && existsSync(p));
+  } catch {}
+  const browser = await chromium.launch(executablePath ? { executablePath } : {});
   const desktop = await browser.newContext({
     viewport: { width: 1440, height: 900 },
     deviceScaleFactor: 2,

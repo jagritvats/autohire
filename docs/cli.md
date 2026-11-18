@@ -1,5 +1,7 @@
 # The `jobflow` CLI
 
+![jobflow search](screenshots/cli-search.png)
+
 JobFlow on your own machine: set your details once, search live job sources, get honest
 match scores, draft grounded résumés and answers, and pre-fill applications up to the
 review screen. One person, one machine — no login, no server, no tokens. Everything lives
