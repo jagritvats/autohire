@@ -9,7 +9,7 @@ import { Icon, type IconName } from "./Icon";
 
 const cx = (...c: Array<string | false | null | undefined>) => c.filter(Boolean).join(" ");
 
-export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+export type ButtonVariant = "primary" | "secondary" | "tonal" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md" | "lg";
 
 /** Class string for a button-looking element (use on <a>, <label> for file inputs, etc.). */

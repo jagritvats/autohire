@@ -4,6 +4,31 @@ All notable changes to JobFlow are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- **New design system** ("calm ledger"): neutral Radix-based palette with one action colour
+  and fixed semantic colours, Inter type, light/dark/system themes at WCAG AA, a shared
+  navigation shell, responsive down to 375px with a filter drawer, and accessibility passes
+  (skip link, focus rings, labels, live regions). See `docs/internal/DESIGN.md`.
+- **Journeys rebuilt**: navigation is Jobs · Search · Applications · Profile · Sources ·
+  Settings; a new **Job page** per role (fit, description, drafts, an apply checklist with a
+  fix for each gap, open / pre-fill / mark applied); a get-started checklist; saved-search
+  tabs; filters always report what they hid; keyboard shortcuts on Jobs; Profile split from
+  Settings. `/searches` and `/discovery` redirect. See `docs/internal/UX_AUDIT.md`.
+- **CLI**: `jobflow` with no arguments shows your status and next step; `init --yes`
+  refuses an empty profile; `apply` marks a job ready only when nothing is missing; clearer
+  help, hints and errors.
+- **The web app saves by default**: it shares the CLI's durable store in `~/.jobflow`
+  instead of an in-memory fallback, and keeps the feed synced on a schedule while open.
+
+### Fixed
+- Finishing onboarding during the first background sync no longer leaves the feed unranked.
+- Search before onboarding no longer makes fit claims about an empty profile.
+
+### Docs
+- Rewritten CONTRIBUTING.md and new contributor guides in `docs/contributing/`.
+
 ## [0.1.0] — 2026-11-18
 
 The first public release: a local-first job search engine with honest match cards, grounded
@@ -74,4 +99,5 @@ tailoring and an autofill that always stops at a human review gate.
 - Docs: getting started, CLI reference, guides, configuration, architecture, legal & ethics.
 - CI: build, typecheck, ~650 offline tests, plus personal-data and tenant-isolation guards.
 
+[Unreleased]: https://github.com/jagritvats/autohire/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/jagritvats/autohire/releases/tag/v0.1.0

@@ -18,7 +18,9 @@ export interface RepositoryOptions {
  * Which store `createRepository` opens. Precedence:
  *   explicit `store` → DATABASE_URL (Postgres) → JOBFLOW_STORE → JOBFLOW_DATA_DIR set (PGlite)
  *   → in-memory.
- * So the web app / worker with no env stay in-memory, as before; a hosted DB always wins.
+ * The library default stays in-memory (tests, embedding); the APPS choose durability: the CLI
+ * and the web app (apps/web/lib/repo.ts) ask for PGlite in ~/.jobflow when nothing is
+ * configured, so they share one store. A hosted DB always wins.
  */
 export function storeKind(opts: RepositoryOptions = {}, env: NodeJS.ProcessEnv = process.env): StoreKind {
   if (opts.store) return check(opts.store, "store option");
