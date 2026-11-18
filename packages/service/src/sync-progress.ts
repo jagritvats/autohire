@@ -163,13 +163,25 @@ export function estimateEtaMs(s: SyncProgress, now: number = Date.now()): number
       eta += boardsMs;
     }
   }
+  const prior = s.timing.priorPhaseMs ?? {};
   if (open("feeds")) {
     const timed = Object.values(s.sources).filter((x) => x.ms != null);
-    const avgFeed = timed.length ? timed.reduce((a, x) => a + (x.ms ?? 0), 0) / timed.length : FEED_GUESS_MS;
-    const left = s.feeds.total ? Math.max(0, s.feeds.total - s.feeds.done - s.feeds.failed) : 4;
-    eta += left * avgFeed;
+    if (!s.feeds.total && prior.feeds != null) eta += prior.feeds; // not planned yet: last run's
+    else {
+      const avgFeed = timed.length ? timed.reduce((a, x) => a + (x.ms ?? 0), 0) / timed.length : FEED_GUESS_MS;
+      const left = s.feeds.total ? Math.max(0, s.feeds.total - s.feeds.done - s.feeds.failed) : 4;
+      eta += left * avgFeed;
+    }
   }
-  if (status("rank") !== "done" && status("rank") !== "skipped") eta += TAIL_GUESS_MS;
+  // the steps after: as long as they took last run (ranking grows with the corpus), else a guess
+  const tail = (["resolve", "expire", "process", "rank"] as const).filter((id) => open(id));
+  const known = tail.filter((id) => prior[id] != null);
+  if (known.length) {
+    for (const id of known) {
+      const started = s.phases.find((p) => p.id === id)?.startedAt;
+      eta += Math.max(0, prior[id]! - (status(id) === "active" && started != null ? now - started : 0));
+    }
+  } else if (tail.length) eta += TAIL_GUESS_MS;
   return Math.round(eta);
 }
 
@@ -187,6 +199,13 @@ export function syncFraction(s: SyncProgress): number {
     }
   }
   return Math.min(0.99, Math.max(0, f));
+}
+
+/** how long each step took (done steps only) — the next run's ETA guess for its later steps */
+export function phaseDurations(s: SyncProgress): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const p of s.phases) if (p.status === "done" && p.startedAt != null && p.finishedAt != null) out[p.id] = p.finishedAt - p.startedAt;
+  return out;
 }
 
 /** the run's one-line outcome */

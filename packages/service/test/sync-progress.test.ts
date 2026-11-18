@@ -81,6 +81,29 @@ describe("sync progress model", () => {
     expect(estimateEtaMs(s, T0 + 2000)).toBeNull();
   });
 
+  it("guesses the steps it hasn't reached from how long they took last run", () => {
+    const s = fold(fresh(), [
+      [0, { type: "phase", phase: "renormalize", state: "skipped" }],
+      [0, { type: "phase", phase: "discover", state: "skipped" }],
+      [0, { type: "plan", boards: 1, deferred: 0, notDue: 0, budgetMs: null, concurrency: 1 }],
+      [0, { type: "phase", phase: "boards", state: "start" }],
+      [1000, { type: "board", state: "done", id: "a", name: "A", fetched: 1, created: 0, updated: 1, staled: 0, ms: 1000 }],
+      [1000, { type: "phase", phase: "boards", state: "done" }],
+    ]);
+    s.timing.priorPhaseMs = { feeds: 40_000, resolve: 2_000, expire: 1_000, process: 3_000, rank: 30_000 };
+    expect(estimateEtaMs(s, T0 + 1000)).toBe(40_000 + 2_000 + 1_000 + 3_000 + 30_000);
+    // ranking for 10 s already: 20 s of it left
+    fold(s, [
+      [1000, { type: "feeds", total: 0 }],
+      [1000, { type: "phase", phase: "feeds", state: "skipped" }],
+      [1000, { type: "phase", phase: "resolve", state: "skipped" }],
+      [1000, { type: "phase", phase: "expire", state: "skipped" }],
+      [1000, { type: "phase", phase: "process", state: "skipped" }],
+      [2000, { type: "phase", phase: "rank", state: "start" }],
+    ]);
+    expect(estimateEtaMs(s, T0 + 12_000)).toBe(20_000);
+  });
+
   it("fraction grows with the boards and never reads 100% while running", () => {
     const s = fold(fresh(), [
       [0, { type: "phase", phase: "discover", state: "done" }],

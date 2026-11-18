@@ -122,6 +122,8 @@ export const SyncProgress = z.object({
     budgetMs: z.number().nullable().default(null),
     avgBoardMs: z.number().nullable().default(null),
     concurrency: z.number().default(1),
+    /** how long each step took on the previous run — the ETA's guess for steps not reached yet */
+    priorPhaseMs: z.record(z.number()).optional(),
   }),
   errors: z.array(SyncError).default([]),
   /** feeds, custom sources, saved searches and channels this run, by key */

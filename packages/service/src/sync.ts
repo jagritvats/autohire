@@ -3,7 +3,7 @@ import type { SyncOrigin, SyncProgress, SyncTrigger } from "@jobflow/core";
 import type { Repository } from "@jobflow/db";
 import { isOnboarded, type PollListener, type PollStats } from "@jobflow/pipeline";
 import { rankTenant, syncCorpus, type SyncOptions } from "./feed.js";
-import { applySyncEvent, newSyncProgress, syncMessage, syncTick, syncViewFor } from "./sync-progress.js";
+import { applySyncEvent, newSyncProgress, phaseDurations, syncMessage, syncTick, syncViewFor } from "./sync-progress.js";
 
 /**
  * Sync runs: one corpus sync at a time per process, observable while it runs and kept
@@ -108,6 +108,18 @@ export function startCorpusSync(
   if (h.current) return h.current.promise;
 
   const state = newSyncProgress({ runId: randomUUID(), trigger: opts.trigger ?? "manual", origin: opts.origin ?? "web" });
+  // the ETA guesses the steps it hasn't reached from the last finished run (this process's,
+  // else the store's)
+  const prior = h.recent.find((r) => r.status === "done");
+  if (prior) state.timing.priorPhaseMs = phaseDurations(prior);
+  else
+    void repo
+      .listSyncRuns(5)
+      .then((runs) => {
+        const last = runs.find((r) => r.status === "done");
+        if (last && !state.timing.priorPhaseMs) state.timing.priorPhaseMs = phaseDurations(last.summary);
+      })
+      .catch(() => {});
   const controller = new AbortController();
   const run: ActiveRun = { state, controller, stats: null, promise: Promise.resolve() };
   h.current = run;

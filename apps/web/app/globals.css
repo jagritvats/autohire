@@ -4796,7 +4796,6 @@ input[type="file"]::file-selector-button {
   margin: 0;
   font-size: var(--fs-xs);
   color: var(--text-3);
-  font-variant-numeric: tabular-nums;
 }
 
 /* the figures: serif numerals over small-caps labels, hairlines between, no boxes */
