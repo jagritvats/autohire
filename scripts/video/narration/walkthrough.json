@@ -1,0 +1,119 @@
+{
+  "id": "walkthrough",
+  "title": "JobFlow — a walkthrough",
+  "voice": "JBFqnCBsd6RMkjVDRZzb",
+  "music": "calm",
+  "note": "Each line is one TTS call (cached by voice + text). `say` is what the voice reads when it differs from the caption text.",
+  "scenes": [
+    {
+      "id": "intro",
+      "chapter": "What JobFlow is",
+      "lines": [
+        "This is JobFlow, a job search engine that runs on your own computer.",
+        "It finds roles on company job boards, ranks them against your résumé, and tells you honestly how well you fit.",
+        "It helps you write your application from your own material, and it fills in the form. Then it stops, so you can check it and press submit."
+      ]
+    },
+    {
+      "id": "setup",
+      "chapter": "Set up",
+      "lines": [
+        { "text": "Setup takes a few minutes. Clone the repository, then run pnpm install and build.", "say": "Setup takes a few minutes. Clone the repository, then run p-n-p-m install, and build." },
+        { "text": "jobflow init reads your résumé — PDF, Word, LaTeX, Markdown or plain text — and asks you to confirm what it found.", "say": "Then, jobflow in-it reads your résumé — PDF, Word, Lay-tek, Markdown or plain text — and asks you to confirm what it found." }
+      ]
+    },
+    {
+      "id": "onboarding",
+      "chapter": "Onboarding in the browser",
+      "lines": [
+        "In the browser, the same setup is four short steps.",
+        "Every skill and every Evidence Bank item is copied from your résumé. You fix what's wrong, and nothing is made up.",
+        "Then you say where you can work, your pay floor, and the kinds of roles you want."
+      ]
+    },
+    {
+      "id": "sync",
+      "chapter": "Sync, with live progress",
+      "lines": [
+        "Next, a sync. JobFlow checks company job boards and public feeds. Here, it's a fictional demo set.",
+        "The panel shows each step as it runs, the boards being fetched, the jobs found so far, and roughly how long is left.",
+        "A board that doesn't answer is named, in plain words, and tried again next time."
+      ]
+    },
+    {
+      "id": "feed",
+      "chapter": "Jobs and honest match cards",
+      "lines": [
+        "Your jobs come back ranked for you.",
+        "Each card has a score, why it fits, and the likely gap — a language you haven't used, or more years than you have.",
+        "Pay is what the posting states, or an estimate that's labelled as one.",
+        "Flags call out the catches, like a post from a staffing agency, or a remote role that's open in one country only."
+      ]
+    },
+    {
+      "id": "filters",
+      "chapter": "Filters that say what they hid",
+      "lines": [
+        "Filters only hide. Scores never change, and the page tells you how many jobs a filter hid, and why.",
+        "Only two things are ever left out for you: pay stated below your floor, and a location you can't work from."
+      ]
+    },
+    {
+      "id": "job",
+      "chapter": "A Job page",
+      "lines": [
+        "Open a job for the whole picture: how you fit, what to check before applying, and the full description."
+      ]
+    },
+    {
+      "id": "search",
+      "chapter": "Search and saved searches",
+      "lines": [
+        "Search asks the job boards right now, with the same honest scoring, and reports what your query hid.",
+        "Save a search, and it runs on every sync and becomes a tab on your Jobs page."
+      ]
+    },
+    {
+      "id": "tailor",
+      "chapter": "Tailoring from your own material",
+      "lines": [
+        "Tailor drafts a résumé, a cover letter and answers for one role.",
+        "They're built from your résumé, your Evidence Bank and your skills: rephrased and trimmed, never extended. Each draft says where it came from.",
+        "Without a model, you get your own résumé, reformatted, and cover letters are switched off rather than faked."
+      ]
+    },
+    {
+      "id": "apply",
+      "chapter": "Apply: the checklist and the review gate",
+      "lines": [
+        "The Apply checklist makes sure you have what you need: your name, your email and a résumé file.",
+        { "text": "Then open the form yourself, or pre-fill it in a browser on your machine with jobflow apply --fill.", "say": "Then open the form yourself, or pre-fill it in a browser on your machine, with jobflow apply, dash dash fill." },
+        "It types only what you stored, attaches your résumé, and stops at the review screen.",
+        "JobFlow never submits. You read it, and you send it."
+      ]
+    },
+    {
+      "id": "applications",
+      "chapter": "Applications tracker",
+      "lines": [
+        "Once it's sent, mark it applied. Applications keeps every role from saved to offer, with a next step and a follow-up date."
+      ]
+    },
+    {
+      "id": "mcp",
+      "chapter": "From an AI agent, over MCP",
+      "lines": [
+        "You can also use JobFlow from an AI assistant. jobflow mcp serves your local data over the Model Context Protocol.",
+        "The assistant can search, read a job, and plan an application as a dry run. It can't fill or submit a form."
+      ]
+    },
+    {
+      "id": "outro",
+      "chapter": "Open source, on your machine",
+      "lines": [
+        { "text": "JobFlow is open source, under the AGPL. It runs on your machine, and your data stays there.", "say": "JobFlow is open source, under the A-G-P-L. It runs on your machine, and your data stays there." },
+        "Pick a style, light or dark. Use the terminal or the browser. And give it a try."
+      ]
+    }
+  ]
+}

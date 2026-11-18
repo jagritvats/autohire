@@ -1,0 +1,40 @@
+/* The app's Editorial style (Concept A): warm paper, ink, vermilion. Fraunces for display,
+   Schibsted Grotesk for text, JetBrains Mono for code — all Google Fonts. */
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..800;1,9..144,300..800&family=JetBrains+Mono:wght@400;600;700&family=Schibsted+Grotesk:ital,wght@0,400..800;1,400..800&display=block");
+
+:root {
+  --paper: #f6f1e7;
+  --paper-2: #efe7d8;
+  --paper-3: #e6dcc8;
+  --ink: #1c1915;
+  --ink-2: #4a433a;
+  --ink-3: #7a7062;
+  --rule: #d8ccb6;
+  --vermilion: #b8401c;
+  --vermilion-soft: #f3d9cc;
+  --green: #3f6b3a;
+  --display: "Fraunces", Georgia, serif;
+  --text: "Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--text);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+/* faint paper grain so large flat areas don't band after encoding */
+body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: .5;
+  background-image: radial-gradient(rgba(28,25,21,.035) 1px, transparent 1px);
+  background-size: 3px 3px;
+}
+.logo { font-family: var(--display); font-weight: 600; letter-spacing: -0.01em; }
+.logo i { font-style: italic; font-weight: 500; }
+.logo .dot { display: inline-block; width: .22em; height: .22em; border-radius: 50%; background: var(--vermilion); margin-left: .06em; vertical-align: baseline; }
+.kicker { font-family: var(--text); font-weight: 700; text-transform: uppercase; letter-spacing: .14em; color: var(--vermilion); }
+.badge { display: inline-flex; align-items: center; gap: .5em; font: 600 18px var(--text); color: var(--ink-2); background: var(--paper-2); border: 1px solid var(--rule); border-radius: 999px; padding: .35em .9em; }
+.badge::before { content: ""; width: .55em; height: .55em; border-radius: 50%; background: var(--vermilion); }

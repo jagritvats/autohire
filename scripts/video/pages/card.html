@@ -1,0 +1,103 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>card</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+  :root { --dur: 4s; }
+  body { display: grid; place-items: center; }
+  body.ink { background: var(--ink); color: var(--paper); }
+  body.ink::before { background-image: radial-gradient(rgba(246,241,231,.04) 1px, transparent 1px); }
+  .stage { position: relative; z-index: 1; width: 78vw; }
+  .vertical .stage { width: 84vw; }
+  .brand { position: fixed; top: 6.5vh; left: 8vw; font-size: 42px; z-index: 2; animation: fade .7s .1s both; }
+  .vertical .brand { top: 15vh; left: 8vw; font-size: 54px; }
+  .brand img { height: 1.1em; display: block; }
+  .corner { position: fixed; top: 7.4vh; right: 8vw; z-index: 2; font: 600 20px var(--text); color: var(--ink-3); animation: fade .7s .2s both; }
+  .ink .corner { color: #a99d8a; }
+  .kicker { font-size: 24px; margin-bottom: 26px; animation: rise .7s .15s both; }
+  .vertical .kicker { font-size: 34px; }
+  h1 { margin: 0; font: 600 108px/1.02 var(--display); letter-spacing: -0.02em; font-variation-settings: "opsz" 144; }
+  .vertical h1 { font-size: 118px; }
+  h1 .w { display: inline-block; animation: rise .75s cubic-bezier(.2,.8,.2,1) both; }
+  h1 em { font-style: italic; color: var(--vermilion); font-weight: 500; }
+  .ink h1 em { color: #e0673f; }
+  .rule { height: 4px; background: var(--vermilion); margin: 40px 0 34px; transform-origin: left; animation: draw .9s cubic-bezier(.7,0,.2,1) both; width: 220px; }
+  .sub { font: 400 38px/1.35 var(--text); color: var(--ink-2); max-width: 1200px; animation: rise .7s both; }
+  .vertical .sub { font-size: 46px; }
+  .ink .sub { color: #d9cfbd; }
+  .sub code, .url { font-family: var(--mono); font-size: .86em; }
+  .url { color: var(--vermilion); }
+  .ink .url { color: #e0673f; }
+  .pills { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 36px; }
+  .pills span { font: 600 24px var(--text); border: 1.5px solid currentColor; border-radius: 999px; padding: .35em .9em; animation: rise .6s both; color: var(--ink-2); }
+  .ink .pills span { color: #d9cfbd; }
+  .vertical .pills span { font-size: 32px; }
+  .end h1 { font-size: 150px; }
+  .end .logo-big { font-size: 170px; line-height: 1; margin-bottom: 18px; animation: rise .8s .1s both; }
+  .end .logo-big img { height: 1em; }
+  .out { animation: out .45s ease-in both; animation-delay: calc(var(--dur) - .45s); }
+  @keyframes rise { from { opacity: 0; transform: translateY(38px); } to { opacity: 1; transform: none; } }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes draw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  @keyframes out { from { opacity: 1; } to { opacity: 0; transform: translateY(-14px); } }
+</style>
+</head>
+<body>
+<div class="brand" id="brand"></div>
+<div class="corner" id="corner"></div>
+<div class="out" id="out"><div class="stage" id="stage"></div></div>
+<script>
+// window.__data: { variant: "title"|"statement"|"end", kicker, title (words; *word* = accent), sub, pills[], corner, ink, vertical, duration, noOut, logo (svg url) }
+const D = window.__data;
+document.body.classList.toggle("ink", !!D.ink);
+document.body.classList.toggle("vertical", !!D.vertical);
+document.documentElement.style.setProperty("--dur", (D.duration || 4) + "s");
+const logo = (cls) => D.logo ? `<img src="${D.logo}" alt="JobFlow" class="${cls}">` : `<span class="logo ${cls}">Job<i>Flow</i><span class="dot"></span></span>`;
+if (D.variant !== "end" && !D.noBrand) document.getElementById("brand").innerHTML = logo("");
+document.getElementById("corner").textContent = D.corner || "";
+if (D.noOut) document.getElementById("out").classList.remove("out");
+const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+// *accent* may span words ("in *5 minutes*."): accented words are set in vermilion italic
+const words = (t, t0, step) => {
+  let on = false;
+  return t.split(" ").map((w, i) => {
+    const opens = w.startsWith("*");
+    const closes = /\*[.,!?]?$/.test(w) && (!opens || w.replace(/[.,!?]$/, "").length > 1);
+    const accent = on || opens;
+    on = (on || opens) && !closes;
+    const m = w.replace(/\*/g, "").match(/^(.*?)([.,!?]?)$/);
+    const txt = accent ? `<em>${esc(m[1])}</em>${esc(m[2])}` : esc(w.replace(/\*/g, ""));
+    return `<span class="w" style="animation-delay:${(t0 + i * step).toFixed(2)}s">${txt}</span>`;
+  }).join(" ");
+};
+const s = document.getElementById("stage");
+const step = D.step ?? 0.11;
+const lines = (D.title || "").split("\n");
+let delay = 0.25;
+const h1 = lines.map((l) => { const h = words(l, delay, step); delay += l.split(" ").length * step; return h; }).join("<br>");
+if (D.variant === "end") {
+  document.body.classList.add("end");
+  s.innerHTML = `<div class="logo-big">${logo("")}</div>
+    <div class="rule" style="animation-delay:.55s"></div>
+    <div class="sub" style="animation-delay:.75s">${D.sub || ""}</div>
+    <div class="pills">${(D.pills || []).map((p, i) => `<span style="animation-delay:${(1 + i * .12).toFixed(2)}s">${p}</span>`).join("")}</div>`;
+} else {
+  s.innerHTML = `${D.kicker ? `<div class="kicker">${D.kicker}</div>` : ""}<h1>${h1}</h1>
+    ${D.sub || D.pills ? `<div class="rule" style="animation-delay:${(delay + .1).toFixed(2)}s"></div>` : ""}
+    ${D.sub ? `<div class="sub" style="animation-delay:${(delay + .3).toFixed(2)}s">${D.sub}</div>` : ""}
+    ${D.pills ? `<div class="pills">${D.pills.map((p, i) => `<span style="animation-delay:${(delay + .45 + i * .1).toFixed(2)}s">${p}</span>`).join("")}</div>` : ""}`;
+}
+window.__ready = (async () => {
+  await document.fonts.load('600 108px Fraunces');
+  await document.fonts.load('italic 500 108px Fraunces');
+  await document.fonts.load('400 38px "Schibsted Grotesk"');
+  await document.fonts.load('700 24px "Schibsted Grotesk"');
+  await document.fonts.load('400 30px "JetBrains Mono"');
+  await document.fonts.ready;
+  if (D.logo) await Promise.all([...document.images].map((i) => i.decode().catch(() => {})));
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,119 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>chat</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+  /* A NEUTRAL chat layout for an illustrative conversation — deliberately not any real
+     product's interface. Tool results shown in it are real JobFlow output. */
+  body { display: flex; flex-direction: column; align-items: center; }
+  .top { width: var(--w); margin-top: 52px; display: flex; justify-content: space-between; align-items: flex-end; position: relative; z-index: 1; }
+  .top h1 { margin: 0; font: 600 44px/1.05 var(--display); }
+  .top h1 code { font-family: var(--mono); font-size: .8em; color: var(--vermilion); }
+  .top .kicker { font-size: 17px; margin-bottom: 10px; }
+  .panel { width: var(--w); flex: 1; margin: 22px 0 46px; background: #fffdf8; border: 1px solid var(--rule); border-radius: 16px; position: relative; overflow: hidden; z-index: 1; box-shadow: 0 24px 50px -28px rgba(28,25,21,.35); }
+  .panel .label { position: absolute; top: 0; left: 0; right: 0; height: 50px; display: flex; align-items: center; justify-content: space-between; padding: 0 22px; border-bottom: 1px solid var(--rule); background: var(--paper-2); font: 600 16px var(--text); color: var(--ink-2); z-index: 3; }
+  .panel .label b { color: var(--ink); }
+  .scroll { position: absolute; top: 50px; left: 0; right: 0; bottom: 0; overflow: hidden; }
+  .feed { padding: 26px 34px 40px; display: flex; flex-direction: column; gap: 20px; will-change: transform; }
+  .msg { max-width: 80%; font: 400 24px/1.45 var(--text); }
+  .who { font: 700 14px var(--text); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 6px; }
+  .user { align-self: flex-end; background: var(--ink); color: var(--paper); padding: 14px 20px; border-radius: 18px 18px 4px 18px; }
+  .user .who { color: #a99d8a; text-align: right; }
+  .assistant { align-self: flex-start; color: var(--ink); }
+  .assistant code { font-family: var(--mono); font-size: .86em; background: var(--paper-2); padding: .05em .35em; border-radius: 5px; }
+  .tool { align-self: stretch; border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); overflow: hidden; }
+  .tool .th { display: flex; align-items: center; gap: 12px; padding: 12px 18px; font: 600 19px var(--text); color: var(--ink-2); border-bottom: 1px solid transparent; }
+  .tool .th .name { font-family: var(--mono); color: var(--vermilion); font-weight: 700; }
+  .tool .th .args { font-family: var(--mono); font-weight: 400; color: var(--ink-3); font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+  .tool .th .st { font: 600 15px var(--text); color: var(--ink-3); white-space: nowrap; }
+  .tool .th .st.ok { color: var(--green); }
+  .tool.open .th { border-bottom-color: var(--rule); }
+  .tool pre { margin: 0; padding: 14px 18px 16px; font: 400 19px/1.42 var(--mono); color: var(--ink); white-space: pre-wrap; word-break: break-word; max-height: var(--maxh, 520px); overflow: hidden; position: relative; }
+  .tool pre.cut::after { content: "⋯ (more in the result)"; position: absolute; left: 0; right: 0; bottom: 0; padding: 26px 18px 10px; background: linear-gradient(transparent, var(--paper) 55%); color: var(--ink-3); font: 600 15px var(--text); }
+  .hl { background: #f6dccf; border-radius: 3px; }
+  .vertical .msg { font-size: 30px; max-width: 92%; }
+  .vertical .tool pre { font-size: 21px; }
+  .vertical .top h1 { font-size: 52px; }
+  .vertical .top { margin-top: 270px; }
+  .vertical .panel { margin-bottom: 660px; }
+</style>
+</head>
+<body>
+<div class="top"><div><div class="kicker" id="kicker"></div><h1 id="title"></h1></div><div id="badge"></div></div>
+<div class="panel"><div class="label"><span><b>AI assistant</b> · illustrative conversation</span><span id="note">tool results: real JobFlow output (demo data)</span></div>
+<div class="scroll" id="scroll"><div class="feed" id="feed"></div></div></div>
+<script>
+// window.__data: { width, vertical, title, kicker, badge, items: [{ t, kind, text, tool, args, result, maxLines, hl:[str] , cps }] }
+const D = window.__data;
+document.documentElement.style.setProperty("--w", D.width + "px");
+document.body.classList.toggle("vertical", !!D.vertical);
+document.getElementById("title").innerHTML = D.title || "";
+document.getElementById("kicker").textContent = D.kicker || "";
+if (D.badge) document.getElementById("badge").innerHTML = `<span class="badge">${D.badge}</span>`;
+if (D.note) document.getElementById("note").textContent = D.note;
+const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const md = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/\*([^*]+)\*/g, "<i>$1</i>");
+const feed = document.getElementById("feed");
+const els = D.items.map((it) => {
+  const el = document.createElement("div");
+  el.style.display = "none";
+  if (it.kind === "tool") {
+    el.className = "tool";
+    const res = it.maxLines ? it.result.split("\n").slice(0, it.maxLines).join("\n") : it.result;
+    let html = esc(res);
+    for (const h of it.hl || []) html = html.split(esc(h)).join(`<span class="hl">${esc(h)}</span>`);
+    el.innerHTML = `<div class="th"><span>jobflow ·</span><span class="name">${esc(it.tool)}</span><span class="args">${esc(JSON.stringify(it.args))}</span><span class="st">running…</span></div><pre class="${it.maxLines && it.result.split("\n").length > it.maxLines ? "cut" : ""}" style="display:none">${html}</pre>`;
+  } else {
+    el.className = `msg ${it.kind}`;
+    el.innerHTML = `<div class="who">${it.kind === "user" ? "You" : "Assistant"}</div><div class="body"></div>`;
+  }
+  feed.appendChild(el);
+  return el;
+});
+const state = D.items.map(() => "");
+let scroll = null; // the first frame starts scrolled to the newest message
+window.__ready = (async () => {
+  await document.fonts.load('400 24px "Schibsted Grotesk"');
+  await document.fonts.load('400 17px "JetBrains Mono"');
+  await document.fonts.load('600 44px Fraunces');
+  await document.fonts.ready;
+})();
+window.__frame = async (t) => {
+  let changed = false;
+  D.items.forEach((it, i) => {
+    const el = els[i];
+    let s = "hidden";
+    if (t >= it.t) {
+      if (it.kind === "tool") {
+        s = t >= it.t + (it.run ?? 0.9) ? "done" : "run" + Math.floor((t - it.t) * 3);
+      } else if (it.kind === "assistant") {
+        const words = it.text.split(" ");
+        const n = Math.min(words.length, Math.floor((t - it.t) * (it.wps ?? 7)) + 1);
+        s = "w" + n;
+      } else s = "shown";
+    }
+    if (s === state[i]) return;
+    state[i] = s;
+    changed = true;
+    if (s === "hidden") { el.style.display = "none"; return; }
+    el.style.display = "";
+    if (it.kind === "tool") {
+      const st = el.querySelector(".st");
+      if (s === "done") { st.textContent = "✓ done"; st.classList.add("ok"); el.querySelector("pre").style.display = ""; el.classList.add("open"); }
+      else st.textContent = "running" + ".".repeat((Number(s.slice(3)) % 3) + 1);
+    } else if (it.kind === "assistant") {
+      el.querySelector(".body").innerHTML = md(it.text.split(" ").slice(0, Number(s.slice(1))).join(" "));
+    } else el.querySelector(".body").innerHTML = md(it.text);
+  });
+  // follow the newest message, eased
+  const box = document.getElementById("scroll");
+  const target = Math.max(0, feed.scrollHeight - box.clientHeight);
+  const next = scroll === null || Math.abs(target - scroll) < 0.5 ? target : scroll + (target - scroll) * 0.16;
+  if (next !== scroll) { scroll = next; feed.style.transform = `translateY(${-scroll}px)`; changed = true; }
+  return changed;
+};
+</script>
+</body>
+</html>
