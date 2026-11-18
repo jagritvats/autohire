@@ -172,10 +172,12 @@ export function resolveProfileDir(dir: string | undefined, env: NodeJS.ProcessEn
  * agent owns ONE of these and drives all browser jobs through it sequentially, so
  * Tier-3 fetch and form-fill never fight over the same Chromium profile (§7.1).
  */
-export async function launchUserContext(opts: { userDataDir?: string; headless?: boolean } = {}): Promise<PwContext> {
+export async function launchUserContext(
+  opts: { userDataDir?: string; headless?: boolean; env?: NodeJS.ProcessEnv } = {},
+): Promise<PwContext> {
   const pw = await importPlaywright();
-  return pw.chromium.launchPersistentContext(resolveProfileDir(opts.userDataDir), {
-    ...chromiumExecutable(),
+  return pw.chromium.launchPersistentContext(resolveProfileDir(opts.userDataDir, opts.env), {
+    ...chromiumExecutable(opts.env),
     headless: opts.headless ?? false,
     viewport: null,
   });
@@ -209,7 +211,7 @@ interface PwModule {
   chromium: {
     launchPersistentContext(
       dir: string,
-      opts: { headless?: boolean; viewport?: null },
+      opts: { headless?: boolean; viewport?: null; executablePath?: string },
     ): Promise<PwContext>;
   };
 }
@@ -227,8 +229,17 @@ async function importPlaywright(): Promise<PwModule> {
   }
 }
 
-/** JOBFLOW_CHROMIUM: use an installed Chrome/Chromium instead of Playwright's own download. */
-function chromiumExecutable(): { executablePath?: string } {
-  const p = process.env.JOBFLOW_CHROMIUM?.trim();
+/**
+ * JOBFLOW_CHROMIUM: an installed Chrome/Chromium to use instead of Playwright's own
+ * download (`~` expanded; blank = unset). The CLI's readiness checks use the same rule.
+ */
+export function chromiumExecutablePath(env: NodeJS.ProcessEnv = process.env): string | null {
+  const p = env.JOBFLOW_CHROMIUM?.trim();
+  if (!p) return null;
+  return p === "~" || p.startsWith("~/") ? join(homedir(), p.slice(1)) : p;
+}
+
+function chromiumExecutable(env: NodeJS.ProcessEnv = process.env): { executablePath?: string } {
+  const p = chromiumExecutablePath(env);
   return p ? { executablePath: p } : {};
 }

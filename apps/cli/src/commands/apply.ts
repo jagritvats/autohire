@@ -164,14 +164,25 @@ async function fill(ctx: Ctx, ap: ApplyPlan, ref: string, browserProfile?: strin
   }
   assertNeverSubmits(flags); // gate 4 — immovable
 
-  const pw = await playwrightStatus();
+  const pw = await playwrightStatus(ctx.io.env);
   if (!pw.installed) throw needsSetup("--fill needs Playwright, which isn't installed.", `Install it: ${PLAYWRIGHT_INSTALL_HINT}`);
-  if (!pw.chromium) throw needsSetup("Playwright is installed but its Chromium isn't.", "Install it: npx playwright install chromium");
+  if (pw.customMissing) {
+    throw needsSetup(
+      `JOBFLOW_CHROMIUM is set to ${pw.customMissing}, which doesn't exist.`,
+      "Point it at your Chrome/Chromium binary, or unset it and run: npx playwright install chromium",
+    );
+  }
+  if (!pw.chromium) {
+    throw needsSetup(
+      "Playwright is installed but its Chromium isn't.",
+      "Install it: npx playwright install chromium   (or set JOBFLOW_CHROMIUM to a Chrome/Chromium you already have)",
+    );
+  }
 
   const userDataDir = browserProfile ? ctx.userPath(browserProfile) : ctx.io.env.JOBFLOW_BROWSER_PROFILE?.trim() || join(ctx.dataDir, "browser-profile");
   for (const m of ap.missing.filter((x) => x !== "email")) out.warn(`missing ${m} — ${FIX[m]}`);
   const spin = out.spinner(`Opening ${ap.applyUrl} in a local browser and filling it (human-paced)`);
-  const context = await launchUserContext({ userDataDir, headless: false }).catch((e: Error) => {
+  const context = await launchUserContext({ userDataDir, headless: false, env: ctx.io.env }).catch((e: Error) => {
     spin.stop();
     throw new CliError(`Couldn't start the browser: ${e.message}`, EXIT.error, "Is a display available? Try `jobflow apply --open` instead.");
   });
