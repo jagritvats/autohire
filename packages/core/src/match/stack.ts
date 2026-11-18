@@ -53,6 +53,58 @@ export const STACK_EDGES: StackEdge[] = [
   { from: "docker", to: "kubernetes", weight: 0.75 },
   { from: "aws", to: "gcp", weight: 0.8 },
   { from: "aws", to: "azure", weight: 0.78 },
+  { from: "javascript", to: "typescript", weight: 0.85 },
+  // SQL: every relational database implies it; dbt is SQL
+  { from: "postgres", to: "sql", weight: 0.9 },
+  { from: "mysql", to: "sql", weight: 0.9 },
+  { from: "dbt", to: "sql", weight: 0.9 },
+  { from: "sql", to: "postgres", weight: 0.7 },
+  { from: "sql", to: "mysql", weight: 0.7 },
+  { from: "sql", to: "dbt", weight: 0.6 },
+  // BI tools are interchangeable for a dashboard role
+  { from: "tableau", to: "power_bi", weight: 0.8 },
+  { from: "tableau", to: "looker", weight: 0.8 },
+  { from: "power_bi", to: "tableau", weight: 0.8 },
+  { from: "power_bi", to: "looker", weight: 0.75 },
+  { from: "looker", to: "tableau", weight: 0.75 },
+  { from: "looker", to: "power_bi", weight: 0.75 },
+  // analytics languages
+  { from: "pandas", to: "python", weight: 0.9 },
+  { from: "python", to: "r", weight: 0.55 },
+  { from: "r", to: "python", weight: 0.6 },
+  { from: "r", to: "sas", weight: 0.6 },
+  { from: "sas", to: "r", weight: 0.6 },
+  // frontend frameworks: the framework of a framework you know is near; peers transfer
+  { from: "react", to: "nextjs", weight: 0.85 },
+  { from: "nextjs", to: "react", weight: 0.95 },
+  { from: "vue", to: "nuxt", weight: 0.85 },
+  { from: "nuxt", to: "vue", weight: 0.95 },
+  { from: "react", to: "vue", weight: 0.7 },
+  { from: "vue", to: "react", weight: 0.7 },
+  { from: "react", to: "angular", weight: 0.6 },
+  { from: "vue", to: "angular", weight: 0.6 },
+  { from: "angular", to: "react", weight: 0.65 },
+  { from: "angular", to: "vue", weight: 0.65 },
+  { from: "react", to: "svelte", weight: 0.7 },
+  { from: "vue", to: "svelte", weight: 0.75 },
+  { from: "sass", to: "css", weight: 0.95 },
+  { from: "css", to: "sass", weight: 0.85 },
+  { from: "cypress", to: "playwright", weight: 0.85 },
+  { from: "playwright", to: "cypress", weight: 0.85 },
+  { from: "jest", to: "playwright", weight: 0.5 },
+  { from: "jest", to: "cypress", weight: 0.5 },
+  // iOS / Apple and systems languages
+  { from: "swiftui", to: "swift", weight: 0.95 },
+  { from: "swift", to: "swiftui", weight: 0.8 },
+  { from: "objective_c", to: "swift", weight: 0.75 },
+  { from: "swift", to: "objective_c", weight: 0.6 },
+  { from: "swift", to: "kotlin", weight: 0.55 },
+  { from: "kotlin", to: "swift", weight: 0.55 },
+  { from: "kotlin", to: "dart", weight: 0.5 },
+  { from: "swift", to: "dart", weight: 0.5 },
+  { from: "cpp", to: "c", weight: 0.85 },
+  { from: "c", to: "cpp", weight: 0.7 },
+  { from: "cpp", to: "rust", weight: 0.6 },
 ];
 
 const LANGUAGES = new Set([
@@ -68,7 +120,39 @@ const LANGUAGES = new Set([
   "php",
   "ruby",
   "cpp",
+  "c",
+  "swift",
+  "objective_c",
+  "dart",
+  "r",
+  "sas",
 ]);
+
+/**
+ * Domains the dictionary recognises ("fintech" from payments / ledger / KYC words): what the
+ * company DOES, not something a candidate learns. Context, never a gap — the stack note says
+ * "you have fintech" when both sides do and never lists it as "new to you" (2026-11 feed review).
+ */
+const DOMAIN_SKILLS: ReadonlySet<string> = new Set(["fintech_domain"]);
+
+export function isDomainSkill(skill: string): boolean {
+  return DOMAIN_SKILLS.has(skill);
+}
+
+/**
+ * A profile's declared skills as dictionary ids where the dictionary knows them: a skill
+ * typed or imported before the dictionary had it ("power bi", "Tableau", "Next.js") counts
+ * as the id the JD parser now emits ("power_bi", "tableau", "nextjs"). Unknown skills stay
+ * as typed (matched as whole words in the JD — `stackAdjacency`).
+ */
+export function canonicalStack(skills: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const s of skills) {
+    const id = matchSkillToken(s) ?? s;
+    if (!out.includes(id)) out.push(id);
+  }
+  return out;
+}
 
 /** Skills that are "the hard part" — having them covers a language gap (§11.1). */
 const SYSTEMS_CORE = new Set([
@@ -139,6 +223,12 @@ const LANGUAGE_MENTION: Readonly<Record<string, RegExp>> = {
   php: /\bphp\b|\blaravel\b/gi,
   ruby: /\bruby\b|\brails\b/gi,
   cpp: /c\+\+/gi,
+  c: /(?<![\w#+.\-/])C(?=\s*\/\s*C\+\+|,\s*C\+\+|\s+programming\b)|\bEmbedded C\b/g,
+  swift: /(?<![\w.])Swift(?![\w])|\bSwiftUI\b/g,
+  objective_c: /\bobjective-?c\b|\bobj-c\b/gi,
+  dart: /\bdart\b|\bflutter\b/gi,
+  r: /(?<![\w&/.\-])R(?=\s*(?:[,/]|\s+(?:and|or)\s)\s*(?:Python|SQL|SAS)\b|\s+programming\b)|(?<=\b(?:Python|SQL|SAS)(?:\s*[,/]\s*|\s+(?:and|or)\s+))R(?![\w&])/g,
+  sas: /(?<![\w])SAS(?![\w])/g,
 };
 
 /** the role's main language: named in the title, else the most-mentioned (then earliest) in the JD */
@@ -198,10 +288,36 @@ const SKILL_TEXT: Readonly<Record<string, string>> = {
   spark: "Spark",
   airflow: "Airflow",
   react: "React",
+  nextjs: "Next.js",
+  vue: "Vue",
+  nuxt: "Nuxt",
+  angular: "Angular",
+  svelte: "Svelte",
+  css: "CSS",
+  html: "HTML",
+  sass: "Sass",
+  jest: "Jest",
+  cypress: "Cypress",
+  playwright: "Playwright",
+  webpack: "webpack",
+  storybook: "Storybook",
+  figma: "Figma",
+  swiftui: "SwiftUI",
+  sql: "SQL",
+  excel: "Excel",
+  tableau: "Tableau",
+  power_bi: "Power BI",
+  looker: "Looker",
+  pandas: "pandas",
+  numpy: "NumPy",
+  dbt: "dbt",
+  statistics: "statistics",
+  ab_testing: "A/B testing",
 };
 const LANG_TEXT: Readonly<Record<string, string>> = {
   java: "Java", kotlin: "Kotlin", go: "Go", scala: "Scala", rust: "Rust", csharp: "C#", python: "Python",
   typescript: "TypeScript", javascript: "JavaScript", php: "PHP", ruby: "Ruby", cpp: "C++",
+  c: "C", swift: "Swift", objective_c: "Objective-C", dart: "Dart", r: "R", sas: "SAS",
 };
 const langText = (l: string) => LANG_TEXT[l] ?? l;
 const list = (xs: readonly string[], f: (s: string) => string = skillText) => {
@@ -223,12 +339,14 @@ export function stackAdjacency(
   jdSkillsIn: string[],
   ctx: StackContext = {},
 ): StackAdjacencyResult {
-  const owned = new Set(ownedSkills);
+  const ownedList = canonicalStack(ownedSkills);
+  const owned = new Set(ownedList);
   // declared skills outside the dictionary, found in the JD as whole words (title or text)
-  const extra = ctx.jdText || ctx.title ? ownedSkills.filter((s) => !jdSkillsIn.includes(s) && isFreeSkill(s) && mentions(`${ctx.title ?? ""}\n${(ctx.jdText ?? "").slice(0, 8000)}`, s)) : [];
+  const extra = ctx.jdText || ctx.title ? ownedList.filter((s) => !jdSkillsIn.includes(s) && isFreeSkill(s) && mentions(`${ctx.title ?? ""}\n${(ctx.jdText ?? "").slice(0, 8000)}`, s)) : [];
   const jdSkills = [...jdSkillsIn, ...extra];
   const jdLangs = jdSkills.filter(isLanguage);
-  const jdNonLangs = jdSkills.filter((s) => !isLanguage(s));
+  // a domain the JD names counts only when it is yours too (context, never a gap)
+  const jdNonLangs = jdSkills.filter((s) => !isLanguage(s) && (!isDomainSkill(s) || owned.has(s)));
 
   // best transfer from any owned skill to each JD skill
   const bestTransfer = (target: string): number => {

@@ -10,7 +10,7 @@ import type { PresetOption, PresetSuggestions } from "@/lib/presets";
  * Evidence Bank holds only claims from your own material).
  */
 
-const ARCHETYPES: RoleArchetype[] = ["backend", "platform", "fullstack", "infra_devops", "data_ml", "frontend", "mobile", "sre"];
+const ARCHETYPES: RoleArchetype[] = ["backend", "platform", "fullstack", "infra_devops", "data_ml", "data_analytics", "frontend", "mobile", "sre"];
 const LEVELS: LevelBand[] = ["intern", "junior", "mid", "senior", "staff", "lead", "principal", "manager", "director"];
 const GEOS: { id: RemoteGeo; label: string }[] = [
   { id: "worldwide", label: "worldwide" },

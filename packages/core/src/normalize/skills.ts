@@ -30,7 +30,45 @@ const SKILL_ALIASES: Record<string, string[]> = {
   cpp: ["c\\+\\+", "\\bcpp\\b"],
   javascript: ["javascript", "node\\.?js", "\\bnode\\b(?=\\s*(\\.js|js|,|/|\\)|backend|developer|engineer|services?|apis?|ecosystem|and (typescript|express|react)))", "\\bjs\\b", "express\\.?js"],
   // "react" is also the verb ("react to incidents") — the library needs a tech cue
-  react: ["react\\.?js", "react(?=\\s*(native|hooks|query|router|components?|developer|engineer|frontend|front-end|,|;|/|\\)|\\+|$|and (redux|typescript|next)))", "(?<=\\b(in|with|using|of|knowledge of|experience (in|with))\\s)react", "next\\.?js", "redux"],
+  react: ["react\\.?js", "react(?=\\s*(native|hooks|query|router|components?|developer|engineer|frontend|front-end|,|;|/|\\)|\\+|$|and (redux|typescript|next)))", "(?<=\\b(in|with|using|of|knowledge of|experience (in|with))\\s)react", "redux"],
+  // frameworks a frontend résumé lists by name (Next.js was folded into React, so a Next.js
+  // role told a React developer nothing about the gap — 2026-11 feed review)
+  nextjs: ["next\\.?js"],
+  vue: ["vue\\.?js", "vuejs", "vuex", "pinia"], // the bare word is CASED ("en vue de" is French)
+  nuxt: ["nuxt(\\.?js)?"],
+  angular: ["angular(\\.?js)?"],
+  svelte: ["svelte(kit)?"],
+  css: ["css3?", "tailwind ?css", "tailwindcss"],
+  html: ["html5?"],
+  sass: ["sass", "scss"],
+  jest: ["jest"],
+  cypress: ["cypress"],
+  playwright: ["playwright"],
+  webpack: ["webpack"],
+  storybook: ["storybook"],
+  figma: ["figma"],
+  // mobile languages: an iOS role named "no languages we recognise" (2026-11 feed review).
+  // "Swift" the language is CASED (SWIFT is the banking network, "swift" an adjective)
+  swiftui: ["swiftui"],
+  objective_c: ["objective-c", "objectivec", "obj-c"],
+  dart: ["\\bdart\\b", "flutter"],
+  // data / analytics: the analyst persona's résumé read as "python" alone
+  sql: ["sql", "t-sql", "pl/sql"],
+  tableau: ["tableau(?!\\s+de\\b)"], // "tableau de bord" is French for dashboard
+  power_bi: ["power ?bi", "powerbi"],
+  looker: ["looker( studio)?"],
+  pandas: ["pandas"],
+  numpy: ["numpy"],
+  dbt: ["dbt"],
+  // (not Snowflake: it is as often a customer named in company boilerplate as a skill)
+  // statistics as a skill or a field of study, never "frequently cited statistics show…"
+  statistics: [
+    "statistical (analysis|modell?ing|methods|inference|programming|software)",
+    "(knowledge|background|experience|expertise|degree|coursework|skills?|proficiency) (in|of) (applied )?statistics",
+    "statistics(?=,? (and |or )?(mathematics|maths?|economics|computer science|data science|physics|engineering)\\b)",
+    "(?<=\\b(mathematics|maths?|economics|computer science|cs|data science|physics), (or |and )?)statistics",
+  ],
+  ab_testing: ["a/b test(s|ing)?", "ab testing", "split testing"],
   kafka: ["kafka", "kafka streams", "ksql", "confluent"],
   rabbitmq: ["rabbitmq", "amqp"],
   postgres: ["postgres", "postgresql", "psql"],
@@ -55,6 +93,8 @@ const SKILL_ALIASES: Record<string, string[]> = {
   spark: ["apache spark", "\\bspark\\b", "pyspark"],
   airflow: ["airflow", "dagster", "prefect"],
   ml: ["machine learning", "\\bml\\b", "pytorch", "tensorflow", "llms?", "\\brag\\b"],
+  // a DOMAIN, not a skill: context on the card ("you have fintech"), never "new to you"
+  // (`isDomainSkill`, match/stack.ts)
   fintech_domain: ["payments", "ledger", "double[- ]entry", "wallet", "settlement", "trading", "fintech", "banking", "\\bkyc\\b", "\\bsip\\b"],
 };
 
@@ -81,6 +121,19 @@ export function extractSkills(text: string): string[] {
  */
 const CASED: ReadonlyArray<readonly [string, RegExp]> = [
   ["react", /(?<![\w])React(?![\w])(?!\s+(?:to|quickly|swiftly|fast|calmly|appropriately|accordingly|positively)\b)/],
+  ["vue", /(?<![\w])Vue(?![\w])/],
+  // the language, not SWIFT payments or a swift response: "Swift" cased, not before a
+  // payments word, not after an adjective slot ("a Swift transition" is rare in JDs)
+  ["swift", /(?<![\w.])Swift(?![\w])(?!\s+(?:codes?|payments?|messages?|messaging|network|transfers?|gpi|MT\d*|action|response|delivery)\b)/],
+  // Excel the tool — "excel at" / "excel in" is the verb
+  ["excel", /(?<![\w])(?:(?:MS|Microsoft)\s+)?Excel(?![\w])(?!\s+(?:at|in)\b)/],
+  // R and SAS only beside another analytics language or with a language word: a bare
+  // capital R is a trademark, "R&D", a grade; SAS is also an airline, a disk bus and an
+  // Azure token
+  ["r", new RegExp(String.raw`(?<![\w&/.\-])R(?![\w&'’+\-)])(?=\s*(?:[,/]\s*|\s+(?:and|or)\s+)(?:Python|SQL|SAS|Stata|MATLAB|Julia|Scala)\b|\s+(?:programming|language|Studio|Shiny|Markdown)\b)|(?<=\b(?:Python|SQL|SAS|Stata|MATLAB|Julia)(?:\s*[,/]\s*|\s+(?:and|or)\s+))R(?![\w&'’+\-)])`)],
+  ["sas", new RegExp(String.raw`(?<![\w])SAS(?![\w])(?=\s*(?:[,/]\s*|\s+(?:and|or)\s+)(?:Python|SQL|R|Stata|SPSS|MATLAB)\b|\s+(?:programming|Enterprise|Viya|Base|EG|macros?)\b)|(?<=\b(?:Python|SQL|R|Stata|SPSS|MATLAB)(?:\s*[,/]\s*|\s+(?:and|or)\s+))SAS(?![\w])`)],
+  // C only where it is plainly the language: "C/C++", "C, C++", "Embedded C", "C programming"
+  ["c", new RegExp(String.raw`(?<![\w#+.\-/])C(?![\w#+\-])(?=\s*(?:\/\s*C\+\+|,\s*C\+\+|\s+(?:and|or)\s+C\+\+|\s+(?:programming|language)\b))|(?<=\b(?:Embedded|ANSI|Linux|in)\s)C(?![\w#+\-])(?=\s*(?:[,/;.)]|\s+(?:and|or)\b|$))`)],
 ];
 
 function matchAliases(text: string): string[] {
@@ -131,6 +184,20 @@ export const CANONICAL_SKILLS: readonly string[] = Object.keys(SKILL_ALIASES);
  */
 const EXACT_SKILL_TOKENS: Record<string, string> = {
   go: "go",
+  // CASED in prose; alone in a skills list they ARE the skill
+  r: "r",
+  sas: "sas",
+  c: "c",
+  swift: "swift",
+  excel: "excel",
+  "ms excel": "excel",
+  "microsoft excel": "excel",
+  vue: "vue",
+  "power bi": "power_bi",
+  "a/b testing": "ab_testing",
+  statistics: "statistics",
+  "nodejs": "javascript",
+  "node.js": "javascript",
   node: "javascript",
   "c#": "csharp",
   "c++": "cpp",
@@ -175,6 +242,12 @@ export function matchSkillToken(token: string): string | null {
   const exact = EXACT_SKILL_TOKENS[lower];
   if (exact) return exact;
   if (Object.prototype.hasOwnProperty.call(SKILL_ALIASES, lower)) return lower;
-  for (const [skill, re] of TOKEN_COMPILED) if (re.test(t)) return skill;
-  return null;
+  // the alias covering the most of the token wins: "Next.js" is Next.js, though "js" alone
+  // is a JavaScript alias (dictionary order read every "*.js" framework as JavaScript)
+  let best: { skill: string; len: number } | null = null;
+  for (const [skill, re] of TOKEN_COMPILED) {
+    const m = re.exec(t);
+    if (m && (!best || m[0].length > best.len)) best = { skill, len: m[0].length };
+  }
+  return best?.skill ?? null;
 }

@@ -9,7 +9,7 @@ import { FilterDrawer } from "./ui/FilterDrawer";
 import { roleText } from "@/lib/cardText";
 import { DIVERSIFY_WINDOW, diversifyByCompany, diversifyKey, moreBelow } from "@jobflow/core";
 
-const ARCHETYPES = ["backend", "platform", "infra_devops", "fullstack", "data_ml", "sre", "frontend", "mobile"];
+const ARCHETYPES = ["backend", "platform", "infra_devops", "fullstack", "data_ml", "data_analytics", "sre", "frontend", "mobile"];
 const MODES = ["remote", "hybrid", "onsite"];
 const GEOS: Array<{ id: string; label: string }> = [
   { id: "worldwide", label: "anywhere" },

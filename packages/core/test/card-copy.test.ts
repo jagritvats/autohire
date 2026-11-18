@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   companyDisplayName,
   describeLocation,
+  extractSkills,
   diversifyByCompany,
   moreBelow,
   parseLocation,
@@ -175,12 +176,15 @@ describe("main language (jdSkills come in dictionary order, not the posting's)",
     expect(r.note).not.toMatch(/ramp|direct match|_/);
   });
   it("a declared skill the dictionary doesn't know counts when the JD names it", () => {
-    const analyst = ["sql", "tableau", "excel", "python", "r"];
-    const jd = "Data Analyst: SQL every day, Tableau dashboards, Excel models; Python or R, a plus.";
-    const withText = stackAdjacency(analyst, ["python"], { title: "Data Analyst", jdText: jd });
+    // SQL / Tableau / Excel / R are dictionary skills now; Stata still isn't
+    const analyst = ["sql", "tableau", "excel", "python", "r", "stata"];
+    const jd = "Data Analyst: SQL every day, Tableau dashboards, Excel models; Stata. Python or R, a plus.";
+    expect(extractSkills(jd)).toEqual(expect.arrayContaining(["python", "sql", "tableau", "excel", "r"]));
+    const withText = stackAdjacency(analyst, extractSkills(jd), { title: "Data Analyst", jdText: jd });
     const without = stackAdjacency(analyst, ["python"]);
     expect(withText.score).toBeGreaterThan(without.score);
-    expect(withText.note).toMatch(/You have SQL, tableau, excel and R/);
+    expect(withText.note).toMatch(/Main language Python — you have it/);
+    expect(withText.note).toMatch(/You have SQL, Tableau, Excel and stata/);
     // a one-letter skill only as a standalone capital: "r" is not found in "your role"
     expect(stackAdjacency(["r"], [], { jdText: "your role as a reviewer" }).note).not.toMatch(/You have r/);
   });
