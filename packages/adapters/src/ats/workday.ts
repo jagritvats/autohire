@@ -25,8 +25,8 @@ interface WdFacet {
   values?: WdFacetValue[];
 }
 interface WdJob {
-  title: string;
-  externalPath: string;
+  title?: string;
+  externalPath?: string;
   locationsText?: string;
   postedOn?: string;
   bulletFields?: string[];
@@ -113,11 +113,12 @@ export class WorkdayAdapter implements SourceAdapter {
       if (batch.length < PAGE) break;
     }
     // the list stopped at the cap with more on the board: a diff against it would stale the
-    // tail (invariant #5) — say so, and let ingest skip markStale (the TTL sweep retires)
+    // tail (invariant #5) — say so, and let ingest skip markStale (the TTL sweep retires).
+    // Counted over EVERY row received, redacted ones included: `total` counts them too.
     const truncated = Number.isFinite(total) && jobs.length < total;
-    const kept = unfiltered && countryName ? jobs.filter((j) => !placedElsewhere(j.locationsText, target.location!, countryName)) : jobs;
+    const { rows: identified, redactedKnown } = splitRedacted(jobs, target.known);
+    const kept = unfiltered && countryName ? identified.filter((j) => !placedElsewhere(j.locationsText, target.location!, countryName)) : identified;
 
-    const idOf = (j: WdJob) => j.externalPath.match(/_([A-Za-z0-9-]+)$/)?.[1] ?? j.externalPath;
     const needDetail = pickForDetail(kept.filter((j) => !target.known?.has(idOf(j))), (j) => j.title, target.limit ?? DETAIL_CAP);
     const details = new Map<string, WdDetail | null>();
     await mapPool(needDetail, 3, async (j) => details.set(j.externalPath, await httpJson<WdDetail>(`${api}${j.externalPath}`)));
@@ -133,7 +134,7 @@ export class WorkdayAdapter implements SourceAdapter {
         atsJobId: idOf(j),
         companyName: t.tenant,
         companySlug: target.slug!,
-        title: j.title,
+        title: j.title.trim(),
         jdText: htmlToText(info?.jobDescription),
         jdHtml: info?.jobDescription ?? null,
         // Workday location strings are often "IND - Bangalore" — append the country name when
@@ -146,8 +147,45 @@ export class WorkdayAdapter implements SourceAdapter {
         raw: j as unknown as Record<string, unknown>,
       } satisfies RawPosting;
     });
-    return truncated || unfiltered ? markPartial(out) : out;
+    // A redacted row whose id matches a posting we already store means that posting is still
+    // on the board, only hidden in this answer: diffing would retire it, so don't (§3).
+    return truncated || unfiltered || redactedKnown ? markPartial(out) : out;
   }
+}
+
+type WdRow = WdJob & { title: string; externalPath: string };
+
+/** Workday's job id: the path's trailing "_R-12345" / "_1216477-2". */
+function idOf(j: WdRow): string {
+  return j.externalPath.match(/_([A-Za-z0-9-]+)$/)?.[1] ?? j.externalPath;
+}
+
+/**
+ * Some tenants (Mastercard, PwC, HPE, Citi… seen 2026-11) put REDACTED rows in the list:
+ * `{"bulletFields":["R-293658"]}` with no title and no path. There is nothing to show or
+ * apply to, and the detail endpoint can't be reached without the path, so such a row is
+ * skipped — it used to throw in `idOf` and lose the whole board.
+ *
+ * Staleness (invariant #5): the board's `total` counts redacted rows, so the "did we list
+ * everything" check above runs over every row received and a skipped row never makes a
+ * complete list look complete when it isn't. A complete list minus its redacted rows is
+ * still a safe diff: a redacted row's id never appears as a normal row, so the only posting
+ * a diff could retire is one the board no longer lets anyone open. The exception is a
+ * redacted row whose bullet id matches a posting we already store (`known`): that posting
+ * is still listed, only hidden in this answer, so the fetch is marked partial instead.
+ * Workday paths carry a repost suffix ("1216477-2") the bullet id lacks, hence the prefix.
+ */
+export function splitRedacted(jobs: WdJob[], known?: ReadonlySet<string>): { rows: WdRow[]; redacted: number; redactedKnown: boolean } {
+  const rows: WdRow[] = [];
+  const hidden: string[] = [];
+  for (const j of jobs) {
+    if (typeof j.externalPath === "string" && j.externalPath && typeof j.title === "string" && j.title.trim()) rows.push(j as WdRow);
+    else hidden.push(...(j.bulletFields ?? []).map((b) => String(b).trim()).filter(Boolean));
+  }
+  const redacted = jobs.length - rows.length;
+  const knownIds = known ? [...known] : [];
+  const redactedKnown = hidden.some((b) => knownIds.some((k) => k === b || k.startsWith(`${b}-`)));
+  return { rows, redacted, redactedKnown };
 }
 
 /** an unfiltered fallback list stops here (politeness; the result is marked partial). */

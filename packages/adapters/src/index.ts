@@ -36,7 +36,7 @@ export { BambooHrAdapter, parseBambooJobs } from "./ats/bamboohr.js";
 export { BreezyAdapter, parseBreezyPositions, breezyGoneRedirect } from "./ats/breezy.js";
 export { RemoteOkAdapter, parseRemoteOk } from "./aggregators/remoteok.js";
 export { JobicyAdapter, parseJobicyJobs } from "./aggregators/jobicy.js";
-export { WorkdayAdapter, findCountryFacet, findCountrySites, relativePosted, parseWorkdaySlug } from "./ats/workday.js";
+export { WorkdayAdapter, findCountryFacet, findCountrySites, relativePosted, parseWorkdaySlug, splitRedacted } from "./ats/workday.js";
 export { EightfoldAdapter, parseEightfoldSlug } from "./ats/eightfold.js";
 export { AmazonJobsAdapter } from "./ats/amazon.js";
 export { OracleHcmAdapter } from "./ats/oracle.js";
