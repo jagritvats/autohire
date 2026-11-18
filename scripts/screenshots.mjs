@@ -6,7 +6,8 @@
 //   pnpm --filter @jobflow/web build && node scripts/screenshots.mjs [--only jobs,settings]
 //
 // Writes docs/screenshots/*.png: every page in the dark theme, the key pages again in the
-// light theme (*-light.png), and 375px-wide mobile views (*-mobile*.png).
+// light theme (*-light.png), 375px-wide mobile views (*-mobile*.png), and the guide captures
+// (jobs-checklist, jobs-keyboard, jobs-saved-search, onboarding-review).
 // Needs Playwright + Chromium (`npx playwright install chromium`).
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
@@ -60,6 +61,23 @@ async function waitUp() {
 }
 
 const CARD = "article.match";
+// an invented candidate for the onboarding capture — never a real person
+const DEMO_RESUME = `Sam Placeholder
+sam@example.com · github.com/sam-placeholder · Lisbon, Portugal
+
+SUMMARY
+Backend engineer with 5 years of experience building APIs and data pipelines in Go and Python.
+
+EXPERIENCE
+Senior Software Engineer, Example Logistics — Mar 2022 – Present
+- Built a Go service that routes 40k shipment events per minute through Kafka into PostgreSQL
+- Cut p99 API latency from 900ms to 180ms by adding Redis caching and query indexes
+Software Engineer, Placeholder Analytics — Jan 2020 – Feb 2022
+- Wrote Python ETL jobs on Airflow that load 2TB a day into Snowflake
+- Moved 14 services to Kubernetes with Terraform-managed infrastructure
+
+SKILLS
+Go, Python, PostgreSQL, Kafka, Redis, Kubernetes, Terraform, AWS, Airflow`;
 const shots = [];
 try {
   await waitUp();
@@ -165,6 +183,57 @@ try {
   await shot("jobs-mobile-light", "/", { wait: CARD });
   await shot("applications-mobile-light", "/applications", { wait: ".crm-row, .empty" });
   await shot("sources-mobile-light", "/sources", { wait: ".onb-preset" });
+
+  // ── guide captures (dark, desktop) — last, because they add a saved search and read a
+  // résumé into the in-memory store, which would otherwise show up in the shots above ──
+  const g = await (await context("dark", { width: 1440, height: 900 })).newPage();
+  shot = shooter(g);
+  const hideChecklist = async (p) => {
+    await p.locator("#get-started button", { hasText: "later" }).click().catch(() => undefined);
+  };
+  // the "Get started" checklist on its own
+  await shot("jobs-checklist", "/", { wait: "#get-started", element: "#get-started" });
+  // keyboard in use: the second card selected, the shortcut line expanded
+  await shot("jobs-keyboard", "/", {
+    wait: CARD,
+    before: async (p) => {
+      await hideChecklist(p);
+      for (const k of ["j", "j", "?"]) await p.keyboard.press(k);
+      await p.waitForSelector(`${CARD}[data-selected]`, { timeout: 2000 }).catch(() => undefined);
+    },
+  });
+  // a saved search as a Jobs tab: what the search hides, plus a rail filter's hidden report
+  if (!ONLY || ONLY.has("jobs-saved-search")) {
+    await g.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    const viewId = await g.evaluate(async () => {
+      const r = await fetch("/api/searches", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        // a view over your corpus only (asSource: false) — nothing is fetched live
+        body: JSON.stringify({ op: "save", name: "Remote backend", text: "backend --remote", asSource: false, asView: true }),
+      });
+      return (await r.json()).search?.id ?? null;
+    });
+    if (viewId)
+      await shot("jobs-saved-search", `/?view=${viewId}`, {
+        wait: CARD,
+        before: async (p) => {
+          await hideChecklist(p);
+          await p.locator(".filter-rail .chip", { hasText: "anywhere" }).first().click();
+          await p.waitForSelector(".ux-hidden-report[role=status]", { timeout: 5000 }).catch(() => undefined);
+        },
+      });
+  }
+  // onboarding step 2 — "Check what we found" — from a pasted, fictional résumé
+  await shot("onboarding-review", "/onboarding", {
+    fullPage: true,
+    before: async (p) => {
+      await p.fill("textarea", DEMO_RESUME);
+      await p.getByRole("button", { name: "Read pasted text" }).click();
+      await p.waitForSelector("text=Contact", { timeout: 15_000 });
+      await p.evaluate(() => window.scrollTo(0, 0));
+    },
+  });
 
   await browser.close();
 } finally {
