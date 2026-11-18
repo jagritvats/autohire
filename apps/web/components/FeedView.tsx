@@ -11,6 +11,7 @@ import { DIVERSIFY_WINDOW, diversifyByCompany, diversifyKey, moreBelow } from "@
 
 const ARCHETYPES = ["backend", "platform", "infra_devops", "fullstack", "data_ml", "data_analytics", "sre", "frontend", "mobile"];
 const MODES = ["remote", "hybrid", "onsite"];
+/** remote-region chips; only the regions present in YOUR jobs are offered (region-neutral). */
 const GEOS: Array<{ id: string; label: string }> = [
   { id: "worldwide", label: "anywhere" },
   { id: "india_ok", label: "India OK" },
@@ -33,9 +34,11 @@ interface Filters {
   geos: Set<string>;
   hideUsOnly: boolean;
   hideServices: boolean;
+  hideAgency: boolean;
+  hideUnworkable: boolean;
   minTrust: number;
 }
-const NO_FILTERS: Filters = { minScore: 0, maxYears: 0, presets: new Set(), roles: new Set(), modes: new Set(), geos: new Set(), hideUsOnly: false, hideServices: false, minTrust: 0 };
+const NO_FILTERS: Filters = { minScore: 0, maxYears: 0, presets: new Set(), roles: new Set(), modes: new Set(), geos: new Set(), hideUsOnly: false, hideServices: false, hideAgency: false, hideUnworkable: false, minTrust: 0 };
 
 /** the FIRST filter that hides a card (so the hidden report adds up), or null */
 function hiddenBy(c: FeedCard, f: Filters): string | null {
@@ -46,6 +49,8 @@ function hiddenBy(c: FeedCard, f: Filters): string | null {
   if (f.modes.size && !f.modes.has(c.location.mode)) return "work mode";
   if (f.geos.size && c.location.mode === "remote" && !f.geos.has(c.location.remoteGeo)) return "remote region";
   if (f.hideUsOnly && c.location.remoteGeo === "us_only") return "US-only remote";
+  if (f.hideUnworkable && c.workable === false) return "not workable for you";
+  if (f.hideAgency && c.agency) return "staffing agency";
   if (f.hideServices && c.services) return "IT services";
   if (f.minTrust > 0 && c.trust * 100 < f.minTrust) return "source trust";
   return null;
@@ -161,6 +166,17 @@ export function FeedView({
   }, [baseCards, filters, scored, scoreOrder]);
   const hiddenTotal = Object.values(hidden).reduce((a, b) => a + b, 0);
   const filtersOn = hiddenTotal > 0 || JSON.stringify(filters, (_k, v) => (v instanceof Set ? [...v] : v)) !== JSON.stringify(NO_FILTERS, (_k, v) => (v instanceof Set ? [...v] : v));
+  // offer only the chips that can hide something in YOUR jobs (no region-specific defaults)
+  const presentGeos = useMemo(() => new Set(baseCards.filter((c) => c.location.mode === "remote").map((c) => c.location.remoteGeo)), [baseCards]);
+  const present = useMemo(
+    () => ({
+      unworkable: baseCards.some((c) => c.workable === false),
+      usOnly: baseCards.some((c) => c.location.remoteGeo === "us_only"),
+      agency: baseCards.some((c) => c.agency),
+      services: baseCards.some((c) => c.services),
+    }),
+    [baseCards],
+  );
   const feedPresets = useMemo(() => [...new Set(baseCards.flatMap((c) => c.presets ?? []))].sort(), [baseCards]);
 
   // ── sync: start in the background, poll progress, swap the jobs in when done ──
@@ -317,7 +333,7 @@ export function FeedView({
   // how many filters are narrowing the list — shown on the mobile "Filters" button
   const activeFilters =
     filters.presets.size + filters.roles.size + filters.modes.size + filters.geos.size + (filters.minScore > 0 ? 1 : 0) + (filters.maxYears > 0 ? 1 : 0) +
-    (filters.hideUsOnly ? 1 : 0) + (filters.hideServices ? 1 : 0) + (filters.minTrust > 0 ? 1 : 0);
+    (filters.hideUsOnly ? 1 : 0) + (filters.hideServices ? 1 : 0) + (filters.hideAgency ? 1 : 0) + (filters.hideUnworkable ? 1 : 0) + (filters.minTrust > 0 ? 1 : 0);
   const tabOptions = tabs.map((t) => ({ id: tabKey(t.tab), label: t.label }));
   const pickTab = (key: string) => {
     const t = tabs.find((x) => tabKey(x.tab) === key);
@@ -406,28 +422,46 @@ export function FeedView({
           </div>
         </fieldset>
 
+        {GEOS.some((g) => presentGeos.has(g.id) || filters.geos.has(g.id)) ? (
         <fieldset className="rail-group">
           <legend>remote from</legend>
           <div className="chip-row">
-            {GEOS.map((g) => (
+            {GEOS.filter((g) => presentGeos.has(g.id) || filters.geos.has(g.id)).map((g) => (
               <Chip key={g.id} on={filters.geos.has(g.id)} onClick={() => toggleSet("geos", g.id)}>
                 {g.label}
               </Chip>
             ))}
           </div>
         </fieldset>
+        ) : null}
 
+        {present.unworkable || present.usOnly || present.agency || present.services || filters.hideUnworkable || filters.hideUsOnly || filters.hideAgency || filters.hideServices ? (
         <fieldset className="rail-group">
           <legend>hide</legend>
           <div className="chip-row">
-            <Chip on={filters.hideUsOnly} onClick={() => setFilters((f) => ({ ...f, hideUsOnly: !f.hideUsOnly }))} title="“Remote” roles that are really US-only">
-              US-only “remote”
-            </Chip>
-            <Chip on={filters.hideServices} onClick={() => setFilters((f) => ({ ...f, hideServices: !f.hideServices }))} title="IT-services / outsourcing employers">
-              IT services firms
-            </Chip>
+            {present.unworkable || filters.hideUnworkable ? (
+              <Chip on={filters.hideUnworkable} onClick={() => setFilters((f) => ({ ...f, hideUnworkable: !f.hideUnworkable }))} title="Roles outside your home country and markets, or remote only from regions you didn't choose">
+                not workable for me
+              </Chip>
+            ) : null}
+            {present.usOnly || filters.hideUsOnly ? (
+              <Chip on={filters.hideUsOnly} onClick={() => setFilters((f) => ({ ...f, hideUsOnly: !f.hideUsOnly }))} title="“Remote” roles that are really US-only">
+                US-only “remote”
+              </Chip>
+            ) : null}
+            {present.agency || filters.hideAgency ? (
+              <Chip on={filters.hideAgency} onClick={() => setFilters((f) => ({ ...f, hideAgency: !f.hideAgency }))} title="Posted by a staffing agency or third-party recruiter, not the employer">
+                staffing agencies
+              </Chip>
+            ) : null}
+            {present.services || filters.hideServices ? (
+              <Chip on={filters.hideServices} onClick={() => setFilters((f) => ({ ...f, hideServices: !f.hideServices }))} title="IT-services / outsourcing employers">
+                IT services firms
+              </Chip>
+            ) : null}
           </div>
         </fieldset>
+        ) : null}
 
         <div className="rail-group">
           <label className="rail-group__label" htmlFor="f-min-trust">
@@ -465,7 +499,9 @@ export function FeedView({
       <div className="feed-main">
         <div className="feed-toolbar">
           <div className="feed-toolbar__start">
+            <Dateline />
             <h1 className="page-title">Jobs</h1>
+            <TodayLede cards={data.cards} scored={scored} />
             <div className="stats" aria-label="Your jobs">
               <Stat value={cards.length} label="shown" tone="good" />
               <Stat value={data.stats.postings} label="jobs in your list" />
@@ -596,6 +632,53 @@ export function FeedView({
         )}
       </div>
     </div>
+  );
+}
+
+/** Today's date over the masthead. Client-only (after mount) so it's the reader's own day. */
+function Dateline() {
+  const [today, setToday] = useState("");
+  useEffect(() => setToday(new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })), []);
+  return (
+    <p className="feed-dateline" aria-hidden={!today || undefined}>
+      {today || " "}
+    </p>
+  );
+}
+
+/**
+ * The masthead's one-sentence lede: what's new since yesterday (posted in the last day, by the
+ * source's own date) and the strongest match. Plain counts only — unscored lists never claim a
+ * "best match".
+ */
+function TodayLede({ cards, scored }: { cards: FeedCard[]; scored: boolean }) {
+  const live = cards.filter((c) => !c.archived && !c.invalidated);
+  if (live.length === 0) return null;
+  const fresh = live.filter((c) => c.ageDays <= 1).length;
+  const noun = scored ? (fresh === 1 ? "match" : "matches") : fresh === 1 ? "job" : "jobs";
+  const top = scored ? live.reduce((a, b) => (b.score > a.score ? b : a)) : null;
+  return (
+    <p className="feed-lede">
+      {fresh > 0 ? (
+        <>
+          <b>
+            {fresh} new {noun}
+          </b>{" "}
+          since yesterday.
+        </>
+      ) : (
+        <>Nothing new since yesterday.</>
+      )}{" "}
+      {top && (
+        <>
+          The strongest of {live.length}:{" "}
+          <a href={`/jobs/${top.id}`}>
+            {top.title}
+          </a>{" "}
+          at {top.company}, <span className="feed-lede__score">{top.score}</span>.
+        </>
+      )}
+    </p>
   );
 }
 
