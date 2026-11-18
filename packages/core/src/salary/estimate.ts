@@ -109,7 +109,7 @@ export function compSampleOf(p: Posting): CompSample | null {
   if (s.source === "none" || s.min == null || s.max == null) return null;
   if (s.confidence !== "high" && s.confidence !== "medium_high") return null;
   if (s.min <= 0 || s.max < s.min || s.max / s.min > 3) return null; // too wide to inform
-  const market = salaryMarketOf(p.location);
+  const market = salaryMarketOf(p.location, s.currency);
   // a market's comps must be priced in its currency (a USD role "in India" is a different regime)
   if (!market || MARKET_CURRENCY[market] !== s.currency) return null;
   const lvl = salaryLevelOf(p.levelBand, p.experience);
@@ -128,7 +128,7 @@ export function compSampleOf(p: Posting): CompSample | null {
 }
 
 export function estimateTargetOf(p: Posting): EstimateTarget | null {
-  const market = salaryMarketOf(p.location);
+  const market = salaryMarketOf(p.location, hasStatedSalary(p) ? p.salary.currency : null);
   if (!market) return null;
   const lvl = salaryLevelOf(p.levelBand, p.experience);
   return {

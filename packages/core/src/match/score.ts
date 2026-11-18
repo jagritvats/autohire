@@ -5,7 +5,7 @@ import { convertCurrency, formatSalary } from "../salary/fx.js";
 import { comparablePay, statedCeilingBelow } from "../salary/compare.js";
 import { PERIOD_WORD } from "../salary/period.js";
 import { stackAdjacency, type StackAdjacencyResult } from "./stack.js";
-import { countryDisplayName, locationInCountry, primaryRemoteGeo, remoteGeosForCountry } from "../normalize/location.js";
+import { countryDisplayName, inEurope, locationInCountry, primaryRemoteGeo, remoteGeosForCountry } from "../normalize/location.js";
 import { effectiveHomeCountry, effectiveMarkets, effectiveRemoteGeos } from "./region.js";
 import { EVERGREEN_TITLE_RE, REDATED_SOURCES, TALENT_POOL_JD_RE, scoreSourceTrust } from "./trust.js";
 
@@ -406,7 +406,8 @@ function matchLocationLabel(
 ): number {
   if (weights.length === 0) return 0.7;
   const max = Math.max(...weights.map((w) => w.weight), 1);
-  const hay = `${loc.mode} ${loc.city ?? ""} ${loc.country ?? ""} ${loc.remoteGeo}`.toLowerCase();
+  // the region word too: an onsite Berlin role now names "Germany", and a "europe" preference must still match it
+  const hay = `${loc.mode} ${loc.city ?? ""} ${loc.country ?? ""}${inEurope(loc) ? " europe" : ""} ${loc.remoteGeo}`.toLowerCase();
   let best = 0.3; // default for "anywhere else"
   for (const w of weights) {
     const frag = w.label.toLowerCase();

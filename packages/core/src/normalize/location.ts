@@ -12,9 +12,23 @@ import type { LocationMode, RemoteGeo } from "../schema/enums.js";
  * which must not flip an onsite Bengaluru role to remote or a remote role to US-only.
  */
 
-const INDIA_CITIES = /\b(bengaluru|bangalore|mumbai|navi mumbai|thane|pune|hyderabad|secunderabad|delhi|new delhi|ncr|gurgaon|gurugram|noida|chennai|kolkata|ahmedabad|gandhinagar|gift city|vadodara|jaipur|indore|kochi|cochin|trivandrum|thiruvananthapuram|coimbatore|mysore|mysuru|mangalore|mangaluru|chandigarh|mohali|bhubaneswar|visakhapatnam|vizag|nagpur|lucknow|india)\b/i;
+const INDIA_CITIES = /\b(bengaluru|bangalore|mumbai|navi mumbai|thane|pune|hyderabad|secunderabad|delhi|new delhi|ncr|gurgaon|gurugram|noida|chennai|kolkata|ahmedabad|gandhinagar|gift city|vadodara|jaipur|indore|kochi|cochin|trivandrum|thiruvananthapuram|coimbatore|mysore|mysuru|mangalore|mangaluru|chandigarh|mohali|bhubaneswar|visakhapatnam|vizag|nagpur|lucknow|hubli|hubballi|surat|sonipat|madurai|nashik|bhopal|patna|ranchi|raipur|guwahati|dehradun|vijayawada|kanpur|ludhiana|rajkot|tiruchirappalli|trichy|belgaum|belagavi|manipal|udaipur|jodhpur|goa|panaji|india)\b/i;
+/** an Indian city — the city slot never takes the country word ("Remote - India" has no city). */
+const INDIA_CITY_ONLY = new RegExp(INDIA_CITIES.source.replace("|india)", ")"), "i");
 /** US signal in a LOCATION string (short, structured) — case-insensitive is safe here. */
-const US_HINT = /\b(united states|usa|u\.s\.a?\.?|us|new york|nyc|san francisco|sf|bay area|seattle|austin|boston|chicago|los angeles|denver|atlanta|miami|palo alto|mountain view|menlo park|sunnyvale|san jose|san mateo|redwood city|oakland|portland|dallas|houston|philadelphia|pittsburgh|washington,? d\.?c\.?|remote[ -]?us|us[ -]?based|bellevue|redmond|kirkland|santa clara|cupertino|san diego|irvine|nashville|raleigh|durham|charlotte|phoenix|tempe|salt lake city|minneapolis|detroit|columbus|st\.? louis|kansas city|baltimore|arlington|reston|herndon|mclean|plano|irving|jersey city|hoboken|honolulu|pleasanton|schenectady|alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming)\b|,\s*(CA|NY|WA|TX|MA|IL|CO|GA|FL|OR|UT|NC|VA|NJ|PA|AZ|MN|MI|OH|DC)\b|\bUS-[A-Z]{2}\b/i;
+const US_HINT_RE = /\b(united states|usa|u\.s\.a?\.?|us|new york|nyc|san francisco|sf|bay area|seattle|austin|boston|chicago|los angeles|denver|atlanta|miami|palo alto|mountain view|menlo park|sunnyvale|san jose|san mateo|redwood city|oakland|portland|dallas|houston|philadelphia|pittsburgh|washington,? d\.?c\.?|remote[ -]?us|us[ -]?based|bellevue|redmond|kirkland|santa clara|cupertino|san diego|irvine|nashville|raleigh|durham|charlotte|phoenix|tempe|salt lake city|minneapolis|detroit|columbus|st\.? louis|kansas city|baltimore|arlington|reston|herndon|mclean|plano|irving|jersey city|hoboken|honolulu|pleasanton|schenectady|alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming)\b|,\s*(CA|NY|WA|TX|MA|IL|CO|GA|FL|OR|UT|NC|VA|NJ|PA|AZ|MN|MI|OH|DC)\b|\bUS-[A-Z]{2}\b|\bu\.s\.(?:a\.)?(?![a-z])/i;
+/**
+ * US state codes read after a comma ("Birmingham, AL"), case-sensitive. Left out: codes that
+ * are also ISO codes of countries this parser names (AR Argentina, DE Germany, ID Indonesia,
+ * IN India, MT Malta) — "Walldorf, DE" is Germany.
+ */
+const US_STATE_CODES =
+  "CA|NY|WA|TX|MA|IL|CO|GA|FL|OR|UT|NC|VA|NJ|PA|AZ|MN|MI|OH|DC|AL|AK|CT|HI|IA|KS|KY|LA|ME|MD|MS|MO|NE|NV|NH|NM|ND|OK|RI|SC|SD|TN|VT|WV|WI|WY";
+const US_HINT = {
+  test(s: string): boolean {
+    return US_HINT_RE.test(s) || US_STATE_SUFFIX.test(s);
+  },
+};
 const CANADA_HINT = /\b(canada|toronto|vancouver|montreal|ottawa|calgary|waterloo|edmonton|ontario|quebec|british columbia|alberta|manitoba|nova scotia)\b/i;
 /** Region-level restrictions that are NOT open to someone in India (Americas-only). */
 const AMERICAS_HINT = /\b(north america|americas|latam|latin america|canada)\b/i;
@@ -49,15 +63,15 @@ export function foldPlace(s: string): string {
  * Birmingham, Hanover, Florence, Bergen, York) and plain words (Nice, Split, Reading, Bath).
  */
 const EUROPE_PLACES: ReadonlyArray<readonly [code: string, names: RegExp, cities: RegExp | null]> = [
-  ["GB", /\b(united kingdom|uk|great britain|britain|england|scotland|wales|northern ireland)\b/i, /\b(london|manchester|edinburgh|glasgow|bristol|oxford|leeds|liverpool|newcastle upon tyne|belfast|cardiff|sheffield|nottingham|brighton|milton keynes|guildford|aberdeen|southampton|leicester|coventry)\b/i],
+  ["GB", /\b(united kingdom|uk|great britain|britain|england|scotland|(?<!south )wales|northern ireland)\b/i, /\b(london|manchester|edinburgh|glasgow|bristol|oxford|leeds|liverpool|newcastle upon tyne|belfast|cardiff|sheffield|nottingham|brighton|milton keynes|guildford|aberdeen|southampton|leicester|coventry|exeter|plymouth|wolverhampton|watford|swansea|dundee|swindon|slough|basingstoke|cheltenham|bournemouth|crawley|stoke-on-trent|henley-on-thames)\b/i],
   ["IE", /\b((?<!northern )ireland|eire)\b/i, /\b(dublin|cork|galway|limerick|waterford)\b/i],
-  ["DE", /\b(germany|deutschland)\b/i, /\b(berlin|munich|munchen|muenchen|hamburg|frankfurt|cologne|koln|koeln|stuttgart|dusseldorf|duesseldorf|leipzig|dresden|nuremberg|nurnberg|nuernberg|hannover|bonn|karlsruhe|mannheim|heidelberg|dortmund|bremen|potsdam|freiburg|aachen|darmstadt|wiesbaden|mainz|walldorf|ingolstadt|wolfsburg|erlangen)\b/i],
-  ["NL", /\b(netherlands|nederland|holland)\b/i, /\b(amsterdam|rotterdam|utrecht|eindhoven|the hague|den haag|delft|leiden|groningen|haarlem|amstelveen|hilversum|nijmegen|arnhem|breda|tilburg|enschede)\b/i],
-  ["FR", /\b(france)\b/i, /\b(paris|lyon|marseille|toulouse|nantes|bordeaux|lille|grenoble|montpellier|rennes|strasbourg|sophia antipolis)\b/i],
-  ["ES", /\b(spain|espana)\b/i, /\b(madrid|barcelona|valencia|seville|sevilla|malaga|bilbao|zaragoza)\b/i],
+  ["DE", /\b(germany|deutschland)\b/i, /\b(berlin|munich|munchen|muenchen|hamburg|frankfurt|cologne|koln|koeln|stuttgart|dusseldorf|duesseldorf|leipzig|dresden|nuremberg|nurnberg|nuernberg|hannover|bonn|karlsruhe|mannheim|heidelberg|dortmund|bremen|potsdam|freiburg|aachen|darmstadt|wiesbaden|mainz|walldorf|ingolstadt|wolfsburg|erlangen|augsburg|braunschweig|chemnitz|zwickau|osnabruck|osnabrueck|wurzburg|wuerzburg|bielefeld|essen|gottingen|goettingen|rosenheim|landshut|erfurt|wuppertal|kiel|lubeck|luebeck|rostock|magdeburg|kassel|regensburg|ulm|bochum|duisburg|saarbrucken|saarbruecken|paderborn|jena|heilbronn|bremerhaven|luneburg|lueneburg|deggendorf|ansbach|neumunster|unterschleissheim)\b/i],
+  ["NL", /\b(netherlands|nederland|holland)\b/i, /\b(amsterdam|rotterdam|utrecht|eindhoven|the hague|den haag|delft|leiden|groningen|haarlem|amstelveen|hilversum|nijmegen|arnhem|breda|tilburg|enschede|vlissingen|boxmeer|zwolle|maastricht|leeuwarden|almere|hoofddorp)\b/i],
+  ["FR", /\b(france)\b/i, /\b(paris|lyon|marseille|toulouse|nantes|bordeaux|lille|grenoble|montpellier|rennes|strasbourg|sophia antipolis|villeurbanne|massy|neuilly-sur-seine|issy[- ]les[- ]moulineaux|boulogne-billancourt|courbevoie|nanterre|puteaux|levallois-perret|la defense|caen|rouen|annecy|aix-en-provence|brest|saint-etienne|avignon|reims|dijon|angers|clermont-ferrand|metz|toulon|amiens|limoges|mulhouse|besancon|poitiers)\b/i],
+  ["ES", /\b(spain|espana)\b/i, /\b(madrid|barcelona|valencia|seville|sevilla|malaga|bilbao|zaragoza|zamudio|alicante|murcia|palma de mallorca|san sebastian|donostia|vigo|a coruna|valladolid|granada)\b/i],
   ["PT", /\b(portugal)\b/i, /\b(lisbon|lisboa|porto(?! alegre)|braga|coimbra|aveiro)\b/i],
-  ["PL", /\b(poland|polska)\b/i, /\b(warsaw|warszawa|krakow|cracow|wroclaw|gdansk|poznan|lodz|katowice|gdynia|szczecin|lublin)\b/i],
-  ["IT", /\b(italy|italia)\b/i, /\b(milan|milano|rome|roma|turin|torino|naples|napoli|firenze|bologna|genoa|genova|venezia|padova|trieste)\b/i],
+  ["PL", /\b(poland|polska)\b/i, /\b(warsaw|warszawa|krakow|cracow|wroclaw|gdansk|poznan|lodz|katowice|gdynia|szczecin|lublin|elblag|bydgoszcz|rzeszow|bialystok|torun)\b/i],
+  ["IT", /\b(italy|italia)\b/i, /\b(milan|milano|rome|roma|turin|torino|naples|napoli|firenze|bologna|genoa|genova|venezia|padova|padua|trieste|treviso|verona|palermo|pescara|campobasso|catania|bari|brescia|bergamo|modena|parma|perugia|cagliari|ancona)\b/i],
   ["SE", /\b(sweden|sverige)\b/i, /\b(stockholm|gothenburg|goteborg|malmo|uppsala|linkoping)\b/i],
   ["DK", /\b(denmark|danmark)\b/i, /\b(copenhagen|kobenhavn|aarhus|odense|aalborg)\b/i],
   ["FI", /\b(finland|suomi)\b/i, /\b(helsinki|espoo|tampere|oulu|turku|vantaa)\b/i],
@@ -68,7 +82,7 @@ const EUROPE_PLACES: ReadonlyArray<readonly [code: string, names: RegExp, cities
   ["CZ", /\b(czechia|czech republic|cesko|ceska republika)\b/i, /\b(prague|praha|brno|ostrava)\b/i],
   ["RO", /\b(romania)\b/i, /\b(bucharest|bucuresti|cluj|iasi|timisoara|brasov)\b/i],
   ["GR", /\b(greece)\b/i, /\b(athens|thessaloniki)\b/i],
-  ["HU", /\b(hungary|magyarorszag)\b/i, /\b(budapest|debrecen)\b/i],
+  ["HU", /\b(hungary|magyarorszag)\b/i, /\b(budapest|debrecen|szeged|gyor|veresegyhaz)\b/i],
   ["LU", /\b(luxembourg)\b/i, null],
   ["EE", /\b(estonia|eesti)\b/i, /\b(tallinn|tartu)\b/i],
   ["LV", /\b(latvia)\b/i, /\b(riga)\b/i],
@@ -82,7 +96,18 @@ const EUROPE_PLACES: ReadonlyArray<readonly [code: string, names: RegExp, cities
   ["RS", /\b(serbia)\b/i, /\b(belgrade|beograd|novi sad)\b/i],
   ["CY", /\b(cyprus)\b/i, /\b(limassol|nicosia|larnaca)\b/i],
   ["MT", /\b(malta)\b/i, /\b(valletta|sliema)\b/i],
+  ["AL", /\b(albania)\b/i, /\b(tirana)\b/i],
+  ["MK", /\b(north macedonia|macedonia)\b/i, /\b(skopje)\b/i],
 ];
+/** the display name `parseLocation` reports as the primary country for a European place. */
+const EUROPE_COUNTRY_NAME: Readonly<Record<string, string>> = {
+  GB: "United Kingdom", IE: "Ireland", DE: "Germany", NL: "Netherlands", FR: "France", ES: "Spain",
+  PT: "Portugal", PL: "Poland", IT: "Italy", SE: "Sweden", DK: "Denmark", FI: "Finland", NO: "Norway",
+  AT: "Austria", BE: "Belgium", CH: "Switzerland", CZ: "Czechia", RO: "Romania", GR: "Greece",
+  HU: "Hungary", LU: "Luxembourg", EE: "Estonia", LV: "Latvia", LT: "Lithuania", SK: "Slovakia",
+  SI: "Slovenia", HR: "Croatia", BG: "Bulgaria", IS: "Iceland", UA: "Ukraine", RS: "Serbia",
+  CY: "Cyprus", MT: "Malta", AL: "Albania", MK: "North Macedonia",
+};
 /** a pan-European region word (no single country). */
 const EU_REGION = /\b(europe|european union|eu|emea)\b/i;
 /** any European place or region word in a location string (diacritic-insensitive). */
@@ -103,12 +128,12 @@ const APAC_HINT = /\b(apac|asia[- ]pacific|asia)\b/i;
 const OTHER_COUNTRIES: ReadonlyArray<readonly [string, string, RegExp]> = [
   ["SG", "Singapore", /\bsingapore\b/i],
   ["JP", "Japan", /\b(japan|tokyo|osaka|yokohama|kyoto|fukuoka)\b/i],
-  ["KR", "South Korea", /\b(south korea|korea|seoul|busan|pangyo)\b/i],
+  ["KR", "South Korea", /\b(south korea|korea|seoul|busan|pangyo|changwon|incheon|daejeon|suwon)\b/i],
   ["AU", "Australia", /\b(australia|sydney|melbourne|brisbane|perth|canberra|adelaide)\b/i],
   ["NZ", "New Zealand", /\b(new zealand|auckland|wellington)\b/i],
   ["CN", "China", /\b(china|beijing|shanghai|shenzhen|guangzhou|hangzhou|chengdu)\b/i],
   ["HK", "Hong Kong", /\bhong kong\b/i],
-  ["TW", "Taiwan", /\b(taiwan|taipei|hsinchu)\b/i],
+  ["TW", "Taiwan", /\b(taiwan|taipei|hsinchu|tainan|taichung|kaohsiung)\b/i],
   ["PH", "Philippines", /\b(philippines|manila|makati|taguig|cebu)\b/i],
   ["MY", "Malaysia", /\b(malaysia|kuala lumpur|penang)\b/i],
   ["TH", "Thailand", /\b(thailand|bangkok)\b/i],
@@ -124,8 +149,8 @@ const OTHER_COUNTRIES: ReadonlyArray<readonly [string, string, RegExp]> = [
   ["ZA", "South Africa", /\b(south africa|johannesburg|cape town)\b/i],
   ["NG", "Nigeria", /\b(nigeria|lagos)\b/i],
   ["KE", "Kenya", /\b(kenya|nairobi)\b/i],
-  ["MX", "Mexico", /\b((?<!new )mexico|guadalajara|monterrey)\b/i],
-  ["BR", "Brazil", /\b(brazil|brasil|s[aã]o paulo|rio de janeiro|curitiba|florian[oó]polis|belo horizonte)\b/i],
+  ["MX", "Mexico", /\b((?<!new )mexico|guadalajara|monterrey|cienega de flores|queretaro|tijuana)\b/i],
+  ["BR", "Brazil", /\b(brazil|brasil|s[aã]o paulo|rio de janeiro|curitiba|florian[oó]polis|belo horizonte|campinas|porto alegre|recife|s[aã]o jos[eé] dos campos)\b/i],
   ["AR", "Argentina", /\b(argentina|buenos aires)\b/i],
   ["CO", "Colombia", /\b(colombia|bogot[aá]|medell[ií]n)\b/i],
   ["CL", "Chile", /\bchile\b/i],
@@ -136,6 +161,25 @@ const OTHER_COUNTRIES: ReadonlyArray<readonly [string, string, RegExp]> = [
   ["PK", "Pakistan", /\b(pakistan|karachi|lahore|islamabad)\b/i],
   ["BD", "Bangladesh", /\b(bangladesh|dhaka)\b/i],
   ["LK", "Sri Lanka", /\b(sri lanka|colombo)\b/i],
+  ["TN", "Tunisia", /\b(tunisia|tunis)\b/i],
+  ["MA", "Morocco", /\b(morocco|casablanca|rabat)\b/i],
+  ["MU", "Mauritius", /\b(mauritius|ebene|port louis)\b/i],
+  ["KZ", "Kazakhstan", /\b(kazakhstan|almaty|astana)\b/i],
+  ["EC", "Ecuador", /\b(ecuador|quito|guayaquil)\b/i],
+  ["GH", "Ghana", /\b(ghana|accra)\b/i],
+  ["UG", "Uganda", /\b(uganda|kampala)\b/i],
+  ["RW", "Rwanda", /\b(rwanda|kigali)\b/i],
+  ["ET", "Ethiopia", /\b(ethiopia|addis ababa)\b/i],
+  ["NP", "Nepal", /\b(nepal|kathmandu)\b/i],
+  ["AM", "Armenia", /\b(armenia|yerevan)\b/i],
+  ["UZ", "Uzbekistan", /\b(uzbekistan|tashkent)\b/i],
+  ["JO", "Jordan", /\b(jordan|amman)\b/i],
+  ["LB", "Lebanon", /\b(lebanon|beirut)\b/i],
+  ["BH", "Bahrain", /\b(bahrain|manama)\b/i],
+  ["OM", "Oman", /\b(oman|muscat)\b/i],
+  ["BM", "Bermuda", /\bbermuda\b/i],
+  ["PA", "Panama", /\bpanama\b(?! city)/i],
+  ["GT", "Guatemala", /\bguatemala\b/i],
 ];
 
 function otherCountry(loc: string): (typeof OTHER_COUNTRIES)[number] | null {
@@ -157,7 +201,161 @@ const PLACE_SEPARATOR = /\s*(?:[;|\n•]|\s\/\s|\s·\s|\s+(?:or|and|&)\s+)\s*/;
 const US_NAME = /\b(united states|usa|us)\b|\bu\.s\.(?:a\.)?/i;
 const CANADA_NAME = /\bcanada\b/i;
 /** "Dublin, OH", "Paris, TX", "US-CA": a US state code beats a same-named European city. */
-const US_STATE_SUFFIX = /,\s*(CA|NY|WA|TX|MA|IL|CO|GA|FL|OR|UT|NC|VA|NJ|PA|AZ|MN|MI|OH|DC)\b|\bUS-[A-Z]{2}\b/;
+const US_STATE_SUFFIX = new RegExp(`,\\s*(${US_STATE_CODES})\\b|\\bUS-[A-Z]{2}\\b`);
+
+// ── comma-separated place lists in ONE segment ("London, Berlin") ──
+
+/** US state names (lower-case, folded). New York / Washington are cities first: not here. */
+const US_STATE_NAMES = new Set([
+  "alabama", "alaska", "arizona", "arkansas", "california", "colorado", "connecticut", "delaware", "florida",
+  "georgia", "hawaii", "idaho", "illinois", "indiana", "iowa", "kansas", "kentucky", "louisiana", "maine",
+  "maryland", "massachusetts", "michigan", "minnesota", "mississippi", "missouri", "montana", "nebraska", "nevada",
+  "new hampshire", "new jersey", "new mexico", "north carolina", "north dakota", "ohio", "oklahoma", "oregon",
+  "pennsylvania", "rhode island", "south carolina", "south dakota", "tennessee", "texas", "utah", "vermont",
+  "virginia", "west virginia", "wisconsin", "wyoming", "district of columbia",
+]);
+/** every US state code, collisions included: as a QUALIFIER the place before it disambiguates. */
+const US_STATE_CODE_SET = new Set([...US_STATE_CODES.split("|"), "AR", "DE", "ID", "IN", "MT"]);
+/** Indian state codes HR systems write after a city ("Pune, MH, India"). */
+const IN_STATE_CODES = new Set(["KA", "MH", "HR", "TN", "TS", "TG", "AP", "UP", "DL", "WB", "GJ", "RJ", "KL", "MP", "OD", "PB", "CH"]);
+const CA_PROVINCE_CODES = new Set(["ON", "BC", "QC", "AB", "MB", "NS", "NB", "NL", "PE", "SK", "YT", "NT", "NU"]);
+const CA_PROVINCE_NAMES = new Set([
+  "ontario", "quebec", "british columbia", "alberta", "manitoba", "nova scotia", "new brunswick",
+  "newfoundland and labrador", "newfoundland", "prince edward island", "saskatchewan", "yukon",
+]);
+/** first-level regions elsewhere that follow a city ("Hyderabad, Telangana", "Sydney, NSW"). */
+const OTHER_REGIONS: Readonly<Record<string, string>> = {
+  karnataka: "IN", maharashtra: "IN", telangana: "IN", "tamil nadu": "IN", haryana: "IN", "uttar pradesh": "IN",
+  kerala: "IN", gujarat: "IN", "west bengal": "IN", "andhra pradesh": "IN", rajasthan: "IN", odisha: "IN", punjab: "IN",
+  "new south wales": "AU", nsw: "AU", victoria: "AU", vic: "AU", queensland: "AU", qld: "AU", "western australia": "AU",
+  bavaria: "DE", bayern: "DE", hesse: "DE", hessen: "DE", "baden-wurttemberg": "DE", "baden wurttemberg": "DE",
+  "north rhine-westphalia": "DE", "nordrhein-westfalen": "DE",
+  "ile-de-france": "FR", "ile de france": "FR", catalonia: "ES", catalunya: "ES", "community of madrid": "ES",
+  "north holland": "NL", "noord-holland": "NL", "south holland": "NL", "zuid-holland": "NL",
+  "greater london": "GB", "county dublin": "IE", "co. dublin": "IE",
+};
+/** country names (folded, lower-case) beyond the European `names` patterns. */
+const COUNTRY_NAME_ALIASES: Readonly<Record<string, string>> = {
+  "united states": "US", "united states of america": "US", usa: "US", us: "US", "u.s.": "US", "u.s": "US", "u.s.a.": "US", "u.s.a": "US",
+  canada: "CA", india: "IN", uae: "AE", ksa: "SA", brasil: "BR", turkiye: "TR", "viet nam": "VN", korea: "KR",
+  "republic of korea": "KR", "the netherlands": "NL",
+};
+
+/** the bare place words of one comma part: folded, lower-case, mode words and brackets dropped. */
+function partText(part: string): string {
+  return foldPlace(part)
+    .toLowerCase()
+    .replace(/\((?:[^)]*)\)/g, " ")
+    .replace(/\b(remote|hybrid|on[ -]?site|in[ -]?office|office|hq|headquarters)\b/g, " ")
+    .replace(/[^a-z.\s'-]/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^[\s.'-]+|[\s'-]+$/g, "")
+    .trim();
+}
+
+/** ISO-2 when the whole part is a country NAME ("Germany", "United Kingdom", "Japan"). */
+function countryNameCode(part: string): string | null {
+  const t = partText(part);
+  if (!t) return null;
+  const alias = COUNTRY_NAME_ALIASES[t];
+  if (alias) return alias;
+  for (const [code, names] of EUROPE_PLACES) {
+    const m = t.match(names);
+    if (m && m[0].length === t.length) return code;
+  }
+  for (const [code, name] of OTHER_COUNTRIES) if (name.toLowerCase() === t) return code;
+  return null;
+}
+
+type CommaPart =
+  | { kind: "country"; code: string }
+  | { kind: "region"; codes: readonly string[]; code2?: boolean }
+  | { kind: "city"; code: string }
+  | { kind: "unknown" };
+
+function classifyPart(part: string): CommaPart {
+  const raw = part.trim();
+  const named = countryNameCode(raw);
+  if (named) return { kind: "country", code: named };
+  // a bare two-letter code is a qualifier: a US state, a Canadian province, or a country code
+  if (/^[A-Z]{2}$/.test(raw)) {
+    const codes: string[] = [];
+    if (US_STATE_CODE_SET.has(raw)) codes.push("US");
+    if (CA_PROVINCE_CODES.has(raw)) codes.push("CA");
+    if (IN_STATE_CODES.has(raw)) codes.push("IN"); // "Bengaluru, KA", "Chennai, TN" (not Tennessee)
+    if (PARSED_COUNTRY_NAME[raw]) codes.push(raw); // "Berlin, DE"
+    return { kind: "region", codes, code2: true };
+  }
+  const t = partText(raw);
+  if (!t) return { kind: "unknown" };
+  if (US_STATE_NAMES.has(t)) return { kind: "region", codes: ["US"] };
+  if (CA_PROVINCE_NAMES.has(t)) return { kind: "region", codes: ["CA"] };
+  const other = OTHER_REGIONS[t];
+  if (other) return { kind: "region", codes: [other] };
+  // a part that NAMES a country inside other words ("Anywhere in France") is that country,
+  // so the next country name starts a new place instead of re-qualifying this one
+  const f = foldPlace(raw);
+  const inName = US_NAME.test(f) ? "US" : CANADA_NAME.test(f) ? "CA" : EUROPE_PLACES.find(([, names]) => names.test(f))?.[0];
+  if (inName) return { kind: "country", code: inName };
+  const code = placeCodes(raw)[0];
+  return code ? { kind: "city", code } : { kind: "unknown" };
+}
+
+/**
+ * A comma-only list of places in one segment: "London, Berlin", "Toronto, ON, Canada, New
+ * York, NY", "Bangalore, Hyderabad, Pune". Commas there do two jobs — qualifying a place
+ * ("Dublin, OH", "Albuquerque, New Mexico", "Austin, TX, United States") and listing places —
+ * so each part is classified: a known city or an unknown word starts a place; a state /
+ * province / region code or a country name that follows qualifies the place before it (and
+ * overrules the city's own country: "Dublin, OH" is Ohio, "London, Ontario" is Canada).
+ * Returns the places' countries only when they name 2+ DISTINCT countries — otherwise null,
+ * and the segment resolves as one place, as before (conservative: a qualifier pair never
+ * splits).
+ */
+function commaListCodes(segment: string): string[] | null {
+  const parts = segment.split(",").map((p) => p.trim()).filter(Boolean);
+  if (parts.length < 2) return null;
+  const codes = commaPlaces(parts);
+  if (codes.length >= 2) return codes;
+  // ONE place, qualified: "Perth, Scotland", "Sydney, Nova Scotia, Canada" — the qualifier
+  // decides, where the whole-segment reading would also add the city's namesake country
+  const whole = placeCodes(segment);
+  const only = codes[0];
+  if (only && (whole.includes(only) || !whole.length)) return [only];
+  return null;
+}
+
+function commaPlaces(parts: readonly string[]): string[] {
+  const places: Array<{ code: string | null; qualified: boolean; named: boolean }> = [];
+  for (const part of parts) {
+    const c = classifyPart(part);
+    const cur = places[places.length - 1];
+    if (c.kind === "region") {
+      if (cur && !cur.qualified && !cur.named) {
+        // a two-letter code that is the city's own country ("Berlin, DE") keeps it; else the
+        // first reading (a US state before a Canadian province before an ISO code) wins
+        cur.code = cur.code && c.codes.includes(cur.code) ? cur.code : (c.codes[0] ?? null);
+        cur.qualified = true;
+      } else {
+        // a region on its own ("…, Texas") names its country; a lone two-letter code is
+        // ambiguous ("CA": California or Canada) and names nothing
+        places.push({ code: c.code2 ? null : (c.codes[0] ?? null), qualified: true, named: false });
+      }
+    } else if (c.kind === "country") {
+      if (cur && !cur.named && (!cur.qualified || cur.code === c.code)) {
+        cur.code = c.code;
+        cur.named = true;
+      } else {
+        places.push({ code: c.code, qualified: true, named: true });
+      }
+    } else {
+      places.push({ code: c.kind === "city" ? c.code : null, qualified: false, named: false });
+    }
+  }
+  const codes: string[] = [];
+  for (const p of places) if (p.code && !codes.includes(p.code)) codes.push(p.code);
+  return codes;
+}
 
 /**
  * ISO-2 codes for ONE place ("Austin, TX", "London, United Kingdom", "München"). A segment
@@ -199,12 +397,49 @@ function codeForParsedCountry(name: string | null | undefined): string | null {
  * multi-office posting ("Hybrid - Austin, TX; London, United Kingdom") is workable in each.
  */
 export function locationCountries(locationRaw: string | null | undefined, primary?: string | null): string[] {
-  const loc = (locationRaw ?? "").replace(/\bUS-[A-Z]{2}-[^;,|]*/g, "US");
+  const loc = expandPlaceCodes(locationRaw ?? "").replace(/\bUS-[A-Z]{2}-[^;,|]*/g, "US");
   const out: string[] = [];
   const first = codeForParsedCountry(primary);
   if (first) out.push(first);
-  for (const seg of loc.split(PLACE_SEPARATOR)) for (const c of placeCodes(seg)) if (!out.includes(c)) out.push(c);
+  for (const seg of loc.split(PLACE_SEPARATOR)) {
+    for (const c of commaListCodes(seg) ?? placeCodes(seg)) if (!out.includes(c)) out.push(c);
+  }
   return out;
+}
+
+/** ISO-3 country codes some HR systems (Workday, Oracle) lead a location with. */
+const ISO3: Readonly<Record<string, string>> = {
+  IND: "IN", USA: "US", CAN: "CA", GBR: "GB", IRL: "IE", DEU: "DE", NLD: "NL", FRA: "FR", ESP: "ES", PRT: "PT",
+  POL: "PL", ITA: "IT", SWE: "SE", DNK: "DK", FIN: "FI", NOR: "NO", AUT: "AT", BEL: "BE", CHE: "CH", CZE: "CZ",
+  ROU: "RO", GRC: "GR", HUN: "HU", LUX: "LU", EST: "EE", LVA: "LV", LTU: "LT", SVK: "SK", SVN: "SI", HRV: "HR",
+  BGR: "BG", UKR: "UA", SRB: "RS", SGP: "SG", JPN: "JP", KOR: "KR", AUS: "AU", NZL: "NZ", CHN: "CN", HKG: "HK",
+  TWN: "TW", PHL: "PH", MYS: "MY", THA: "TH", IDN: "ID", VNM: "VN", ARE: "AE", SAU: "SA", ISR: "IL", TUR: "TR",
+  ZAF: "ZA", NGA: "NG", KEN: "KE", EGY: "EG", MEX: "MX", BRA: "BR", ARG: "AR", COL: "CO", CHL: "CL", PER: "PE",
+  CRI: "CR", URY: "UY", PAK: "PK", BGD: "BD", LKA: "LK", TUN: "TN", MAR: "MA",
+};
+/** Indian site codes (airport-style) in "IND-BLR-Divyasree Technopolis". */
+const IN_SITE_CODES: Readonly<Record<string, string>> = {
+  BLR: "Bengaluru", HYD: "Hyderabad", MAA: "Chennai", CHN: "Chennai", BOM: "Mumbai", MUM: "Mumbai", PNQ: "Pune",
+  PUN: "Pune", DEL: "Delhi", NOI: "Noida", GGN: "Gurugram", GUR: "Gurugram", CCU: "Kolkata", AMD: "Ahmedabad",
+};
+/** US state codes that read as the US on their own ("Remote - MA", "TX - Frisco"): not CA (Canada?), ME (Middle East?) or ISO clashes. */
+const US_STATE_ALONE = US_STATE_CODES.split("|").filter((c) => c !== "CA" && c !== "ME").join("|");
+const STATE_DASH = new RegExp(`(^|[;|]\\s*|\\bremote\\s*-\\s*(?:remote-)?)(${US_STATE_ALONE})(?=\\s*(?:$|[;|]|-\\s|\\s+metro\\b))`, "gi");
+
+/**
+ * Codes some sources lead a place with, spelled out so every reading below resolves them:
+ * Workday's ISO-3 prefixes ("IND BNGL FL2-3", "DEU - Bayern - Unterschleissheim" → "India,
+ * BNGL FL2-3", "Germany, Bayern - …") and a bare US state code after "Remote -" or before
+ * " - City" ("Remote - MA", "TX - Frisco" → "US-MA", the Ashby form the hints already read).
+ */
+function expandPlaceCodes(raw: string): string {
+  return raw
+    .replace(/\bIND-([A-Z]{3})-/g, (m, c: string) => (IN_SITE_CODES[c] ? `${IN_SITE_CODES[c]}, ` : m))
+    .replace(/(^|[;|•\n]\s*)([A-Z]{3})(?:\s+-\s+|\s+)(?=\S)/g, (m, pre: string, c3: string) => {
+      const code = ISO3[c3];
+      return code ? `${pre}${countryDisplayName(code)}, ` : m;
+    })
+    .replace(STATE_DASH, (m, pre: string, st: string) => (st === st.toUpperCase() ? `${pre}US-${st}` : m));
 }
 
 /** Ashby-style "US-CA-Menlo Park", "JP-Tokyo", "Fins Only-AU-Sydney-MSO", "6 Locations" → the place words. */
@@ -230,6 +465,8 @@ function usTextSignal(text: string): boolean {
 }
 
 const REMOTE_RE = /\bremote\b/i;
+/** in a LOCATION string, "Home based - Worldwide" / "Work from home" are remote too. */
+const REMOTE_LOC_RE = /\b(remote|home[- ]based|work from home|wfh)\b/i;
 const HYBRID_RE = /\bhybrid\b/i;
 const ONSITE_RE = /\b(on[ -]?site|in[ -]?office|in[ -]?person|work from office|wfo)\b/i;
 /** JD phrasing that says the ROLE itself is remote (vs a "remote-friendly" / "WFH stipend" perk). */
@@ -284,7 +521,7 @@ function geoFromLoc(loc: string): RemoteGeo | null {
 }
 
 export function parseLocation(locationRaw: string | null, jdText = ""): ParsedLocation {
-  const raw = (locationRaw ?? "").trim();
+  const raw = expandPlaceCodes((locationRaw ?? "").trim());
   // hints read "US-CA-Dublin" as the US, not as Dublin, Ireland (Ashby's ISO-prefixed form)
   const loc = raw.replace(/\bUS-[A-Z]{2}-[^;,|]*/g, "US");
   const jd = jdText ?? "";
@@ -292,7 +529,7 @@ export function parseLocation(locationRaw: string | null, jdText = ""): ParsedLo
   // 1. mode — location string first; JD prose only fills a gap
   let mode: LocationMode = "unknown";
   if (HYBRID_RE.test(loc)) mode = "hybrid";
-  else if (REMOTE_RE.test(loc)) mode = "remote";
+  else if (REMOTE_LOC_RE.test(loc)) mode = "remote";
   else if (ONSITE_RE.test(loc)) mode = "onsite";
   if (mode === "unknown") {
     if (HYBRID_RE.test(jd)) mode = "hybrid";
@@ -302,8 +539,9 @@ export function parseLocation(locationRaw: string | null, jdText = ""): ParsedLo
     else if (ONSITE_RE.test(jd)) mode = "onsite";
   }
 
-  // 2. country/city (from the location string only)
-  const country = INDIA_CITIES.test(loc)
+  // 2. country/city (from the location string only). The rest of the world is left to the
+  //    per-place reading below, which keeps the string's order ("Lagos, Cairo" is Nigeria first)
+  let country: string | null = INDIA_CITIES.test(loc)
     ? "India"
     : US_HINT.test(loc)
       ? "United States"
@@ -311,18 +549,29 @@ export function parseLocation(locationRaw: string | null, jdText = ""): ParsedLo
         ? "Canada"
         : EU_HINT.test(loc)
           ? "Europe"
-          : (otherCountry(loc)?.[1] ?? null);
-  const locForCity = cleanForCity(raw).replace(/\b(remote|hybrid|on[ -]?site|in[ -]?office|anywhere|worldwide|global)\b/gi, " ");
+          : null;
+  const locForCity = cleanForCity(raw.replace(/\bUS-[A-Z]{2}\b(?!-)/g, " ")).replace(/\b(remote|home[- ]based|hybrid|on[ -]?site|in[ -]?office|anywhere|worldwide|global)\b/gi, " ");
   // up to three capitalised words ending at a separator: "San Francisco, CA", "New York
   // City", "Tel Aviv" — not just their first word. Unicode letters, so "München" and
   // "Kraków" are whole words, not "M" / "Krak".
   const cityMatch =
-    locForCity.match(INDIA_CITIES) ??
+    locForCity.match(INDIA_CITY_ONLY) ??
     locForCity.match(/(?<![\p{L}\p{N}])\p{Lu}[\p{L}.'-]+(?:\s+\p{Lu}[\p{L}.'-]+){0,2}(?=\s*(?:[,(|/;]|\s-\s|$))/u) ??
     locForCity.match(/(?<![\p{L}\p{N}])(\p{Lu}\p{L}+)(?:,|\s|$)/u);
-  const city = cityMatch ? cityMatch[0].replace(/,$/, "").trim() : null;
-  // every country the string names (primary first): a multi-office role is workable in each
-  const countries = locationCountries(raw, country);
+  const cityText = cityMatch ? cityMatch[0].replace(/,$/, "").trim() : null;
+  // a country or region word is not a city: "Remote - Canada" has no city
+  const city = cityText && !notACity(cityText) ? cityText : null;
+  // every country the string names, place by place: a multi-office role is workable in each
+  const placed = locationCountries(raw);
+  // The primary country is a real country whenever one is known: "München" is Germany, not
+  // the region "Europe" (kept only when no European country is named: "Remote - Europe").
+  // When the per-place reading disagrees with the whole-string hint, the place wins:
+  // "Durham, United Kingdom" is the UK, though Durham is also a US city hint. A place only
+  // the per-place reading resolves ("Ingolstadt, Bavaria") still gets a country.
+  let primary = country === "Europe" ? placed.find((c) => EUROPE_CODES.has(c)) : codeForParsedCountry(country);
+  if (country !== "Europe" && (!primary || (placed.length && !placed.includes(primary)))) primary = placed[0] ?? primary;
+  if (primary) country = countryDisplayName(primary);
+  const countries = primary ? [primary, ...placed.filter((c) => c !== primary)] : placed;
 
   // 3. remote geo — the load-bearing signal (§11.3)
   const indiaSignal = INDIA_OK_RE.test(jd) || INDIA_CITIES.test(loc);
@@ -387,7 +636,9 @@ export function parseLocation(locationRaw: string | null, jdText = ""): ParsedLo
   //    a lone stray "US" hint on a "remote" role, or a bare capitalized token with
   //    no resolvable country, is a guess and must NOT read as fact downstream.
   const conflicting = [indiaSignal, usSignal, euSignal].filter(Boolean).length > 1;
-  const confidence = scoreConfidence(mode, country, city, remoteGeo, geoSource, conflicting);
+  // a named place counts as resolved even when it is a country word the city slot drops
+  // ("Germany", "India"): confidence reads the same as when it filled the slot
+  const confidence = scoreConfidence(mode, country, city ?? cityText, remoteGeo, geoSource, conflicting);
 
   return { mode, city, country, ...(countries.length ? { countries } : {}), timezone, remoteGeo, sponsorship, confidence };
 }
@@ -438,6 +689,7 @@ export const PARSED_COUNTRY_NAME: Readonly<Record<string, string>> = {
   IN: "India",
   US: "United States",
   CA: "Canada",
+  ...EUROPE_COUNTRY_NAME,
   ...Object.fromEntries(OTHER_COUNTRIES.map(([code, name]) => [code, name])),
 };
 
@@ -448,7 +700,7 @@ export const PARSED_COUNTRY_NAME: Readonly<Record<string, string>> = {
  */
 export const EUROPE_CODES: ReadonlySet<string> = new Set([
   "GB", "IE", "DE", "NL", "FR", "ES", "PT", "PL", "IT", "SE", "DK", "FI", "NO", "AT", "BE", "CH",
-  "CZ", "RO", "GR", "HU", "LU", "EE", "LV", "LT", "SK", "SI", "HR", "BG", "IS", "UA", "RS", "CY", "MT",
+  "CZ", "RO", "GR", "HU", "LU", "EE", "LV", "LT", "SK", "SI", "HR", "BG", "IS", "UA", "RS", "CY", "MT", "AL", "MK",
 ]);
 const AMERICAS_CODES: ReadonlySet<string> = new Set(["CA", "MX", "BR", "AR", "CL", "CO", "PE", "UY", "CR"]);
 const APAC_CODES: ReadonlySet<string> = new Set(["SG", "AU", "NZ", "JP", "KR", "HK", "TW", "PH", "MY", "ID", "VN", "TH"]);
@@ -489,17 +741,8 @@ export function primaryRemoteGeo(code: string): RemoteGeo | null {
 /** display name for an ISO-2 code (the parser's name where it has one). */
 export function countryDisplayName(code: string): string {
   const c = code.trim().toUpperCase();
-  return PARSED_COUNTRY_NAME[c] ?? COUNTRY_DISPLAY[c] ?? c;
+  return PARSED_COUNTRY_NAME[c] ?? c;
 }
-const COUNTRY_DISPLAY: Record<string, string> = {
-  GB: "United Kingdom", DE: "Germany", NL: "Netherlands", FR: "France", IE: "Ireland", ES: "Spain",
-  PT: "Portugal", PL: "Poland", SE: "Sweden", CH: "Switzerland", SG: "Singapore", AU: "Australia",
-  NZ: "New Zealand", JP: "Japan", AE: "United Arab Emirates",
-  IT: "Italy", DK: "Denmark", FI: "Finland", NO: "Norway", AT: "Austria", BE: "Belgium", CZ: "Czechia",
-  RO: "Romania", GR: "Greece", HU: "Hungary", LU: "Luxembourg", EE: "Estonia", LV: "Latvia",
-  LT: "Lithuania", SK: "Slovakia", SI: "Slovenia", HR: "Croatia", BG: "Bulgaria", IS: "Iceland",
-  UA: "Ukraine", RS: "Serbia", CY: "Cyprus", MT: "Malta",
-};
 
 /**
  * Does a parsed posting country match an ISO-2 country? `true` = definitely there,
@@ -510,10 +753,15 @@ export function parsedCountryMatches(parsed: string | null | undefined, code: st
   const c = code.trim().toUpperCase();
   if (!parsed || !c) return null;
   if (parsed === "Europe") return EUROPE_CODES.has(c) ? null : false;
-  const name = PARSED_COUNTRY_NAME[c];
-  // every country the parser names is in PARSED_COUNTRY_NAME, so for a code it has no name
-  // for, the parsed country is definitely somewhere else
-  return name ? parsed === name : false;
+  if (PARSED_COUNTRY_NAME[c] === parsed) return true;
+  // a European country vs another European country: the right region, never "definitely
+  // abroad" — what the region "Europe" (the parser's answer before it named the country)
+  // always meant, so nothing built on `false` widens
+  const at = codeForParsedCountry(parsed);
+  if (at && EUROPE_CODES.has(at) && EUROPE_CODES.has(c)) return null;
+  // every country the parser names is in PARSED_COUNTRY_NAME, so the parsed country is
+  // definitely somewhere else
+  return false;
 }
 
 type CountryFields = Pick<ParsedLocation, "country"> & { countries?: readonly string[] | undefined };
@@ -547,9 +795,20 @@ export function locationInCountry(loc: CountryFields, code: string): boolean | n
 }
 
 /** does the location name a European place (the region "Europe" or a European country)? */
-function inEurope(loc: CountryFields): boolean {
-  return loc.country === "Europe" || (loc.countries ?? []).some((x) => EUROPE_CODES.has(x));
+export function inEurope(loc: CountryFields): boolean {
+  return locationCountryCodes(loc).some((x) => EUROPE_CODES.has(x)) || loc.country === "Europe";
 }
+
+const REGION_WORD = /^(europe|european union|eu|emea|apac|asia|asia pacific|americas|north america|latin america|latam|worldwide|anywhere|global|international|multiple|various|n\/a|tbd)$/;
+
+/** a country or region word that the city slot must not take ("Remote - Canada", "UK"). */
+function notACity(word: string): boolean {
+  const code = countryNameCode(word);
+  // a bare state / country code ("Remote - CA") is not a city either
+  return (code != null && !CITY_STATES.has(code)) || REGION_WORD.test(partText(word)) || /^[A-Z]{2}$/.test(word.trim());
+}
+/** countries that are also their own city ("Singapore" is a city, "Canada" is not). */
+const CITY_STATES: ReadonlySet<string> = new Set(["SG", "HK", "LU", "MT"]);
 
 /**
  * Workable from one of `markets` (ISO-2): onsite/hybrid with an office in a market country

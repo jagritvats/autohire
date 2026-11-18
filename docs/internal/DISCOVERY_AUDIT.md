@@ -442,3 +442,82 @@ uses the primary country as before (in-memory stores keep the field).
 
 Left: comma-separated city lists in one segment ("London, Berlin") still give one country;
 `dedup`'s location compatibility and the salary market still read the primary country only.
+*Both done in the fourth pass (next section); the db patch landed as migration 0019.*
+
+## Follow-ups (2026-11-18, fourth pass): place lists, named countries, automatic re-normalization
+
+Measured on one live scratch corpus (sample persona, presets `india`, `us`, `eu-uk`, one
+default `jobflow sync`: 366 boards + 12 feeds, 22,354 active postings, 14,085 of them with
+stored location text — the rest predate `location_raw` and keep their stored location until
+their board's next poll). Old parser = the third pass's `location.ts`, new = this one, on the
+same rows. Fixtures: `packages/core/test/location-lists.test.ts`,
+`packages/pipeline/test/renormalize-version.test.ts`, `packages/adapters/test/cutshort.test.ts`.
+
+| rows with location text (14,085) | old | new |
+|---|---|---|
+| no country | 584 (4.1%) | 347 (2.5%) |
+| confidence < 0.5 | 473 (3.4%) | 210 (1.5%) |
+| primary country "Europe" | 2,867 (20.4%) | 61 (0.4%) |
+| naming 2+ countries | 683 | 686 |
+
+The 347 left are almost all not places: bare "Remote" / "Global" / "Worldwide" / "North
+America" / "APAC" (≈230), "N Locations" and "Multiple Locations" (≈55), "Headquarter", plus
+one-off towns (Buc, Zipf, Waukesha) and ambiguous names (Santiago, a bare Birmingham).
+
+- **Comma-only place lists.** Each comma part is classified (country name, state / province /
+  region code or name, known city, unknown); a qualifier that follows a place decides its
+  country ("Dublin, OH", "London, Ontario", "Perth, Scotland", "Chennai, TN" — Tamil Nadu,
+  "Bengaluru, KA"), and a list counts only when 2+ parts resolve to distinct countries
+  ("London, Berlin" → GB, DE; "Lagos, Cairo, Lahore" → NG, EG, PK). On this corpus that adds
+  few rows (comma lists here are mostly "City, Region, Country"); the first version read
+  Indian state codes as countries ("Bengaluru, KA, India" → IN + "KA", 400+ rows) and was
+  fixed before it landed, which the table above includes.
+- **A real primary country.** A European place reports its country ("München" → Germany);
+  the region "Europe" stays only when no European country is named. `parsedCountryMatches`
+  keeps the region rule (Germany vs FR is null, as "Europe" was), so nothing built on
+  `false` widens; the scorer's location-label match adds "europe" for a European place so
+  the eu-uk preset's `europe` preference still matches. The per-place reading also overrides a
+  stray whole-string hint ("Durham, United Kingdom" was the US). Older rows keep "Europe"
+  until re-normalized; every reader still accepts it.
+- **Country words are not cities.** "Remote - Canada", "Remote - India", "United States",
+  "UK", a bare state code: `city` null (city-states keep theirs). "India - Hyderabad" now
+  takes Hyderabad.
+- **Code forms.** Workday's ISO-3 prefixes ("IND BNGL FL2-3", "DEU - Bayern - …"),
+  "IND-BLR-…" site codes, "Remote - MA" / "TX - Frisco" (not CA or ME alone: ambiguous),
+  every US state code after a comma (minus AR / DE / ID / IN / MT, which are countries too),
+  "U.S." with a trailing dot (53 "Remote, U.S." rows went `unknown` → `us_only`), and
+  "Home based - …" as remote (31 rows were onsite).
+- **More places:** larger German, French, Italian, British, Dutch, Polish, Spanish towns;
+  Indian tier-2 cities; Tunisia, Morocco, Mauritius, Kazakhstan, Ecuador and a few more;
+  Albania and North Macedonia as European.
+- **Dedup** reads every country: {US,GB} vs {GB} compatible (a multi-office posting's one
+  stored city is only its first office, so the shared country decides); {IN} vs {US} not; an
+  older row's "Europe" pairs with a European country.
+- **Salary market.** The estimate is per posting in a shared corpus, not per viewer, so the
+  market is the PRIMARY country's. One exception: a posting that STATES its currency is priced
+  in the first named country whose market uses that currency (GBP on "New York; London" is a
+  London comparable, not a dropped US one); single-country postings and remote roles open
+  beyond their countries never move. Backtest on a copy of the corpus, stored (old-parser)
+  locations → re-normalized, median error by confidence band (`< 0.30 / 0.30–0.50 / 0.50–0.70
+  / ≥ 0.70`): all-evidence 58% / 28% / 20% / 10% → 49% / 29% / 20% / 10%; leak-free 40% / 21% /
+  17% / 13% → 37% / 21% / 17% / 12% (5,591 → 5,595 backtested). Monotonic before and after.
+  (No calibration rows on this corpus, so calibrated = uncalibrated.)
+- **Cutshort** sets `postedByAgency` from its own `hiringForClient` (34 of 100 on a live
+  listing page); a "no" falls through to the name/JD rule.
+- **Titles:** "SW Engineer", "Software Engineering Intern / Senior Associate" are engineering
+  (+40 postings out of "other"). The other engineering-looking "other" titles are solutions,
+  sales, support, design, hardware, security and QA roles — correctly outside the archetypes.
+
+**Automatic re-normalization.** `NORMALIZE_VERSION` (core) is recorded per store in
+`store_meta` (migration 0020); `pollAll` re-derives stored postings once when the code's
+version is newer, before polling, so the CLI's `sync`, the web app's background sync, the
+worker and MCP all pick up a parser fix and re-rank as they already do after a sync. A store
+recorded by newer code is left alone. `jobflow renormalize` forces a run and prints a summary.
+On this corpus (PGlite): 22,354 scanned → 5,334 changed (237 newly placed, 24 now
+multi-country, agency +5), 21 s including the re-rank.
+
+Left: stored rows that predate `location_raw` (8,269 here) re-parse only when their board is
+polled again; `renormalize` does not re-derive titles (a re-poll does); the stored `dedup_key`
+is not refreshed by a re-normalize (dedup recomputes keys, the don't-double-apply guard reads
+the stored one); "Toronto, ON, Canada, New York, NY" keeps the US as primary (US hints outrank
+Canada's), with both countries listed.

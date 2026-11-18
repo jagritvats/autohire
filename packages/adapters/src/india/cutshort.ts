@@ -11,7 +11,7 @@ import { crossCapped, inIndia, queryTerms, slugifyTerm } from "../search.js";
  * `target.query` is the listing slug (role × city), which is how the site scopes searches.
  */
 
-interface CsJob {
+export interface CsJob {
   _id: string;
   publicUrl?: string;
   headline: string;
@@ -71,7 +71,7 @@ export class CutshortAdapter implements SourceAdapter {
       const html = await fetchPage(`https://cutshort.io/jobs/${slug}${page > 1 ? `?page=${page}` : ""}`);
       const jobs = html ? parseCutshortPage(html) : [];
       if (!jobs.length) break;
-      for (const j of jobs) out.push(toRaw(j));
+      for (const j of jobs) out.push(cutshortToRaw(j));
       if (jobs.length < 50) break;
     }
     return out.slice(0, limit);
@@ -112,7 +112,8 @@ export function parseCutshortPage(html: string): CsJob[] {
   return [];
 }
 
-function toRaw(j: CsJob): RawPosting {
+/** one Cutshort job → a RawPosting (exported for fixture tests). */
+export function cutshortToRaw(j: CsJob): RawPosting {
   const exp = j.expRange?.min != null ? `Experience: ${j.expRange.min}-${j.expRange.max ?? j.expRange.min} years\n` : "";
   // a recruiter posting for an unnamed client: say so in words the trust scorer reads
   const agency = j.hiringForClient ? "Hiring on behalf of a client (third-party recruiter).\n" : "";
@@ -137,6 +138,10 @@ function toRaw(j: CsJob): RawPosting {
     salaryRaw,
     postedAt: j.jobFactSummary?.postedDate ?? null,
     experienceHint: j.expRange?.min != null ? { min: j.expRange.min, max: j.expRange.max ?? null } : undefined,
+    // the poster's own "hiring for a client" answer (34 of 100 on a live page, 2026-11) flags
+    // it at the source. Only a yes: recruiters posting under their own brand often leave it
+    // off, so a no falls through to the name/JD rule (`looksLikeAgency`) at ingest
+    ...(j.hiringForClient ? { postedByAgency: true } : {}),
     fetchedAt: new Date(),
     raw: { id: j._id, hiringForClient: !!j.hiringForClient } as Record<string, unknown>,
   };

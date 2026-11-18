@@ -52,7 +52,7 @@ is never inside the repo tree, so personal files can't be committed by accident.
 1. **Schema.** Add the field to the Zod shape in `packages/core/src/schema/` (invariant #6:
    one type system). Give it a `.default()` so old rows and old callers still parse.
 2. **Migration.** Add the next numbered file in `packages/db/migrations/`
-   (`0019_<what>.sql` after `0018_multi_presets.sql`). Start it with a comment that says why.
+   (`0021_<what>.sql` after `0020_store_meta.sql`). Start it with a comment that says why.
    Migrations are forward-only and **must be idempotent**: `create table if not exists`,
    `add column if not exists`, `create index if not exists`, and policies created in a
    `do $$ … exception when duplicate_object` block. They run on Postgres, Supabase and PGlite

@@ -1,4 +1,4 @@
-import { looksLikeAgency, parseLocation, type ParsedLocation, type Posting, type SourceKind } from "@jobflow/core";
+import { NORMALIZE_VERSION, NORMALIZE_VERSION_KEY, looksLikeAgency, parseLocation, type ParsedLocation, type Posting, type SourceKind } from "@jobflow/core";
 
 /**
  * Re-derive the normalized location + agency flag of STORED postings after a parser fix,
@@ -85,4 +85,42 @@ export async function renormalizePostings(store: RenormalizeStore): Promise<Reno
     if (!next.postedByAgency && before.agency) stats.agencyCleared++;
   }
   return stats;
+}
+
+/** a store that also records which normalize version its rows were derived with. */
+export interface VersionedRenormalizeStore extends RenormalizeStore {
+  getStoreMeta(key: string): Promise<string | null>;
+  setStoreMeta(key: string, value: string): Promise<void>;
+}
+
+export interface RenormalizeRun extends RenormalizeStats {
+  /** the version the store recorded before this run (null: never recorded) */
+  fromVersion: number | null;
+  toVersion: number;
+}
+
+/**
+ * Re-derive stored postings once per NORMALIZE_VERSION (core): when the store's recorded
+ * version is older than the code's (or was never recorded), run `renormalizePostings`, then
+ * record the code's version — so a local install (CLI / web sync, which never run the worker)
+ * picks up a parser fix on its next sync. Returns null when the store is already current. A
+ * store recorded by NEWER code is left alone (an older process must not re-derive it back).
+ * `force` re-runs regardless (`jobflow renormalize`). Idempotent: a second run changes nothing.
+ */
+export async function renormalizeIfStale(store: VersionedRenormalizeStore, opts: { force?: boolean } = {}): Promise<RenormalizeRun | null> {
+  const recorded = await store.getStoreMeta(NORMALIZE_VERSION_KEY);
+  const parsed = recorded == null ? null : Number(recorded);
+  const fromVersion = parsed != null && Number.isFinite(parsed) ? parsed : null;
+  if (!opts.force && fromVersion != null && fromVersion >= NORMALIZE_VERSION) return null;
+  const stats = await renormalizePostings(store);
+  if (fromVersion == null || fromVersion < NORMALIZE_VERSION) await store.setStoreMeta(NORMALIZE_VERSION_KEY, String(NORMALIZE_VERSION));
+  return { ...stats, fromVersion, toVersion: NORMALIZE_VERSION };
+}
+
+/** one summary line for a renormalize run (CLI, sync log). */
+export function renormalizeSummary(r: RenormalizeStats): string {
+  return (
+    `${r.scanned} scanned → ${r.changed} changed (${r.locations} locations: ${r.placed} newly placed, ${r.multiCountry} now multi-country; ` +
+    `agency +${r.agencyFlagged} −${r.agencyCleared}; ${r.noRaw} stored without location text)`
+  );
 }

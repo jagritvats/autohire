@@ -6,6 +6,7 @@ import { DEFAULT_CONCURRENCY, discoverCompanies, mapPoolKeyed, resolveDiscovered
 import { harvestLinks } from "./harvest.js";
 import { localEmbedder, type Embedder } from "./embedder.js";
 import { estimatePostingSalaries } from "./salary.js";
+import { renormalizeIfStale, renormalizeSummary, type RenormalizeRun } from "./renormalize.js";
 import { resolveDiscoveryPlan, type CustomSourceTarget, type DiscoveryPlan, type SearchTarget } from "./discovery.js";
 import type { DiscoveryFeed } from "./presets/types.js";
 
@@ -109,6 +110,8 @@ export interface PollStats {
   boardsDue?: number;
   /** due boards this run left for the next one (board cap or time budget reached) */
   boardsDeferred?: number;
+  /** stored postings re-derived because the store's NORMALIZE_VERSION was older (once per version) */
+  renormalized?: RenormalizeRun;
   errors: string[];
 }
 
@@ -121,7 +124,20 @@ export interface PollStats {
  * re-checked.
  */
 export async function pollAll(repo: Repository, opts: PollOptions = {}): Promise<PollStats> {
+  // stored postings derived by an older parser are re-derived once, before this poll's
+  // upserts, so the ranking every caller runs next sees one consistent corpus (§11.3).
+  // A no-op (one meta read) when the store is current; never fails the poll.
+  let renormalized: RenormalizeRun | null = null;
+  let renormalizeError: string | null = null;
+  try {
+    renormalized = await renormalizeIfStale(repo);
+    if (renormalized?.changed) opts.log?.(`  re-normalized stored postings (v${renormalized.fromVersion ?? 0} → v${renormalized.toVersion}): ${renormalizeSummary(renormalized)}`);
+  } catch (e) {
+    renormalizeError = `renormalize: ${(e as Error).message}`;
+  }
   const stats = await pollSources(repo, opts);
+  if (renormalized) stats.renormalized = renormalized;
+  if (renormalizeError) stats.errors.push(renormalizeError);
   // offline + cheap: re-price every posting that states no pay against the refreshed
   // corpus, so estimates track new comparables without waiting for an enrich run (§11.4).
   // Never fails the poll.
