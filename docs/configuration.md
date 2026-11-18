@@ -118,6 +118,29 @@ Notes:
 - **Salary honesty.** Only stated, annual (or monthly ×12) pay with an explicit currency is passed on. A stated salary is high-confidence and can trigger the salary-floor exclusion, so estimates and hourly/daily rates are never used.
 - **Not built: Remote Rocketship.** Its Terms (§5) prohibit scraping. The official API (`POST /api/openclaw/jobs`) needs a paid subscription and limits caching of responses to 24 hours (§4), which conflicts with JobFlow storing postings for up to 14 days. Himalayas already covers India-eligible remote roles.
 
+### Keyless remote boards (their terms require a link back)
+
+Two more remote-only boards are registered as Tier-1 adapters and answer live and saved searches (`toTargets`). They need no key. Add them to a preset or a saved search to poll them.
+
+| Source | API | Terms we follow |
+|---|---|---|
+| **Remote OK** (`remoteok`) | `GET https://remoteok.com/api` (`?tag=` narrows, about 100 newest jobs) | The API terms (sent as the first element of every response) require a followed link back to the job's Remote OK page and the name "Remote OK" as the source. So `applyUrl` is always the Remote OK listing, never its outbound `apply_url`. No per-job "gone" signal, so listings expire through the feed TTL sweep. |
+| **Jobicy** (`jobicy`) | `GET https://jobicy.com/api/jobs?count=…&tag=…&geo=…&industry=…` (cursor-paged, jobs from the last 7 days) | Credit Jobicy and send apply buttons to the Jobicy job URL in the feed, which is what `applyUrl` holds. Poll at most once an hour. Leaving the 7-day window does not mean a job closed; `isLive` asks `GET /api/jobs/status?ids=…` and retires a posting only on an explicit `closed`. Jobicy has no India geo, so India searches ask for its `anywhere` (worldwide) roles. |
+
+Both re-date listings (they're in `REDATED_SOURCES`), and both carry a low trust prior (0.35 and 0.25 in `SOURCE_TRUST`).
+
+### Company boards with no configuration
+
+These ATSes are polled straight from a company's careers URL (the detector recognises the URL, then a probe confirms it). Nothing to set up:
+
+| ATS | Board URL | Public endpoint |
+|---|---|---|
+| Recruitee | `{slug}.recruitee.com` | `/api/offers/` (JSON, JD inline) |
+| Personio | `{slug}.jobs.personio.de` / `.com` | `/xml` (read in the employer's language: `?language=en` blanks every untranslated JD) |
+| Teamtailor | `{slug}.teamtailor.com`, or the company's own domain | `/jobs.rss` (the JSON:API needs a per-company key, so it isn't used) |
+| BambooHR | `{slug}.bamboohr.com/careers` | `/careers/list` + `/careers/{id}/detail` (Tier 2: the JSON the careers page calls) |
+| Breezy HR | `{slug}.breezy.hr` | `/json` + the job page's JSON-LD for the JD |
+
 ---
 
 ## Local agent
