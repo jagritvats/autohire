@@ -25,6 +25,7 @@ import type {
   Profile,
   SalaryBand,
   SalaryEstimate,
+  SyncRunRecord,
   TenantConfig,
 } from "@jobflow/core";
 
@@ -230,7 +231,16 @@ export interface Repository {
   followCompany(tenantId: string, companyId: string): Promise<void>;
   unfollowCompany(tenantId: string, companyId: string): Promise<void>;
   listFollowedCompanyIds(tenantId: string): Promise<string[]>;
+
+  // ── sync runs (global: the corpus is shared; per-tenant entries are filtered by the service) ──
+  /** insert or replace a run by id; only the newest SYNC_RUNS_KEPT are kept. */
+  saveSyncRun(run: SyncRunRecord): Promise<void>;
+  /** newest first */
+  listSyncRuns(limit?: number): Promise<SyncRunRecord[]>;
 }
+
+/** sync-run history kept in the store (older rows are pruned on save) */
+export const SYNC_RUNS_KEPT = 50;
 
 export interface EnqueueJob {
   tenantId: string;

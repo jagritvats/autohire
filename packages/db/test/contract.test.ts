@@ -10,12 +10,13 @@ import {
   type Match,
   type Profile,
   type SavedSearch,
+  type SyncRunRecord,
   type TenantConfig,
 } from "@jobflow/core";
 import { InMemoryRepository } from "../src/memory.js";
 import { openPglite } from "../src/pglite.js";
 import { PgRepository } from "../src/postgres.js";
-import type { NewPosting, Repository } from "../src/repository.js";
+import { SYNC_RUNS_KEPT, type NewPosting, type Repository } from "../src/repository.js";
 
 /**
  * One behavioural contract, run against every Repository implementation: the in-memory
@@ -593,6 +594,55 @@ describe.each(stores)("Repository contract — %s", (name, open) => {
     // a location with no countries reads back without the field (older rows alike)
     await repo.updatePostingNormalized(p.id, { location: { ...p.location, countries: undefined }, postedByAgency: false });
     expect((await repo.getPosting(p.id))?.location.countries).toBeUndefined();
+  });
+
+  it("keeps sync-run history: upsert by id, newest first, pruned to the newest SYNC_RUNS_KEPT", async () => {
+    const run = (i: number, status: SyncRunRecord["status"] = "done"): SyncRunRecord => {
+      const startedAt = Date.UTC(2026, 0, 1, 0, i);
+      return {
+        id: `run-${name}-${i}`,
+        trigger: "manual",
+        origin: "web",
+        status,
+        startedAt: new Date(startedAt),
+        finishedAt: status === "running" ? null : new Date(startedAt + 30_000),
+        summary: {
+          runId: `run-${name}-${i}`,
+          trigger: "manual",
+          origin: "web",
+          status,
+          startedAt,
+          finishedAt: status === "running" ? null : startedAt + 30_000,
+          cancelRequested: false,
+          phase: null,
+          phases: [{ id: "boards", status: "done", startedAt, finishedAt: startedAt + 1 }],
+          boards: { total: 3, done: 2, failed: 1, notDue: 0, deferred: 0, skipped: 0, inFlight: [] },
+          feeds: { total: 1, done: 1, failed: 0 },
+          postings: { fetched: 10, new: i, updated: 2, gone: 0, expired: 0 },
+          resolved: 0,
+          timing: { elapsedMs: 30_000, etaMs: null, budgetMs: null, avgBoardMs: 900, concurrency: 8 },
+          errors: [{ source: "Acme", message: "timed out", tenantIds: ["t1"] }],
+          sources: { remotive: { label: "remotive", kind: "feed", status: "ok", fetched: 4, created: 1, ms: 100, error: null } },
+          message: "ok",
+        },
+      };
+    };
+    await repo.saveSyncRun(run(1, "running"));
+    await repo.saveSyncRun(run(1, "done")); // the same run, finished: replaced, not duplicated
+    await repo.saveSyncRun(run(2, "cancelled"));
+    const got = (await repo.listSyncRuns(10)).filter((r) => r.id.startsWith(`run-${name}-`));
+    expect(got.map((r) => [r.id, r.status])).toEqual([
+      [`run-${name}-2`, "cancelled"],
+      [`run-${name}-1`, "done"],
+    ]);
+    expect(got[1]?.summary.postings.new).toBe(1);
+    expect(got[1]?.summary.errors[0]?.tenantIds).toEqual(["t1"]);
+    expect(iso(got[1]?.finishedAt)).toBe(new Date(Date.UTC(2026, 0, 1, 0, 1) + 30_000).toISOString());
+    for (let i = 3; i < SYNC_RUNS_KEPT + 5; i++) await repo.saveSyncRun(run(i));
+    const all = await repo.listSyncRuns(SYNC_RUNS_KEPT + 10);
+    expect(all.length).toBeLessThanOrEqual(SYNC_RUNS_KEPT);
+    expect(all[0]?.id).toBe(`run-${name}-${SYNC_RUNS_KEPT + 4}`);
+    expect(all.some((r) => r.id === `run-${name}-1`)).toBe(false);
   });
 
   if (name === "pglite") {

@@ -16,6 +16,7 @@ import type { Match, Posting, SearchQueryInput, ViewHiddenReason } from "@jobflo
 import { applyView, diversifyByCompany, diversifyKey, formatSalary, isIndiaWorkable, postingAgeDays, scoreSourceTrust } from "@jobflow/core";
 import { ensureTenant } from "./tenant.js";
 import { corpusEmbedder } from "./embedder.js";
+import { corpusSyncing, startCorpusSync } from "./sync.js";
 
 /** Serializable match-card DTO for the client UI (§11.6). */
 export interface FeedCard {
@@ -123,44 +124,6 @@ export interface FeedOptions {
   bootstrap?: boolean;
 }
 
-let corpusSync: Promise<void> | null = null;
-/** what to run once the current sync finishes — every caller's, including ones that JOINED it */
-let afterSync: Array<() => Promise<void>> = [];
-
-/** Is a background corpus sync running in this process? */
-export function corpusSyncing(): boolean {
-  return corpusSync != null;
-}
-
-/**
- * Start (or join) a background discover → poll of the shared corpus. Deduped: concurrent
- * callers share one run, and each joiner's `after` still runs when it ends (e.g. a person
- * who finishes onboarding while the first browse sync is running still gets ranked).
- * Request handlers never await it — the UI shows "syncing".
- */
-export function startCorpusSync(repo: Repository, after?: () => Promise<void>, sync: (repo: Repository) => Promise<unknown> = syncCorpus): Promise<void> {
-  if (after) afterSync.push(after);
-  corpusSync ??= (async () => {
-    try {
-      await sync(repo);
-    } catch (e) {
-      console.error("[jobflow] corpus sync failed:", e instanceof Error ? e.message : e);
-    }
-    // still "syncing" until every follow-up (ranking) is done, so the UI never reads a
-    // finished-but-unranked feed; steps added meanwhile run in this same loop
-    while (afterSync.length) {
-      const fn = afterSync.shift()!;
-      try {
-        await fn();
-      } catch (e) {
-        console.error("[jobflow] after-sync step failed:", e instanceof Error ? e.message : e);
-      }
-    }
-    corpusSync = null;
-  })();
-  return corpusSync;
-}
-
 /** What one sync polls: `full` (every due board and slow feed, no time box) or the default sweep. */
 export interface SyncOptions {
   full?: boolean;
@@ -169,6 +132,10 @@ export interface SyncOptions {
   /** a tighter board-fetch time budget (a request-bound refresh); else `JOBFLOW_SYNC_MINUTES`, else 5 min */
   timeBudgetMs?: number;
   log?: (m: string) => void;
+  /** structured progress events (the sync run manager folds them into SyncProgress) */
+  onProgress?: PollOptions["onProgress"];
+  /** cancel: stop starting boards/feeds; nothing is retired from the partial run */
+  signal?: AbortSignal;
 }
 
 /**
@@ -187,7 +154,11 @@ export const SYNC_TIME_BUDGET_MS = 5 * 60_000;
  * the first feed comes fast (`pollAll`'s "auto"). `full` drops every bound.
  */
 export function syncPollOptions(opts: SyncOptions = {}): PollOptions {
-  const log = opts.log ? { log: opts.log } : {};
+  const log = {
+    ...(opts.log ? { log: opts.log } : {}),
+    ...(opts.onProgress ? { onProgress: opts.onProgress } : {}),
+    ...(opts.signal ? { signal: opts.signal } : {}),
+  };
   if (opts.full) return { embedder: corpusEmbedder(), maxBoards: opts.maxBoards ?? Infinity, timeBudgetMs: Infinity, ...log };
   const env = syncLimitsFromEnv();
   return {
@@ -241,13 +212,13 @@ export async function getFeed(repo: Repository, tenantId: string, opts: FeedOpti
   const spread = opts.diversify !== false;
   if (!onboarded) {
     const browse = await browsePostings(repo, limit);
-    if (browse.length === 0 && opts.bootstrap !== false) void startCorpusSync(repo);
+    if (browse.length === 0 && opts.bootstrap !== false) void startCorpusSync(repo, undefined, undefined, { trigger: "first_run" });
     return shapeBrowse(repo, tenantId, spread ? diversifyByCompany(browse, (p) => diversifyKey(p.companyName)) : browse);
   }
   let matches = await repo.listMatches(tenantId, limit);
   if (matches.length === 0 && opts.bootstrap !== false) {
     const corpus = await repo.listActivePostings();
-    if (corpus.length === 0) void startCorpusSync(repo, async () => void (await rankTenant(repo, tenantId)));
+    if (corpus.length === 0) void startCorpusSync(repo, async () => void (await rankTenant(repo, tenantId)), undefined, { trigger: "first_run" });
     else {
       await rankTenant(repo, tenantId);
       matches = await repo.listMatches(tenantId, limit);
