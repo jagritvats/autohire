@@ -8,6 +8,7 @@ import {
   rankTenant,
   seedDemoCorpus,
   setSyncSchedule,
+  subscribeSync,
   startCloudJobDrainer,
   startCorpusSync,
   type CloudJobDrainer,
@@ -99,6 +100,11 @@ function scheduleLocalSync(repo: Repository): void {
     }
   };
   void announce();
+  // after every run (a capped first sync leaves boards never polled → catch up soon), so the
+  // header's "next in …" is right straight away, not at the next tick
+  subscribeSync((s) => {
+    if (s.status !== "running") void announce().catch(() => {});
+  });
   setInterval(() => void tick(), tickMs).unref?.();
 }
 

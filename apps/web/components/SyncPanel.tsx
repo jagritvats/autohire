@@ -141,8 +141,14 @@ function SourceTable({ run }: { run: SyncProgress | null }) {
               Company job boards <span className="hint">({b.total} this run{b.notDue ? `, ${b.notDue} not due` : ""})</span>
             </th>
             <td>
-              <Badge tone={b.failed && !b.done ? "bad" : b.failed ? "warn" : run.status === "running" ? "info" : "good"}>
-                {run.status === "running" ? `${b.done + b.failed}/${b.total}` : b.failed ? `${b.failed} failed` : "ok"}
+              <Badge tone={b.failed && !b.done ? "bad" : b.failed || run.status === "cancelled" ? "warn" : run.status === "running" ? "info" : "good"}>
+                {run.status === "running"
+                  ? `${b.done + b.failed}/${b.total}`
+                  : run.status === "cancelled"
+                    ? `stopped at ${b.done + b.failed}/${b.total}`
+                    : b.failed
+                      ? `${b.failed} failed`
+                      : "ok"}
               </Badge>
             </td>
             <td className="num">{run.postings.fetched - rows.reduce((a, [, s]) => a + s.fetched, 0)}</td>
