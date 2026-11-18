@@ -1,5 +1,5 @@
 import type { RawPosting } from "@jobflow/core";
-import { markPartial, htmlToText, httpJson, httpStatus, liveFromStatus, type FetchTarget, type SourceAdapter, type LivenessTarget } from "../types.js";
+import { cleanTitle, markPartial, htmlToText, httpJson, httpStatus, liveFromStatus, type FetchTarget, type SourceAdapter, type LivenessTarget } from "../types.js";
 
 /**
  * Amazon Jobs (Tier 2: the public JSON amazon.jobs' own search calls, no auth). One
@@ -88,7 +88,7 @@ function toRaw(j: AmzJob): RawPosting {
     atsJobId: j.id_icims,
     companyName: j.company_name ?? "Amazon",
     companySlug: "amazon",
-    title: j.is_intern ? `${j.title} (Intern)` : j.title,
+    title: j.is_intern ? `${cleanTitle(j.title)} (Intern)` : cleanTitle(j.title),
     jdText: jd,
     jdHtml: j.description ?? null,
     // "IN, KA, Bengaluru" → spell out the country so the location parser resolves it
