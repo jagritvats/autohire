@@ -7,6 +7,7 @@ import { MatchCard } from "./MatchCard";
 import { Badge, Banner, Button, ButtonLink, Chip, EmptyState, Panel, Segmented, Skeleton, Stat } from "./ui";
 import { FilterDrawer } from "./ui/FilterDrawer";
 import { roleText } from "@/lib/cardText";
+import { todaySummary, type TodaySummary } from "@/lib/today";
 import { DIVERSIFY_WINDOW, diversifyByCompany, diversifyKey, moreBelow } from "@jobflow/core";
 
 const ARCHETYPES = ["backend", "platform", "infra_devops", "fullstack", "data_ml", "sre", "frontend", "mobile"];
@@ -329,6 +330,9 @@ export function FeedView({
     { tab: { kind: "hidden" }, label: "Hidden" },
   ];
   const corpusEmpty = data.stats.postings === 0;
+  // the "today" summary over your whole list (not the current filters): Editorial's lede, Spark's chips
+  const today = useMemo(() => todaySummary(data.cards, scored), [data.cards, scored]);
+  const dueFollowUps = progress.applications.dueFollowUps;
   const lastSync = progress.corpus.lastSyncAt;
   // how many filters are narrowing the list — shown on the mobile "Filters" button
   const activeFilters =
@@ -497,13 +501,23 @@ export function FeedView({
       </FilterDrawer>
 
       <div className="feed-main">
-        <div className="feed-toolbar">
+        {/* one header, three presentations (lib/style.ts): Editorial's dated masthead + lede,
+            Spark's "today" hero with count chips, Classic's title + plain counts */}
+        <div className="feed-toolbar feed-hero">
           <div className="feed-toolbar__start">
             <Dateline />
+            <p className="feed-hero__eyebrow">Today</p>
             <h1 className="page-title">Jobs</h1>
-            <TodayLede cards={data.cards} scored={scored} />
-            <div className="stats" aria-label="Your jobs">
-              <Stat value={cards.length} label="shown" tone="good" />
+            <TodayLede today={today} scored={scored} />
+            <div className="stats feed-hero__stats" aria-label="Your jobs">
+              <Stat className="stat--shown" value={cards.length} label="shown" tone="good" />
+              {today.newThisWeek > 0 && <Stat className="feed-hero__extra" value={today.newThisWeek} label="new this week" tone="accent" />}
+              {today.great > 0 && <Stat className="feed-hero__extra" value={today.great} label={today.great === 1 ? "great match" : "great matches"} tone="good" />}
+              {dueFollowUps > 0 && (
+                <a className="stat-link feed-hero__extra" href="/applications" title="Applications with a follow-up date that has come">
+                  <Stat value={dueFollowUps} label={dueFollowUps === 1 ? "follow-up due" : "follow-ups due"} tone="warn" />
+                </a>
+              )}
               <Stat value={data.stats.postings} label="jobs in your list" />
               {data.stats.excluded > 0 && <Stat value={data.stats.excluded} label="left out (pay / location)" tone="muted" />}
             </div>
@@ -651,12 +665,10 @@ function Dateline() {
  * source's own date) and the strongest match. Plain counts only — unscored lists never claim a
  * "best match".
  */
-function TodayLede({ cards, scored }: { cards: FeedCard[]; scored: boolean }) {
-  const live = cards.filter((c) => !c.archived && !c.invalidated);
-  if (live.length === 0) return null;
-  const fresh = live.filter((c) => c.ageDays <= 1).length;
+function TodayLede({ today, scored }: { today: TodaySummary & { top: FeedCard | null }; scored: boolean }) {
+  const { live, fresh, top } = today;
+  if (live === 0) return null;
   const noun = scored ? (fresh === 1 ? "match" : "matches") : fresh === 1 ? "job" : "jobs";
-  const top = scored ? live.reduce((a, b) => (b.score > a.score ? b : a)) : null;
   return (
     <p className="feed-lede">
       {fresh > 0 ? (
@@ -671,7 +683,7 @@ function TodayLede({ cards, scored }: { cards: FeedCard[]; scored: boolean }) {
       )}{" "}
       {top && (
         <>
-          The strongest of {live.length}:{" "}
+          The strongest of {live}:{" "}
           <a href={`/jobs/${top.id}`}>
             {top.title}
           </a>{" "}

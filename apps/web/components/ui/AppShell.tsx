@@ -13,10 +13,17 @@ const BARE = ["/login", "/signup"]; // auth screens: brand + theme only, no app 
 export function Brand() {
   return (
     <Link href="/" className="brand" aria-label="JobFlow — home">
+      {/* Classic + Spark: a tile before the name — three rising lines (the ranked list); Spark
+          adds its coral spark. Each style colours and sizes it; Editorial hides it. */}
+      <svg className="brand__tile" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+        <rect className="brand__tile-bg" x="1" y="1" width="22" height="22" rx="6.5" />
+        <path className="brand__tile-lines" d="M6.8 16h4.6M6.8 12h7.6M6.8 8h10.6" strokeWidth="2.1" strokeLinecap="round" fill="none" />
+        <circle className="brand__tile-spark" cx="16.8" cy="16.5" r="2.1" />
+      </svg>
       <span className="brand__name">
         Job<em>Flow</em>
       </span>
-      {/* the full stop of a masthead — the one vermilion mark in the header */}
+      {/* Editorial: the full stop of a masthead — the one vermilion mark in the header */}
       <svg className="brand__mark" viewBox="0 0 10 10" width="8" height="8" aria-hidden="true">
         <circle cx="5" cy="5" r="5" fill="var(--accent-solid)" />
       </svg>
