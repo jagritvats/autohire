@@ -7,6 +7,18 @@ All notable changes to JobFlow are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **"Also posted for …"**: a role a company posts once per country (same title, level and
+  JD, separate reqs) is one card — the sibling that scores best for you — listing where else
+  it is posted, each one a click (or `jobflow show <id>`) away. Scores are unchanged and the
+  folded count is reported in the web feed, `jobflow feed` and the MCP `list_jobs` result.
+- **`data_analytics` role type** for analyst, BI and analytics-engineering roles ("Data
+  Analyst", "Analytics Engineer", "BI Developer", "Product Analyst"), selectable in setup,
+  the profile and `--roles data_analytics` (alias `analytics`). A profile targeting `data_ml`
+  alone keeps covering analytics roles.
+- **More skills recognised**: SQL, Excel, Tableau, Power BI, Looker, pandas, NumPy, dbt,
+  statistics, A/B testing, R, SAS, Vue, Nuxt, Angular, Svelte, Next.js, CSS, HTML, Sass, Jest,
+  Cypress, Playwright, webpack, Storybook, Figma, Swift, SwiftUI, Objective-C, Dart / Flutter
+  and C — in JDs and in your imported résumé (only what the file names).
 - **MCP server for AI agents**: `jobflow mcp` (new package `@jobflow/mcp`) serves JobFlow
   over the Model Context Protocol on stdio, for Claude Code, Claude Desktop or any MCP client.
   Tools: `jobflow_status`, `search_jobs`, `list_jobs`, `get_job`, saved searches,
@@ -29,6 +41,15 @@ All notable changes to JobFlow are documented here. The format follows
 - **Liveness checks** for Ashby and Himalayas postings (a definitive 404/410 retires a role).
 
 ### Changed
+- **Company level ladders** read conservatively: "Engineer 5", "Data Scientist II", L8+,
+  "E5" / "IC4" beside a role noun, SMTS / LMTS / PMTS. A bare "Member of Technical Staff" no
+  longer reads as a staff-level role. A level the source states wins over a code the title
+  only implies. The mappings are in `docs/architecture.md`.
+- **Preset tags (#india, #us, …) follow where a role is workable**: a US-only remote role
+  found by an India feed, or an India-list employer's US office, no longer carries `#india`.
+- **Stored postings re-read on the next sync** (normalize version 3): JDs saved with HTML
+  markup or entities are cleaned, titles' entities decoded, and role type, level, skills and
+  years asked re-derived — no re-poll needed.
 - **Bigger, verified presets.** Every non-India seed now carries a board URL checked live
   with at least one role in the preset's markets. Seeds: `us` 47 → 130, `eu-uk` 27 → 133,
   `global-remote` 24 → 31, `india` 230 → 239 (dead and India-less boards dropped, 18
@@ -90,6 +111,17 @@ All notable changes to JobFlow are documented here. The format follows
   instead of an in-memory fallback, and keeps the feed synced on a schedule while open.
 
 ### Fixed
+- **Role types**: an assistant, administrator, support or success role is no longer filed as
+  platform or backend engineering because its title names a developer platform; "Developer
+  Advocate" and similar are no longer in the software-engineer salary family.
+- **Stack notes**: a domain ("fintech") is never listed as a skill "new to you"; iOS roles
+  name Swift / Objective-C instead of "no languages we recognise"; a Next.js role is no
+  longer read as plain React; skills typed before the dictionary knew them count.
+- **Résumé import** found 1 skill in a fictional analyst's résumé and 4 in a frontend
+  developer's; now 9 and 12 ("Next.js", "Vue.js" were read as JavaScript).
+- **Locations**: multi-word cities are kept whole ("San Francisco Bay Area", not "San";
+  "Remote (United States)" has no city "United"); a remote list of countries reaching beyond
+  Europe is "those countries only", not "Europe only".
 - **Feed cards read the same, plainly, everywhere**: one location line built once for the
   web, `jobflow feed`/`show` and the MCP tools — remote roles always say where they can be done
   from ("Remote · worldwide", "Remote · APAC", "Remote · Canada only"), onsite/hybrid roles
