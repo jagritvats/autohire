@@ -60,18 +60,24 @@ Don't add one-off colours, font sizes, spacing or shadows.
 
 ### Tokens and themes
 
-- Dark is the `:root` base. Light applies when the OS asks for it, or when the user picks it
-  with the header toggle (`ThemeToggle`, stored in `localStorage["jobflow-theme"]`). Every
-  colour token is defined for both themes, so use `var(--text-2)`, never a hex value.
-- Type sizes (`--fs-xs` 12px to `--fs-2xl` 26px), spacing on a 4px grid (`--s-1` to
-  `--s-12`), radii, control heights and shadows are all tokens. Nothing is smaller than
-  11px. Numbers use tabular figures.
+- The look is Concept A, "Editorial light" ([DESIGN.md](../internal/DESIGN.md#concept-a--editorial-light)).
+  Light (warm paper) is the `:root` base. Dark ("night paper") applies when the OS asks for
+  it, or when the user picks it with the header toggle (`ThemeToggle`, stored in
+  `localStorage["jobflow-theme"]`). Every colour token is defined for both themes, so use
+  `var(--text-2)`, never a hex value.
+- Two faces: `--font-display` (Fraunces) for headings and score numerals, and `--font-sans`
+  (Schibsted Grotesk) for everything else. `h1`–`h3` get the display face automatically.
+- Type sizes (`--fs-2xs` 11px to `--fs-2xl` 44px, plus `--fs-score`), spacing on a 4px grid
+  (`--s-1` to `--s-16`), radii, control heights and shadows are all tokens. Nothing is smaller
+  than 11px. Numbers use tabular figures.
+- Sections are separated by rules (`--border`, `--border-strong`, the ink `--rule`), not
+  boxes. Don't wrap new content in a bordered card.
 - Monospace (`--font-mono`) is for code-like content only: the search syntax, LaTeX,
   ATS slugs.
 
 ### Colour carries meaning
 
-One accent (indigo) means "you can act here". Four semantic tones mean the same thing on
+One accent (vermilion) means "you can act here". Four semantic tones mean the same thing on
 every page:
 
 | Tone | Means | Examples |
