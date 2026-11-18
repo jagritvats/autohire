@@ -506,7 +506,7 @@ export function SettingsForm({
             <button
               key={s}
               className="chip"
-              data-on={prefs.stackProfile.includes(s)}
+              data-on={prefs.stackProfile.includes(s)} aria-pressed={prefs.stackProfile.includes(s)}
               onClick={() => setPrefs({ ...prefs, stackProfile: toggleArr(prefs.stackProfile, s) })}
             >
               {s.replace(/_/g, " ")}
@@ -559,7 +559,7 @@ export function SettingsForm({
             <button
               key={a}
               className="chip"
-              data-on={prefs.targetArchetypes.includes(a as never)}
+              data-on={prefs.targetArchetypes.includes(a as never)} aria-pressed={prefs.targetArchetypes.includes(a as never)}
               onClick={() => setPrefs({ ...prefs, targetArchetypes: toggleArr(prefs.targetArchetypes as string[], a) as never })}
             >
               {a.replace(/_/g, "/")}
@@ -576,13 +576,13 @@ export function SettingsForm({
             <button
               key={g}
               className="chip"
-              data-on={(prefs.remoteGeoOk as string[]).includes(g)}
+              data-on={(prefs.remoteGeoOk as string[]).includes(g)} aria-pressed={(prefs.remoteGeoOk as string[]).includes(g)}
               onClick={() => setPrefs({ ...prefs, remoteGeoOk: toggleArr(prefs.remoteGeoOk as string[], g) as never })}
             >
               {g.replace(/_/g, "-")}
             </button>
           ))}
-          <button className="chip" data-on={prefs.relocate} onClick={() => setPrefs({ ...prefs, relocate: !prefs.relocate })}>
+          <button className="chip" data-on={prefs.relocate} aria-pressed={prefs.relocate} onClick={() => setPrefs({ ...prefs, relocate: !prefs.relocate })}>
             open to relocate
           </button>
         </div>
@@ -779,7 +779,7 @@ export function SettingsForm({
             <button
               key={s}
               className="chip amber"
-              data-on={config.automationFlags.tier3Sources.includes(s)}
+              data-on={config.automationFlags.tier3Sources.includes(s)} aria-pressed={config.automationFlags.tier3Sources.includes(s)}
               onClick={() =>
                 setConfig({
                   ...config,
