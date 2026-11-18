@@ -94,7 +94,9 @@ describe("LLM re-rank write-ups persist on matches (§11.6)", () => {
     const repo = new InMemoryRepository();
     const co = await repo.upsertCompany({ name: "Acme", nameNorm: "acme", atsType: "greenhouse", atsSlug: "acme" });
     for (const jobId of ["a", "b", "c"]) {
-      await repo.upsertPosting(await toNewPosting({ ...normalized, atsJobId: jobId, dedupKey: `k${jobId}` }, co.id, "Acme", counting("x")));
+      // three distinct roles (one board's identically titled reqs in one city dedup to one card)
+      const title = `Backend Engineer, Team ${jobId.toUpperCase()}`;
+      await repo.upsertPosting(await toNewPosting({ ...normalized, title, atsJobId: jobId, dedupKey: `k${jobId}` }, co.id, "Acme", counting("x")));
     }
     let profile = sampleProfile();
     await repo.saveProfile(profile);

@@ -1,28 +1,26 @@
 import Link from "next/link";
-import { AccountMenu } from "@/components/AccountMenu";
 import { pageAuth } from "@/lib/auth";
-import { ActivityPanel } from "@/components/ActivityPanel";
+import { AppFrame } from "@/components/AppFrame";
 import { CompaniesView } from "@/components/CompaniesView";
+import { Icon } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
+/** Every company JobFlow knows (from presets, your sources and discovery) — reached from Sources. */
 export default async function CompaniesPage() {
   await pageAuth("/companies");
   return (
-    <div className="settings-shell">
-      <header className="settings-head">
-        <h1 className="wordmark">
-          Job<span className="flow">Flow</span> <span className="settings-sub">/ registry</span>
-        </h1>
-        <nav className="rail-nav" style={{ margin: 0 }}>
-          <Link href="/">feed</Link>
-          <Link href="/companies" data-active="true">registry</Link>
-          <Link href="/settings">settings</Link>
-          <AccountMenu />
-        </nav>
-      </header>
-      <ActivityPanel />
+    <AppFrame
+      wide
+      title="Companies"
+      eyebrow={
+        <Link href="/sources">
+          <Icon name="arrowLeft" size={14} /> Sources
+        </Link>
+      }
+      intro="Every company JobFlow polls, from your presets, your own sources and what discovery found."
+    >
       <CompaniesView />
-    </div>
+    </AppFrame>
   );
 }

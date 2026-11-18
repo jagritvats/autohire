@@ -12,17 +12,19 @@ interface TokenMeta {
   revokedAt: string | null;
 }
 
+// the `cli` scope is a plain HTTP API token (there is no `jobflow login`: the CLI talks to
+// its own local store, not to a server) — label it for what it does
 const SCOPES = [
-  { id: "cli", label: "CLI", hint: "jobflow login --server …" },
-  { id: "extension", label: "extension", hint: "paste into the extension's options" },
-  { id: "agent", label: "local agent", hint: "JOBFLOW_AGENT_TOKEN on your machine" },
+  { id: "extension", label: "extension", hint: "paste into the browser extension's options page" },
+  { id: "agent", label: "local agent", hint: "set JOBFLOW_AGENT_TOKEN in the agent's .env" },
+  { id: "cli", label: "scripts / API", hint: "send as Authorization: Bearer <token> to this server's /api routes" },
 ] as const;
 
-/** API tokens for the CLI, browser extension and local agent — shown once, stored hashed. */
+/** API tokens for the browser extension, the local agent and scripts — shown once, stored hashed. */
 export function TokensPanel() {
   const [tokens, setTokens] = useState<TokenMeta[]>([]);
   const [name, setName] = useState("");
-  const [scopes, setScopes] = useState<string[]>(["cli"]);
+  const [scopes, setScopes] = useState<string[]>(["extension"]);
   const [fresh, setFresh] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,17 +58,17 @@ export function TokensPanel() {
   return (
     <div className="tokens-panel">
       <p className="hint">
-        Tokens let the CLI, the browser extension and your local agent act as you. Each is shown once and stored only as
-        a hash — revoke one if a machine is lost.
+        A token lets the browser extension, your local agent or a script act as you on this server. Each is shown once and stored
+        only as a hash — revoke one if a machine is lost.
       </p>
       <div className="tokens-new">
-        <input placeholder="name (e.g. laptop)" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
+        <input aria-label="Token name" placeholder="name (e.g. laptop)" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
         {SCOPES.map((s) => (
           <button
             key={s.id}
             type="button"
             className="chip"
-            data-on={scopes.includes(s.id)}
+            data-on={scopes.includes(s.id)} aria-pressed={scopes.includes(s.id)}
             title={s.hint}
             onClick={() => setScopes(scopes.includes(s.id) ? scopes.filter((x) => x !== s.id) : [...scopes, s.id])}
           >
@@ -77,7 +79,7 @@ export function TokensPanel() {
           + create
         </button>
       </div>
-      {error && <p className="auth-error">{error}</p>}
+      {error && <p className="auth-error" role="alert">{error}</p>}
       {fresh && (
         <div className="token-fresh">
           <code>{fresh}</code>

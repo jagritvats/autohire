@@ -105,14 +105,15 @@ export function EvidenceEditor({ promote = [] }: { promote?: PromoteItem[] }) {
       {rows.map((r, i) => (
         <div className="ev-row" key={r.id || `new-${i}`}>
           <div className="ev-line">
-            <input className="ev-project" value={r.project} placeholder="project" onChange={(e) => setField(i, { project: e.target.value })} />
-            <input className="ev-headline" value={r.headline} placeholder="headline — what you built" onChange={(e) => setField(i, { headline: e.target.value })} />
+            <input className="ev-project" aria-label="Project" value={r.project} placeholder="project" onChange={(e) => setField(i, { project: e.target.value })} />
+            <input className="ev-headline" aria-label="Headline" value={r.headline} placeholder="headline — what you built" onChange={(e) => setField(i, { headline: e.target.value })} />
           </div>
-          <textarea className="ev-detail" rows={2} value={r.detail} placeholder="detail — specifics, the hard part" onChange={(e) => setField(i, { detail: e.target.value })} />
+          <textarea className="ev-detail" aria-label="Detail" rows={2} value={r.detail} placeholder="detail — specifics, the hard part" onChange={(e) => setField(i, { detail: e.target.value })} />
           <div className="ev-line">
-            <input className="ev-metric" value={r.metric ?? ""} placeholder="metric (optional)" onChange={(e) => setField(i, { metric: e.target.value })} />
+            <input className="ev-metric" aria-label="Metric" value={r.metric ?? ""} placeholder="metric (optional)" onChange={(e) => setField(i, { metric: e.target.value })} />
             <input
               className="ev-tags"
+              aria-label="Tags"
               value={r.tags.join(", ")}
               placeholder="tags, comma-separated"
               onChange={(e) => setField(i, { tags: e.target.value.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean) })}
@@ -130,7 +131,7 @@ export function EvidenceEditor({ promote = [] }: { promote?: PromoteItem[] }) {
       <button className="cmd add" style={{ marginTop: 10 }} onClick={() => setRows((rs) => [...rs, blank()])}>
         + add evidence
       </button>
-      {msg && <span className="ev-msg">{msg}</span>}
+      <span aria-live="polite">{msg && <span className="ev-msg">{msg}</span>}</span>
     </div>
   );
 }

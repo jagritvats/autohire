@@ -12,7 +12,10 @@ export type CardLike = FeedCard & { relevance?: number; inFeed?: boolean };
 export function locationLabel(c: FeedCard): string {
   const l = c.location;
   if (l.mode === "remote") {
-    const geo = l.remoteGeo && l.remoteGeo !== "unknown" ? ` (${l.remoteGeo.replace(/_/g, " ")})` : "";
+    const geo =
+      l.remoteGeo === "country_only" && l.country
+        ? ` (${l.country} only)`
+        : l.remoteGeo && l.remoteGeo !== "unknown" ? ` (${l.remoteGeo.replace(/_/g, " ")})` : "";
     return `Remote${geo}`;
   }
   const mode = l.mode === "unknown" ? "" : l.mode.charAt(0).toUpperCase() + l.mode.slice(1);

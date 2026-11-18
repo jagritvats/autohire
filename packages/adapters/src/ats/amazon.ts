@@ -1,5 +1,5 @@
 import type { RawPosting } from "@jobflow/core";
-import { htmlToText, httpJson, httpStatus, liveFromStatus, type FetchTarget, type SourceAdapter, type LivenessTarget } from "../types.js";
+import { markPartial, htmlToText, httpJson, httpStatus, liveFromStatus, type FetchTarget, type SourceAdapter, type LivenessTarget } from "../types.js";
 
 /**
  * Amazon Jobs (Tier 2: the public JSON amazon.jobs' own search calls, no auth). One
@@ -32,8 +32,9 @@ interface AmzResponse {
 
 const ISO3: Record<string, string> = { IN: "IND", US: "USA", GB: "GBR", DE: "DEU", SG: "SGP", CA: "CAN" };
 const PAGE = 100;
-/** track the most recent N (sorted by recency) — older reqs age out of the window, which
- *  markStale treats as closed; at Amazon's volume anything older is rarely still live. */
+/** track the most recent N (sorted by recency). A list cut here is PARTIAL: an older req
+ *  past the window may still be open, so the lastSeen TTL sweep retires it — never a
+ *  markStale diff against the truncated list (invariant #5). */
 const MAX_LIST = 500;
 
 export class AmazonJobsAdapter implements SourceAdapter {
@@ -49,6 +50,8 @@ export class AmazonJobsAdapter implements SourceAdapter {
     const query = target.slug && target.slug !== "amazon" ? target.slug : "software";
     const country = target.location ? ISO3[target.location.toUpperCase()] ?? target.location : null;
     const out: RawPosting[] = [];
+    const seen = new Set<string>();
+    let hits = 0;
     for (let offset = 0; offset < MAX_LIST; offset += PAGE) {
       const qs = new URLSearchParams({ base_query: query, result_limit: String(PAGE), offset: String(offset), sort: "recent" });
       if (country) qs.set("country", country);
@@ -56,10 +59,16 @@ export class AmazonJobsAdapter implements SourceAdapter {
       // a failed page mid-list would make the tail look closed to markStale — all or nothing
       if (!res) return [];
       const jobs = res?.jobs ?? [];
-      for (const j of jobs) out.push(toRaw(j));
-      if (jobs.length < PAGE || out.length >= (res?.hits ?? 0)) break;
+      hits = res?.hits ?? 0;
+      // a new req shifts recency-sorted pages, so a row can repeat across pages
+      for (const j of jobs) {
+        if (seen.has(j.id_icims)) continue;
+        seen.add(j.id_icims);
+        out.push(toRaw(j));
+      }
+      if (jobs.length < PAGE || offset + PAGE >= hits) break;
     }
-    return out;
+    return out.length < hits ? markPartial(out) : out;
   }
 }
 

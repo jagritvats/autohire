@@ -4,6 +4,8 @@ import { httpJson, httpText } from "../types.js";
 import { parseWorkdaySlug } from "../ats/workday.js";
 import { parseEightfoldSlug } from "../ats/eightfold.js";
 import { talentBrewQuery } from "../ats/talentbrew.js";
+import { personioHost } from "../ats/personio.js";
+import { teamtailorHost } from "../ats/teamtailor.js";
 
 /**
  * ATS Detector (§ ATS Detector). Given a careers URL and/or company name, identify
@@ -35,6 +37,10 @@ const URL_PATTERNS: Array<{ ats: AtsType; re: RegExp; group: number }> = [
   { ats: "workable", re: /([^./]+)\.workable\.com/i, group: 1 },
   { ats: "recruitee", re: /([^./]+)\.recruitee\.com/i, group: 1 },
   { ats: "personio", re: /([^./]+)\.jobs\.personio\.(?:de|com)/i, group: 1 },
+  // not the CDN/app hosts (teamtailor-cdn.com doesn't match; app./api./www. are reserved)
+  { ats: "teamtailor", re: /(?<![a-z0-9.-])([a-z0-9-]+)\.teamtailor\.com/i, group: 1 },
+  { ats: "bamboohr", re: /(?<![a-z0-9.-])([a-z0-9-]+)\.bamboohr\.com/i, group: 1 },
+  { ats: "breezy", re: /(?<![a-z0-9.-])([a-z0-9-]+)\.breezy\.hr/i, group: 1 },
   { ats: "smartrecruiters", re: /(?:careers|jobs)\.smartrecruiters\.com\/([^/?#]+)/i, group: 1 },
   { ats: "rippling", re: /ats\.rippling\.com\/([^/?#]+)/i, group: 1 },
   { ats: "rippling", re: /api\.rippling\.com\/platform\/api\/ats\/v\d\/board\/([^/?#]+)/i, group: 1 },
@@ -48,7 +54,7 @@ const URL_PATTERNS: Array<{ ats: AtsType; re: RegExp; group: number }> = [
 ];
 
 /** path segments that are never a board slug (script/embed/API paths in page HTML). */
-const RESERVED_SLUG = /^(embed|js|css|api|static|assets|v\d+|www|app|apply|wday|cxs|jobs|job|careers?|en-[a-z]{2})$/i;
+const RESERVED_SLUG = /^(embed|js|css|api|static|assets|v\d+|www|app|apply|wday|cxs|jobs|job|careers?|en-[a-z]{2}|cdn|help|support|docs|blog|status|marketplace|partners|media|images?)$/i;
 
 /**
  * Every (ats, slug) a URL — or a whole careers-page HTML — points at, in pattern order.
@@ -90,6 +96,9 @@ export function atsCandidates(text: string, pageUrl?: string): Array<{ ats: AtsT
   const pageHost = pageUrl?.match(/^https?:\/\/([a-z0-9.-]+)/i)?.[1]?.toLowerCase();
   if (pageHost && /\bjibecdn\.com\//i.test(text)) add("jibe", pageHost);
   if (pageHost && /\btbcdn\.talentbrew\.com\//i.test(text)) add("talentbrew", pageHost);
+  // a Teamtailor career site on the company's own domain (jobs.lunar.app) serves the same
+  // jobs.rss; its assets come from teamtailor-cdn.com
+  if (pageHost && !pageHost.endsWith(".teamtailor.com") && /\bteamtailor-cdn\.com\//i.test(text)) add("teamtailor", pageHost);
   return out;
 }
 
@@ -167,6 +176,26 @@ async function probe(ats: AtsType, slug: string): Promise<boolean> {
     case "recruitee": {
       const r = await httpJson<{ offers?: unknown[] }>(`https://${slug}.recruitee.com/api/offers/`, { timeoutMs: 12_000 });
       return Array.isArray(r?.offers);
+    }
+    case "personio": {
+      // an unknown subdomain answers 404; a live one an XML <workzag-jobs> document
+      const host = personioHost(slug);
+      const xml = host ? await httpText(`https://${host}/xml`, { timeoutMs: 15_000 }) : null;
+      return !!xml && /<workzag-jobs\b/.test(xml);
+    }
+    case "teamtailor": {
+      const host = teamtailorHost(slug);
+      const rss = host ? await httpText(`https://${host}/jobs.rss`, { timeoutMs: 12_000 }) : null;
+      return !!rss && /<rss\b/.test(rss) && /teamtailor/i.test(rss.slice(0, 600));
+    }
+    case "bamboohr": {
+      // an unknown subdomain 302s to bamboohr.com (no JSON) — don't follow it
+      const r = await httpJson<{ result?: unknown[] }>(`https://${encodeURIComponent(slug)}.bamboohr.com/careers/list`, { timeoutMs: 12_000, redirect: "manual" });
+      return Array.isArray(r?.result);
+    }
+    case "breezy": {
+      const r = await httpJson<unknown[]>(`https://${encodeURIComponent(slug)}.breezy.hr/json`, { timeoutMs: 12_000 });
+      return Array.isArray(r);
     }
     case "oracle": {
       const [host, site] = slug.split("/");

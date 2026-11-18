@@ -42,9 +42,18 @@ export type Requirement = z.infer<typeof Requirement>;
 export const ParsedLocation = z.object({
   mode: LocationMode,
   city: z.string().nullable().default(null),
+  /** the PRIMARY country (display name, or the region "Europe") — one per posting */
   country: z.string().nullable().default(null),
+  /**
+   * Every country (ISO-2, primary first) the location string places the role in: a
+   * Greenhouse role with offices in Austin and London is ["US", "GB"]. Market matching and
+   * the "abroad" checks consider any of them (`locationInCountry`). Absent on rows parsed
+   * before it existed — readers fall back to `country`.
+   */
+  countries: z.array(z.string()).optional(),
   timezone: z.string().nullable().default(null),
-  remoteGeo: RemoteGeo.default("unknown"),
+  // a value this build doesn't know (a newer writer) reads as "unknown", never a parse error
+  remoteGeo: RemoteGeo.default("unknown").catch("unknown"),
   sponsorship: z.boolean().nullable().default(null),
   /**
    * 0..1 confidence in the parsed geo (§11.3). High = explicit city+country or an
@@ -226,6 +235,12 @@ export const Posting = z.object({
   requirements: z.array(Requirement).default([]),
 
   location: ParsedLocation,
+  /**
+   * The source's own location text as fetched ("Hybrid - Austin, TX; London, United
+   * Kingdom"), kept so a parser fix can re-derive `location` from stored postings
+   * (`renormalizePostings`) instead of waiting for a re-poll. Absent on older rows.
+   */
+  locationRaw: z.string().nullable().optional(),
   salary: SalaryBand,
   /**
    * The source's own salary text as fetched (Lever/Ashby/Naukri pay strings), kept so an

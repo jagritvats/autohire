@@ -50,3 +50,21 @@ Then ask GitHub Support to remove cached views and dangling objects.
 - [ ] LICENSE holder line and repository URLs in `package.json`, `.github/ISSUE_TEMPLATE/config.yml`,
       `SECURITY.md` and `CODE_OF_CONDUCT.md` point at the public repo
 - [ ] Secrets: rotate any API keys that were ever in a local `.env` you shared
+
+## Cutting the release (after the history is clean)
+
+```bash
+# on the public repo's default branch, with CI green
+git tag -a v0.1.0 -m "JobFlow v0.1.0"
+git push public v0.1.0
+gh release create v0.1.0 --title "JobFlow v0.1.0" --notes-file docs/internal/RELEASE_NOTES_v0.1.0.md
+```
+
+Then on GitHub:
+
+- [ ] Repository description + topics (job-search, ats, cli, self-hosted, typescript)
+- [ ] Social preview image: `docs/screenshots/jobs.png`
+- [ ] Enable Discussions (the issue template's "Questions" link points there) and private
+      vulnerability reporting (Security → Advisories)
+- [ ] Branch protection on `main`: require the `ci` workflow (build-test + guards)
+- [ ] Optional: Actions secrets for the scheduled poll (`DATABASE_URL` with `?sslmode=require`)

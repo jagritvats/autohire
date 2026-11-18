@@ -17,7 +17,8 @@ import type { SeedCompany } from "./discover.js";
 const d = "daily" as const;
 
 export const INDIA_EMPLOYER_BOARDS: SeedCompany[] = [
-  // ── Workday ──
+  // ── Workday ── (removed 2026-11: NXP — the tenant answers 422 for every site; LiveRamp —
+  // its site answers 403 "permission denied")
   { name: "GE Vernova", careersUrl: "https://gevernova.wd5.myworkdayjobs.com/Vernova_ExternalSite", tags: ["global", "india", "energy"], pollCadence: d }, // 251 / 88
   { name: "Citi", careersUrl: "https://citi.wd5.myworkdayjobs.com/2", tags: ["global", "india", "fintech", "gcc"], pollCadence: d }, // 247 / 60
   { name: "Micron", careersUrl: "https://micron.wd1.myworkdayjobs.com/External", tags: ["global", "india", "hardware"], pollCadence: d }, // 230 / 53
@@ -25,7 +26,6 @@ export const INDIA_EMPLOYER_BOARDS: SeedCompany[] = [
   { name: "Cadence", careersUrl: "https://cadence.wd1.myworkdayjobs.com/External_Careers", tags: ["global", "india", "hardware"] }, // 179 / 19
   { name: "HPE", careersUrl: "https://hpe.wd5.myworkdayjobs.com/Jobsathpe", tags: ["global", "india", "hardware"], pollCadence: d }, // 178 / 117
   { name: "Walmart Global Tech", careersUrl: "https://walmart.wd504.myworkdayjobs.com/WalmartExternal", tags: ["global", "india", "consumer"] }, // 173 / 19
-  { name: "NXP", careersUrl: "https://nxp.wd3.myworkdayjobs.com/careers", tags: ["global", "india", "hardware"], pollCadence: d }, // 148 / 26
   { name: "Barclays", careersUrl: "https://barclays.wd3.myworkdayjobs.com/External_Career_Site_Barclays", tags: ["global", "india", "fintech", "gcc"], pollCadence: d }, // 143 / 79
   { name: "Airbus", careersUrl: "https://ag.wd3.myworkdayjobs.com/Airbus", tags: ["global", "india"], pollCadence: d }, // 113 / 89
   { name: "LSEG", careersUrl: "https://lseg.wd3.myworkdayjobs.com/Careers", tags: ["global", "india", "fintech"], pollCadence: d }, // 107 / 32
@@ -96,7 +96,6 @@ export const INDIA_EMPLOYER_BOARDS: SeedCompany[] = [
   { name: "Fiserv", careersUrl: "https://fiserv.wd5.myworkdayjobs.com/EXT", tags: ["global", "india", "fintech"] }, // 8 / 4
   { name: "CME Group", careersUrl: "https://cmegroup.wd1.myworkdayjobs.com/cme_careers", tags: ["global", "india", "fintech"] }, // 7 / 5
   { name: "Invesco", careersUrl: "https://invesco.wd1.myworkdayjobs.com/IVZ", tags: ["global", "india", "fintech"] }, // 6 / 4
-  { name: "LiveRamp", careersUrl: "https://liveramp.wd5.myworkdayjobs.com/liverampcareers", tags: ["global", "india", "saas"] }, // 6 / 3
   { name: "Lowe's", careersUrl: "https://lowes.wd5.myworkdayjobs.com/LWS_External_CS", tags: ["global", "india", "consumer", "gcc"] }, // 6 / 3
   { name: "Veralto", careersUrl: "https://veralto.wd1.myworkdayjobs.com/HachJobs", tags: ["global", "india"] }, // 5 / 5
   { name: "Ciena", careersUrl: "https://ciena.wd5.myworkdayjobs.com/Careers", tags: ["global", "india", "infra"] }, // 5 / 4
@@ -110,7 +109,6 @@ export const INDIA_EMPLOYER_BOARDS: SeedCompany[] = [
 
   // ── Eightfold, older /api/apply/v2 (PCSX answers 403; the detector resolves "…/v2") ──
   { name: "NetApp", careersUrl: "https://netapp.eightfold.ai/careers?domain=netapp.com", tags: ["global", "india", "infra"] }, // 34 / 12
-  { name: "Bayer", careersUrl: "https://talent.bayer.com/careers?domain=bayer.com", tags: ["global", "india", "health"] }, // 10 / 4
   { name: "HSBC", careersUrl: "https://portal.careers.hsbc.com/careers?domain=hsbc.com", tags: ["global", "india", "fintech", "gcc"] }, // 4 / 0 by title (159 India roles, 15 in Technology; ICs are titled "Consultant Specialist")
 
   // ── iCIMS Jibe (the careers site's own /api/jobs) ──
@@ -154,6 +152,29 @@ export const INDIA_EMPLOYER_BOARDS: SeedCompany[] = [
   { name: "Kong", careersUrl: "https://jobs.ashbyhq.com/kong", tags: ["global", "india", "devtools"] }, // 3 / 3
   { name: "CloudSEK", careersUrl: "https://boards.greenhouse.io/cloudsek", tags: ["india", "security"] }, // 3 / 3
   { name: "SigNoz", careersUrl: "https://jobs.ashbyhq.com/signoz", tags: ["india", "devtools", "oss", "infra"] }, // 9 / 2 (OSS, India-first)
+
+  // ── added in the 2026-11-18 coverage audit (docs/internal/PRESET_COVERAGE.md) ──
+  // Comments here: India-workable roles / of those engineering by title (any level) — a
+  // different yardstick from the junior/mid counts above.
+  { name: "eBay", careersUrl: "https://ebay.wd5.myworkdayjobs.com/apply", tags: ["global", "india", "consumer"], pollCadence: d }, // 105 / 45
+  { name: "S&P Global", careersUrl: "https://spgi.wd5.myworkdayjobs.com/SPGI_Careers", tags: ["global", "india", "fintech", "data"] }, // 59 / 25
+  { name: "Marvell", careersUrl: "https://marvell.wd1.myworkdayjobs.com/MarvellCareers", tags: ["global", "india", "hardware"] }, // 42 / 29
+  { name: "Gartner", careersUrl: "https://gartner.wd5.myworkdayjobs.com/EXT", tags: ["global", "india", "data"] }, // 36 / 7
+  { name: "Fidelity Investments", careersUrl: "https://fmr.wd1.myworkdayjobs.com/FidelityCareers", tags: ["global", "india", "fintech", "gcc"] }, // 17 / 10
+  { name: "Red Hat", careersUrl: "https://redhat.wd5.myworkdayjobs.com/jobs", tags: ["global", "india", "oss"] }, // 6 / 1
+  { name: "Zoom", careersUrl: "https://zoom.wd5.myworkdayjobs.com/Zoom", tags: ["global", "india", "saas"] }, // 4 / 2
+  { name: "Fivetran", careersUrl: "https://boards.greenhouse.io/fivetran", tags: ["global", "india", "data"] }, // 18 / 13
+  { name: "Bitwarden", careersUrl: "https://boards.greenhouse.io/bitwarden", tags: ["global", "india", "security", "oss"] }, // 17 / 17 (Noida)
+  { name: "Cloudflare", careersUrl: "https://boards.greenhouse.io/cloudflare", tags: ["global", "india", "infra", "remote"] }, // 17 / 8 ("Remote India", read from offices[])
+  { name: "Elastic", careersUrl: "https://boards.greenhouse.io/elastic", tags: ["global", "india", "infra", "remote"] }, // 17 / 4
+  { name: "IMC Trading", careersUrl: "https://boards.greenhouse.io/imc", tags: ["global", "india", "fintech"] }, // 15 / 8 (Mumbai)
+  { name: "Commvault", careersUrl: "https://boards.greenhouse.io/commvault", tags: ["global", "india", "infra"] }, // 8 / 5
+  { name: "Coursera", careersUrl: "https://boards.greenhouse.io/coursera", tags: ["global", "india", "edtech"] }, // 8 / 2
+  { name: "LaunchDarkly", careersUrl: "https://boards.greenhouse.io/launchdarkly", tags: ["global", "india", "devtools"] }, // 3 / 1
+  { name: "JumpCloud", careersUrl: "https://jobs.lever.co/jumpcloud", tags: ["global", "india", "saas", "remote"] }, // 15 / 8
+  { name: "Outreach", careersUrl: "https://jobs.lever.co/outreach", tags: ["global", "india", "saas"] }, // 4 / 2 (Hyderabad)
+  { name: "Ema", careersUrl: "https://jobs.ashbyhq.com/ema", tags: ["india", "ai"] }, // 15 / 10 (Bengaluru)
+  { name: "Composio", careersUrl: "https://jobs.ashbyhq.com/composio", tags: ["india", "ai", "devtools"] }, // 4 / 1 (Bengaluru)
 ];
 
 /** IT services / consulting — real employers for early-career engineers, tagged so the
