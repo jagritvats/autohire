@@ -25,6 +25,15 @@ const GEOS: { id: RemoteGeo; label: string }[] = [
   { id: "india_ok", label: "India OK" },
   { id: "apac_ok", label: "APAC OK" },
 ];
+const CONTACT_LABEL: Record<string, string> = {
+  firstName: "first name",
+  lastName: "last name",
+  email: "email",
+  phone: "phone",
+  linkedin: "LinkedIn",
+  github: "GitHub",
+  portfolio: "portfolio",
+};
 const CURRENCIES = ["USD", "EUR", "GBP", "INR", "CAD", "AUD", "SGD"];
 
 type Step = "resume" | "review" | "prefs" | "discovery";
@@ -279,7 +288,7 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
             <div className="field-row">
               {(Object.keys(contact) as (keyof typeof contact)[]).map((k) => (
                 <label key={k}>
-                  {k}
+                  {CONTACT_LABEL[k] ?? k}
                   <input value={contact[k]} onChange={(e) => setContact({ ...contact, [k]: e.target.value })} />
                 </label>
               ))}

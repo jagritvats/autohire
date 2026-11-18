@@ -65,7 +65,7 @@ application → apply → keep track and follow up.**
   searches, tracked applications, the model, and **one next step**. It does not dump the
   full help (clig.dev: "suggest what to run next").
 - `jobflow init` runs interactively, or with `--yes` plus flags.
-  - `--yes` with nothing to go on (no résumé, skills or sample) **refuses** with exit 4 and
+  - `--yes` with nothing to go on (no résumé, skills or sample) **refuses** with exit 2 (usage) and
     names the flags to pass. It does not save an empty profile and rank against it.
 - Commands that need a profile say so and give the command to run, with exit 4.
 - Unscored output (before `init`) never shows profile-relative notes ("you're mid", "not in

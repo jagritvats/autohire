@@ -15,6 +15,7 @@ pnpm -r build
 ## 1. Tell JobFlow who you are
 
 ```bash
+pnpm jobflow          # where you are and what to do next — run it any time
 pnpm jobflow init
 ```
 
@@ -99,8 +100,19 @@ See [guides/llm-providers.md](guides/llm-providers.md).
 ## The web app
 
 Prefer a UI? `pnpm jobflow serve` opens the same data in the browser at
-http://localhost:3000 — the ranked feed, search, discovery settings, the tailoring editor
-with PDF preview, and your application pipeline. It only answers on localhost.
+http://localhost:3000. It only answers on localhost.
+
+| Page | What it's for |
+|---|---|
+| **Jobs** | your ranked jobs; a tab per saved search; Saved and Hidden; a "get started" checklist until you're set up. Keys: `j`/`k` move, `o` open, `t` tailor, `a` apply, `s` save, `x` hide, `?` help |
+| **Search** | ask the live boards now; save a search to make it a Jobs tab |
+| **Applications** | to apply / in progress / closed, next steps and due follow-ups |
+| **Profile** | résumé, contact, skills, what you want, Evidence Bank |
+| **Sources** | presets, your own sources (with last-run status), Sync now |
+| **Settings** | writing model, applying & the local agent, data, API tokens |
+
+Click a job's title for its **Job page**: how you fit, the full description, your drafts, and
+the Apply checklist (open the form, pre-fill it, or mark it applied).
 
 ## Docker
 

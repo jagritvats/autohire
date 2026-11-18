@@ -68,3 +68,6 @@ section[id] { scroll-margin-top: 16px; }
 .ux-syntax { margin-top: 10px; font-size: 12px; }
 .ux-syntax table { border-collapse: collapse; margin-top: 6px; }
 .ux-syntax td { padding: 2px 12px 2px 0; vertical-align: top; }
+
+/* the filter rail: hints stay small */
+.rail .hint { font-size: 11px; line-height: 1.5; color: var(--ink-faint); margin: 4px 0 0; }

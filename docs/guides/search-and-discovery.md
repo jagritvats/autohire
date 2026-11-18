@@ -52,7 +52,7 @@ pnpm jobflow searches rm remote-backend
 ```
 
 A saved search runs on each `jobflow sync` (daily by default) and its results join your
-feed. In the web app: **/searches**, and "view in feed" shows the feed through it.
+feed. In the web app: **Search** (`/search`) → "Save search"; each saved search becomes a **tab on the Jobs page** (`/?view=<id>`) that shows how many jobs it hides and why.
 
 ## Discovery presets
 
@@ -81,10 +81,10 @@ pnpm jobflow search "backend engineer" --preset us,eu-uk
 pnpm jobflow feed --preset india
 ```
 
-In the web app, the feed sidebar has a **preset** filter and the search page has preset chips.
+In the web app, the Jobs page's filter rail has a **preset** filter and the Search page has preset chips. Every rail filter is a view too: the page says how many jobs the filters hid, per reason, with a "clear filters" button.
 Like every view filter, it only hides — scores never change — and the hidden count is shown.
 
-Turn individual preset feeds off in the web app (**/discovery**) or with
+Turn individual preset feeds off in the web app (**Sources**, `/sources` — which also shows each of your own sources' last run, and has **Sync now**) or with
 `jobflow discovery disable <feed-id>`.
 
 ## Your own sources

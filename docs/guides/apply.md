@@ -4,6 +4,23 @@ JobFlow helps you apply well — tailored, grounded documents and a pre-filled f
 **stops**. You review every field and click submit yourself. That isn't a missing feature;
 it's the point: what goes out in your name should be something you've read.
 
+## From the web app
+
+Every job has a **Job page** (click its title, or press `o` on the Jobs page). Its **Apply**
+panel is a checklist — your name, your email, a résumé file to attach, an optional cover
+letter — with a fix link for anything missing, followed by three options:
+
+1. **Open form** — apply in your browser yourself.
+2. **Pre-fill it on this computer** — shows the exact `jobflow apply <id> --fill` command to run
+   (stop `jobflow serve` first: the local database takes one writer at a time), or a button
+   when the local agent is running (below).
+3. **I submitted it — mark applied** — then add a follow-up date; it appears under
+   Applications when it's due.
+
+**Tailor** (from a card or the Job page) drafts a résumé, cover letter or answers. Each draft
+says where it came from: *from your résumé (template)* without a model, or *written by
+&lt;model&gt;*. "Next: apply →" takes you back to the Apply panel.
+
 ## From the CLI
 
 ```bash
@@ -71,9 +88,9 @@ The agent is the only part that touches your logged-in sessions, so turning it o
    JOBFLOW_BROWSER_MODE=fill          # only if you want form-fill; else leave 'capture'
    JOBFLOW_BROWSER_PROFILE=~/jobflow-chrome   # a profile logged into LinkedIn/Naukri
    ```
-3. **Opt in from the UI:** Settings → Automation → toggle "browser automation (master)" on, and select the Tier-3 sources you want (`naukri`, `linkedin`, `peerlist`, `wellfound`, `darwinbox`, …). Save.
-4. **Run the agent:** `pnpm --filter @jobflow/agent start`. It heartbeats every 30s → the feed's "local agent" pill goes green and shows the enabled sources.
-5. **Use it:** the feed/CRM "fill" buttons enqueue `form_fill` (the agent opens the form in your browser, fills it, **stops at review** — you submit); Settings "browse {source}" buttons enqueue `tier3_poll`, which runs the good-paying-India-SWE sweep (query × tech-hub × CTC floor) in your session and then enqueues a `rank` so the new postings surface in the feed. Override the sweep per-run via the job payload (`queries`, `locations`, `minLpa`, `limit`, `maxTargets`) or globally via the `JOBFLOW_TIER3_*` env vars above. `local_board_poll` (payload `{}` for every local-only board, or `{ "companyId": "…" }` for one) polls the Darwinbox boards.
+3. **Opt in from the UI:** Settings → Applying & the local agent → tick "let the local agent open a browser for me", and (under "Logged-in job sites") select the Tier-3 sources you want (`naukri`, `linkedin`, `peerlist`, `wellfound`, `darwinbox`, …). Save.
+4. **Run the agent:** `pnpm --filter @jobflow/agent start`. It heartbeats every 30s; while it's online, each Job page's Apply panel shows a **Pre-fill with the local agent** button (and Sources → Sync → Maintenance shows the agent's queue).
+5. **Use it:** the Job page's "Pre-fill" button enqueues `form_fill` (the agent opens the form in your browser, fills it, **stops at review** — you submit); Settings "search {source}" buttons enqueue `tier3_poll`, which runs the good-paying-India-SWE sweep (query × tech-hub × CTC floor) in your session and then enqueues a `rank` so the new postings surface in the feed. Override the sweep per-run via the job payload (`queries`, `locations`, `minLpa`, `limit`, `maxTargets`) or globally via the `JOBFLOW_TIER3_*` env vars above. `local_board_poll` (payload `{}` for every local-only board, or `{ "companyId": "…" }` for one) polls the Darwinbox boards.
 6. **Unattended (optional):** leave the agent running. Every `JOBFLOW_LOCAL_POLL_EVERY_HOURS` (default 12), it enqueues one job per opted-in source whose last run is older than that, skipping sources that already have a job queued. Each run of jobs ends with a single `rank`. Set `0` to keep it click-only.
 
 **Honest caveats:**

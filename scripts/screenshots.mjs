@@ -88,15 +88,19 @@ try {
 
   await shot("feed", "/", { wait: "article.card" });
   await shot("match-card", "/", { wait: "article.card", element: "article.card" });
-  await shot("search", "/searches", {
+  await shot("search", "/search", {
     before: async (p) => {
       await p.fill(".search-bar input", '"backend engineer" --remote --posted 14d');
     },
   });
-  await shot("discovery", "/discovery", { wait: ".onb-preset" });
+  await shot("discovery", "/sources", { wait: ".onb-preset" });
   await shot("onboarding", "/onboarding");
-  await shot("applications", "/applications", { wait: "table, .app-row, li" });
+  await shot("applications", "/applications", { wait: ".crm-row" });
+  await shot("profile", "/profile");
   await shot("settings", "/settings");
+  // the Job page (fit, description, the apply checklist) for the top card
+  const job = await page.goto(`${BASE}/`).then(() => page.locator('a[href^="/jobs/"]').first().getAttribute("href")).catch(() => null);
+  if (job) await shot("job", job);
   // tailor page for the top card
   const href = await page.goto(`${BASE}/`).then(() => page.locator('a[href^="/tailor/"]').first().getAttribute("href")).catch(() => null);
   if (href) await shot("tailor", href);

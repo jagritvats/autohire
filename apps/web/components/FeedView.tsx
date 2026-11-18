@@ -422,7 +422,6 @@ export function FeedView({
 
         <div className="statsbar">
           <Stat n={cards.length} l="shown" good />
-          {scored && <Stat n={data.stats.ranked} l="ranked for you" />}
           <Stat n={data.stats.postings} l="jobs in your list" muted />
           <span className="hint" style={{ alignSelf: "center" }}>
             {lastSync ? `last sync ${relTime(lastSync)}` : "never synced"}

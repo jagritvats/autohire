@@ -18,7 +18,7 @@ pnpm jobflow config set llm.model claude-opus-5-5 # optional: override the stron
 pnpm jobflow doctor                               # sends a 1-token test
 ```
 
-Or in the web app: Settings → Generation model (with a "test" button). The key is stored in
+Or in the web app: Settings → Writing model (it shows the model in use, and has a "Test connection" button). The key is stored in
 your own database (encrypted at rest when `JOBFLOW_SECRET_KEY` is set), is never shown back
 in the UI, and is redacted from error messages and logs.
 

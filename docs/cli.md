@@ -50,7 +50,12 @@ Optional extras, only for the features that need them:
 
 ## The 5-minute path
 
+Not sure where you are? Run `pnpm jobflow` on its own: it shows your profile, jobs, saved
+searches, applications and model, a getting-started checklist, and the **one** command to
+run next.
+
 ```bash
+pnpm jobflow                                   # where you are + what to do next
 pnpm jobflow init                              # résumé → review → preferences → presets
 pnpm jobflow sync                              # poll your presets + sources, then rank (≈1–2 min)
 pnpm jobflow feed                              # your ranked match cards
@@ -84,6 +89,13 @@ corpus yet are kept aside, and the one you pick is saved into your corpus the mo
 Global options (anywhere on the line): `--json`, `--data-dir <dir>`,
 `--store pglite|memory`, `--no-color`. Every command has `--help`.
 
+### `jobflow` / `jobflow status`
+
+```bash
+pnpm jobflow             # status + the next step (the full command list is `jobflow --help`)
+pnpm -s jobflow --json   # the same as JSON: steps, next, profile, corpus, searches, applications, model
+```
+
 ### `jobflow init`
 
 Interactive onboarding. It reads your résumé, shows what it extracted (name, email, skills,
@@ -102,6 +114,10 @@ pnpm jobflow init --yes --resume ./cv.pdf --home US --markets US,CA \
 pnpm jobflow init --yes --sample                # the fictional persona
 cat cv.txt | pnpm jobflow init --yes --resume -  # résumé text on stdin
 ```
+
+`--yes` needs something to build a profile from — `--resume`, `--skills` or `--sample`; with
+none of them it stops (exit 2) instead of saving an empty profile that every score would then
+be invented against. Interactively, skipping the résumé means typing at least one skill.
 
 Other flags: `--name`, `--email`, `--phone`, `--linkedin`, `--github`, `--portfolio`,
 `--skills`, `--yoe`, `--level`, `--relocate`/`--no-relocate`, `--locations`, `--assist`
@@ -185,6 +201,9 @@ Flags: `--remote`, `--onsite`, `--loc <place>` (repeatable), `--country <CC>`,
 `-n/--limit` (15), `--sort score|relevance`, `--format cards|table`, `--save-as <name>`,
 `--ingest`.
 
+Before `init` the results are **unscored**: no score, no notes about "your stack" or level,
+and nothing hard-excluded — there's no profile to judge them against yet.
+
 Each card shows the score, title, company, location, pay (stated, or a labelled estimate
 with its confidence), age, source, stack fit, level note, red flags, preset tags and the
 apply link. A search writes nothing to your corpus unless you `--ingest` or pick a result.
@@ -247,7 +266,7 @@ pnpm jobflow feed                          # top 20
 pnpm jobflow feed -n 50 --min-score 70 --format table
 pnpm jobflow feed --search go-remote       # through a saved search (hidden counts shown)
 pnpm jobflow feed --preset india           # only #india roles
-pnpm jobflow show 3 [--jd]                 # details, tracker status, cached drafts
+pnpm jobflow show 3 [--jd]                 # details, fit, tracker status, drafts, "ready?" + next commands
 ```
 
 Before you've set up a profile the feed is a **browse** feed — freshest postings, no
@@ -290,7 +309,9 @@ pnpm jobflow apply 1 --fill    # pre-fill it in a local browser, then STOP for y
 ```
 
 The dry run also lists anything to fix first (no email, no résumé file to attach…) with the
-exact command to fix it, and marks the posting **ready** in your tracker.
+exact command to fix it. It moves the posting forward in your tracker: **ready** when nothing
+is missing, otherwise **drafting** with the fix as its next step. Nothing is filled or sent by
+a dry run.
 
 `--fill` needs Playwright + Chromium and a one-time `jobflow config set automation.fill on`
 (an explicit `JOBFLOW_BROWSER=off` in the environment always wins). It opens the form in a
