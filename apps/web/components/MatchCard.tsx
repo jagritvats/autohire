@@ -1,6 +1,7 @@
 import type { FeedCard } from "@/lib/feed";
 import { ageText, experienceText, locationText, payText, roleText } from "@/lib/cardText";
 import { Badge, Icon } from "@/components/ui";
+import { skillText } from "@jobflow/core";
 
 const TIER3 = new Set(["naukri", "ambitionbox", "glassdoor", "linkedin"]);
 
@@ -194,6 +195,18 @@ export function MatchCard({
           </ul>
         )}
 
+        {card.siblings?.length > 0 && (
+          <p className="match__more">
+            Also posted for{" "}
+            {card.siblings.map((sib, i) => (
+              <span key={sib.id}>
+                {i > 0 ? ", " : ""}
+                <a href={`/jobs/${sib.id}`}>{sib.place}</a>
+              </span>
+            ))}
+          </p>
+        )}
+
         {moreAtCompany > 0 && (
           <p className="match__more">
             <a href={`/company/${card.companyId}`}>
@@ -206,7 +219,7 @@ export function MatchCard({
           <div className="match__skills" aria-label="Skills in the posting">
             {card.skills.map((s) => (
               <span className="match__skill" key={s}>
-                {s.replace(/_/g, " ")}
+                {skillText(s)}
               </span>
             ))}
           </div>

@@ -601,6 +601,13 @@ export function FeedView({
             </Button>
           </p>
         )}
+        {(data.stats.siblingsFolded ?? 0) > 0 && (
+          <p className="ux-hidden-report" role="status">
+            <span>
+              <b>{data.stats.siblingsFolded}</b> more posted for other countries — shown once, under “Also posted for” on their role. Scores are unchanged.
+            </span>
+          </p>
+        )}
         {cards.length > 0 && (
           <p className="ux-kbd">
             {showKeys ? (
