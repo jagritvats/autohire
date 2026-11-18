@@ -17,6 +17,9 @@ const lever = (slug: string) => `https://jobs.lever.co/${slug}`;
 const sr = (slug: string) => `https://careers.smartrecruiters.com/${slug}`;
 const wk = (slug: string) => `https://apply.workable.com/${slug}`;
 const wd = (host: string, site: string) => `https://${host}.myworkdayjobs.com/${site}`;
+const tt = (slug: string) => `https://${slug}.teamtailor.com/jobs`;
+const rc = (slug: string) => `https://${slug}.recruitee.com/`;
+const pe = (slug: string) => `https://${slug}.jobs.personio.de/`;
 
 /** remote-first / distributed employers — the global-remote preset. Counts: roles open worldwide (or remote with no stated region) / of those engineering. */
 export const REMOTE_FIRST_COMPANIES: SeedCompany[] = [
@@ -73,7 +76,7 @@ export const US_COMPANIES: SeedCompany[] = [
   { name: "Okta", careersUrl: gh("okta"), tags: ["saas", "us"] }, // 126 / 38
   { name: "Zscaler", careersUrl: gh("zscaler"), tags: ["infra", "us", "security"] }, // 165 / 82
   { name: "MongoDB", careersUrl: gh("mongodb"), tags: ["infra", "us"] }, // 126 / 40
-  { name: "Cloudflare", careersUrl: gh("cloudflare"), tags: ["infra", "us"] }, // 0 / 0 — board lists work modes ("Hybrid") in place of cities until the Greenhouse adapter reads offices[]
+  { name: "Cloudflare", careersUrl: gh("cloudflare"), tags: ["infra", "us"] }, // 278 / 139 (offices[] read since 2026-11-18; was 0 while the board gave work modes as locations)
   { name: "Discord", careersUrl: gh("discord"), tags: ["consumer", "us"] }, // 22 / 9
   { name: "Figma", careersUrl: gh("figma"), tags: ["product", "us"] }, // 93 / 33
   { name: "Dropbox", careersUrl: gh("dropbox"), tags: ["saas", "us"] }, // 27 / 12
@@ -192,7 +195,7 @@ export const EU_UK_COMPANIES: SeedCompany[] = [
   { name: "Wise", careersUrl: "https://careers.smartrecruiters.com/wise", tags: ["fintech", "eu"], pollCadence: "daily" }, // 207 / 68
   { name: "Stripe", careersUrl: gh("stripe"), tags: ["fintech", "eu"] }, // 159 / 32
   { name: "Datadog", careersUrl: gh("datadog"), tags: ["infra", "eu"] }, // 63 / 19
-  { name: "Cloudflare", careersUrl: gh("cloudflare"), tags: ["infra", "eu"] }, // 1 / 1 — board lists work modes ("Hybrid") in place of cities until the Greenhouse adapter reads offices[]
+  { name: "Cloudflare", careersUrl: gh("cloudflare"), tags: ["infra", "eu"] }, // 88 / 42 (was 1 / 1 before the Greenhouse adapter read offices[])
   { name: "GitLab", careersUrl: gh("gitlab"), tags: ["devtools", "remote"] }, // 55 / 24
   { name: "MongoDB", careersUrl: gh("mongodb"), tags: ["infra", "eu"] }, // 92 / 33
   { name: "Databricks", careersUrl: gh("databricks"), tags: ["infra", "eu"] }, // 128 / 43
@@ -288,6 +291,42 @@ export const EU_UK_COMPANIES: SeedCompany[] = [
   { name: "Sanity", careersUrl: ashby("sanity"), tags: ["saas", "eu"] }, // 14 / 5
   { name: "Fireblocks", careersUrl: gh("fireblocks"), tags: ["crypto", "security", "eu"] }, // 8 / 3
   { name: "Modal", careersUrl: ashby("modal"), tags: ["ai", "infra", "eu"] }, // 4 / 1
+  // added 2026-11-18 (follow-up): boards on the new pollers (Personio, Recruitee, Teamtailor)
+  // and eu-uk employers re-probed after the first audit found no supported board for them
+  { name: "1KOMMA5°", careersUrl: pe("1komma5grad"), tags: ["energy", "eu"] }, // 91 / 13
+  { name: "tado", careersUrl: pe("tado"), tags: ["hardware", "eu"] }, // 2 / 0
+  { name: "Clark", careersUrl: pe("clark"), tags: ["fintech", "eu"] }, // 1 / 0
+  { name: "bunq", careersUrl: rc("bunq"), tags: ["fintech", "eu"] }, // 16 / 3
+  { name: "Channable", careersUrl: rc("channable"), tags: ["saas", "eu"] }, // 8 / 3
+  { name: "Funda", careersUrl: rc("funda"), tags: ["consumer", "eu"] }, // 8 / 5
+  { name: "Helloprint", careersUrl: rc("helloprint"), tags: ["consumer", "eu"] }, // 5 / 4
+  { name: "Hostaway", careersUrl: rc("hostaway"), tags: ["saas", "eu", "remote"] }, // 6 / 2
+  { name: "Tibber", careersUrl: tt("tibber"), tags: ["energy", "eu"] }, // 5 / 2
+  { name: "Quinyx", careersUrl: tt("quinyx"), tags: ["saas", "eu"] }, // 6 / 1
+  { name: "Templafy", careersUrl: tt("templafy"), tags: ["saas", "eu"] }, // 1 / 1
+  { name: "Polestar", careersUrl: tt("polestar"), tags: ["automotive", "eu"] }, // 4 / 0
+  { name: "Oatly", careersUrl: tt("oatly"), tags: ["consumer", "eu"] }, // 2 / 0
+  { name: "Instabee", careersUrl: tt("instabee"), tags: ["logistics", "eu"] }, // 7 / 0 — Budbee's parent
+  { name: "Natural Cycles", careersUrl: tt("naturalcycles"), tags: ["health", "eu"] }, // 1 / 0
+  { name: "Storytel", careersUrl: tt("storytel"), tags: ["consumer", "eu"] }, // 1 / 0
+  { name: "Epidemic Sound", careersUrl: ashby("epidemic-sound"), tags: ["consumer", "eu"] }, // 3 / 0
+  { name: "Scalable Capital", careersUrl: sr("ScalableGmbH"), tags: ["fintech", "eu"] }, // 101 / 45
+  { name: "Iceye", careersUrl: ashby("iceye"), tags: ["aerospace", "eu"] }, // 56 / 36
+  { name: "Docplanner", careersUrl: ashby("docplanner"), tags: ["health", "eu"] }, // 32 / 11
+  { name: "Moss", careersUrl: ashby("moss"), tags: ["fintech", "eu"] }, // 29 / 3
+  { name: "Too Good To Go", careersUrl: ashby("toogoodtogo"), tags: ["consumer", "eu"] }, // 25 / 1
+  { name: "Staffbase", careersUrl: gh("staffbase"), tags: ["saas", "eu"] }, // 20 / 10
+  { name: "Bynder", careersUrl: ashby("bynder"), tags: ["saas", "eu"] }, // 17 / 1
+  { name: "Pliant", careersUrl: ashby("pliant"), tags: ["fintech", "eu"] }, // 17 / 0
+  { name: "Bitpanda", careersUrl: gh("bitpanda"), tags: ["crypto", "fintech", "eu"] }, // 17 / 1
+  { name: "GoStudent", careersUrl: gh("gostudent"), tags: ["edtech", "eu"] }, // 9 / 0
+  { name: "Babbel", careersUrl: ashby("babbel"), tags: ["edtech", "eu"] }, // 7 / 4
+  { name: "Forto", careersUrl: ashby("forto"), tags: ["logistics", "eu"] }, // 6 / 0
+  { name: "Smartly.io", careersUrl: gh("smartlyio"), tags: ["saas", "eu"] }, // 5 / 4
+  { name: "Aleph Alpha", careersUrl: ashby("alephalpha"), tags: ["ai", "eu"] }, // 3 / 0
+  { name: "Holidu", careersUrl: ashby("holidu"), tags: ["consumer", "eu"] }, // 2 / 0
+  { name: "Billie", careersUrl: ashby("billie"), tags: ["fintech", "eu"] }, // 2 / 1
+  { name: "Mentimeter", careersUrl: gh("mentimeter"), tags: ["saas", "eu"] }, // 1 / 0
 ];
 
 /** Employers hiring in Canada (Toronto, Vancouver, Montréal, Waterloo, Calgary) or Canada-remote — the canada preset. Counts: Canada-workable roles / of those engineering. */
@@ -334,4 +373,5 @@ export const CANADA_COMPANIES: SeedCompany[] = [
   { name: "Amazon", careersUrl: "https://www.amazon.jobs/en/", tags: ["bigtech", "canada"] }, // 213 / 154
   { name: "Salesforce", careersUrl: wd("salesforce.wd12", "External_Career_Site"), tags: ["saas", "canada"] }, // 47 / 7
   { name: "Nvidia", careersUrl: wd("nvidia.wd5", "NVIDIAExternalCareerSite"), tags: ["bigtech", "canada"] }, // 16 / 10
+  { name: "Cloudflare", careersUrl: gh("cloudflare"), tags: ["infra", "canada"] }, // 35 / 14 — Toronto, Canada-remote (added 2026-11-18 once offices[] were read)
 ];

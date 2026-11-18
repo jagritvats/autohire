@@ -107,12 +107,13 @@ Some sources sit behind Cloudflare, which turns away anything but a real browser
 
 ## Optional sources
 
-Extra discovery feeds for more India coverage. They're wired into `DEFAULT_DISCOVERY_FEEDS` (`packages/pipeline/src/poll.ts`) but **key-gated**: until the key is in `.env`, the adapter returns nothing and makes **no network call**, so a fresh install is unaffected. All of them are cloud-safe documented APIs (Tier 1–2). None holds a user session.
+Extra discovery feeds for more India coverage. They're wired into `DEFAULT_DISCOVERY_FEEDS` (`packages/pipeline/src/poll.ts`) but **key-gated**: until the key is in `.env`, the adapter returns nothing and makes **no network call**, so a fresh install is unaffected. The one exception is Himalayas, which works without a key and only gets a larger allowance with one. All of them are cloud-safe documented APIs (Tier 1–2). None holds a user session.
 
 | Source | Env vars | Cost | What it adds |
 |---|---|---|---|
 | **Adzuna India search** | `ADZUNA_APP_ID`, `ADZUNA_APP_KEY` (the same keys as salary enrichment) | free key (developer.adzuna.com; ~250 calls/day, shared with the enricher) | A broad India aggregator. Feed: title-only `backend` / `software engineer`, `max_days_old=14`, newest first. Pay is kept only when the ad states it; Adzuna's own *predicted* salaries are dropped. |
 | **Careerjet** | `CAREERJET_API_KEY`, optional `CAREERJET_USER_IP` | free publisher account (careerjet.co.in → Partners → Job search API) | The careerjet.co.in (`en_IN`) index, newest first. Uses the v4 API (`search.api.careerjet.net/v4/query`, Basic auth with the key; the old `affid` endpoint is superseded). Careerjet requires the searching user's IP + user agent: set `CAREERJET_USER_IP` to your public IP (default `127.0.0.1`). Links go through Careerjet's `jobviewtrack.com` redirect, and descriptions are 500-char excerpts. |
+| **Himalayas API key** (optional) | `HIMALAYAS_API_KEY` | free (himalayas.app/api → sign up, verify email, create a key) | Not a new source: Himalayas feeds every built-in preset and works with no key. Keyless callers share **one** public allowance, and from shared server or cloud egress that answers `429` ("get a free API key"). With a key (sent as `Authorization: Bearer …`) your account gets its own 60 requests/minute and 10,000/day. Without one, a rate-limited Himalayas logs `[himalayas] rate-limited (429) without an API key…` once, pauses for 15 minutes and returns nothing; the other sources carry on. |
 | **JSearch** (paid) | `JSEARCH_API_KEY` (OpenWeb Ninja) **or** `JSEARCH_RAPIDAPI_KEY` (RapidAPI), `JSEARCH_MIN_HOURS` (default `24`) | paid; free trial tiers are small | The Google-for-Jobs index: Indian boards and employer career sites in one call (up to 100 jobs per request). Prefers the employer's own ATS link when one is listed. **Spend guard:** each feed target is called at most once per `JSEARCH_MIN_HOURS` per worker process. A cron that starts a fresh process per run gets no carry-over, so budget for one call per run. |
 
 Notes:
@@ -122,12 +123,12 @@ Notes:
 
 ### Keyless remote boards (their terms require a link back)
 
-Two more remote-only boards are registered as Tier-1 adapters and answer live and saved searches (`toTargets`). They need no key. Add them to a preset or a saved search to poll them.
+Two more remote-only boards are registered as Tier-1 adapters and answer live and saved searches (`toTargets`). They need no key. The built-in presets poll them: Remote OK in `global-remote` (it has no region filter), Jobicy in `global-remote`, `us`, `eu-uk` and `canada` by Jobicy geo.
 
 | Source | API | Terms we follow |
 |---|---|---|
 | **Remote OK** (`remoteok`) | `GET https://remoteok.com/api` (`?tag=` narrows, about 100 newest jobs) | The API terms (sent as the first element of every response) require a followed link back to the job's Remote OK page and the name "Remote OK" as the source. So `applyUrl` is always the Remote OK listing, never its outbound `apply_url`. No per-job "gone" signal, so listings expire through the feed TTL sweep. |
-| **Jobicy** (`jobicy`) | `GET https://jobicy.com/api/jobs?count=…&tag=…&geo=…&industry=…` (cursor-paged, jobs from the last 7 days) | Credit Jobicy and send apply buttons to the Jobicy job URL in the feed, which is what `applyUrl` holds. Poll at most once an hour. Leaving the 7-day window does not mean a job closed; `isLive` asks `GET /api/jobs/status?ids=…` and retires a posting only on an explicit `closed`. Jobicy has no India geo, so India searches ask for its `anywhere` (worldwide) roles. |
+| **Jobicy** (`jobicy`) | `GET https://jobicy.com/api/jobs?count=…&tag=…&geo=…&industry=…` (cursor-paged, jobs from the last 7 days) | Credit Jobicy and send apply buttons to the Jobicy job URL in the feed, which is what `applyUrl` holds. Poll at most once an hour: the adapter enforces this itself (a target fetched less than an hour ago returns nothing without a request, per process), and the preset feeds are marked `slow` so a page-load refresh never spends the hourly pass. Leaving the 7-day window does not mean a job closed; `isLive` asks `GET /api/jobs/status?ids=…` and retires a posting only on an explicit `closed`. Jobicy has no India geo, so India searches ask for its `anywhere` (worldwide) roles. |
 
 Both re-date listings (they're in `REDATED_SOURCES`), and both carry a low trust prior (0.35 and 0.25 in `SOURCE_TRUST`).
 

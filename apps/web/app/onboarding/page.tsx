@@ -6,6 +6,7 @@ import { tenantProvider } from "@jobflow/service";
 import { isOfflineProvider } from "@jobflow/llm";
 import { AppFrame } from "@/components/AppFrame";
 import { OnboardingWizard } from "@/components/OnboardingWizard";
+import { presetChoices } from "@/lib/presets";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,7 @@ export default async function OnboardingPage() {
   const auth = await pageAuth("/onboarding");
   const config = await (await getRepo()).getConfig(auth.tenantId);
   const llmReady = !isOfflineProvider(tenantProvider(config));
+  const { options, suggest } = presetChoices();
   return (
     <AppFrame
       title="Set up your profile"
@@ -23,7 +25,7 @@ export default async function OnboardingPage() {
         </Link>
       }
     >
-      <OnboardingWizard llmReady={llmReady} />
+      <OnboardingWizard llmReady={llmReady} presetOptions={options} suggest={suggest} />
     </AppFrame>
   );
 }

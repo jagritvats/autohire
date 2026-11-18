@@ -5,8 +5,6 @@ import type { FeedCard } from "@/lib/feed";
 import { MatchCard } from "./MatchCard";
 import { Banner, Button, ButtonLink, Chip, EmptyState, Skeleton } from "./ui";
 
-const PRESET_TAGS = ["india", "global-remote", "us", "eu-uk"];
-
 /** click-to-run examples — the query syntax is the CLI's, so they double as a tutorial */
 const EXAMPLES = [
   "backend engineer --remote",
@@ -81,7 +79,8 @@ function describe(q: SavedSearchDTO["query"]): string {
  * scorer as Jobs (unscored before onboarding); the query's filters are a view, and what they
  * hid is always reported. Save a search to make it a tab on Jobs that refreshes every sync.
  */
-export function SearchView() {
+/** `presets`: the built-in discovery preset ids (`listPresets()`, from the page), offered as tag chips. */
+export function SearchView({ presets }: { presets: string[] }) {
   const [text, setText] = useState("");
   const [ingest, setIngest] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -218,7 +217,7 @@ export function SearchView() {
         </div>
         <div className="ux-examples">
           <span className="hint" title="Only jobs from these discovery presets' companies and boards">only from presets:</span>
-          {PRESET_TAGS.map((p) => (
+          {presets.map((p) => (
             <Chip key={p} on={tags.includes(p)} onClick={() => setTags(tags.includes(p) ? tags.filter((t) => t !== p) : [...tags, p])}>
               #{p}
             </Chip>

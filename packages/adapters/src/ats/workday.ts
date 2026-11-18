@@ -1,5 +1,5 @@
 import { countryCodeFromText, type RawPosting } from "@jobflow/core";
-import { markPartial, COUNTRY_NAMES, DETAIL_CAP, pickForDetail, htmlToText, httpJson, mapPool, httpStatus, liveFromStatus, type FetchTarget, type SourceAdapter, type LivenessTarget } from "../types.js";
+import { adapterNotice, markPartial, COUNTRY_NAMES, DETAIL_CAP, pickForDetail, htmlToText, httpJson, mapPool, httpStatus, liveFromStatus, type FetchTarget, type SourceAdapter, type LivenessTarget } from "../types.js";
 
 /**
  * Workday CXS (Tier 2: the public JSON the careers site itself calls, no auth). The
@@ -25,8 +25,8 @@ interface WdFacet {
   values?: WdFacetValue[];
 }
 interface WdJob {
-  title: string;
-  externalPath: string;
+  title?: string;
+  externalPath?: string;
   locationsText?: string;
   postedOn?: string;
   bulletFields?: string[];
@@ -71,7 +71,21 @@ export class WorkdayAdapter implements SourceAdapter {
     return liveFromStatus(await httpStatus(`https://${t.host}/wday/cxs/${t.tenant}/${t.site}${path}`));
   }
 
+  /**
+   * Total: a tenant's malformed answer (a redacted row, a non-array field) must cost that
+   * one board's poll, never throw into the pipeline. A throw is "unknown" ([]), so ingest
+   * never diffs against it (invariant #5).
+   */
   async fetch(target: FetchTarget): Promise<RawPosting[]> {
+    try {
+      return await this.fetchBoard(target);
+    } catch (e) {
+      adapterNotice("workday", `${target.slug ?? "?"}: unexpected answer (${(e as Error)?.message ?? e}); skipped this poll`);
+      return [];
+    }
+  }
+
+  private async fetchBoard(target: FetchTarget): Promise<RawPosting[]> {
     const t = target.slug ? parseWorkdaySlug(target.slug) : null;
     if (!t) return [];
     const api = `https://${t.host}/wday/cxs/${t.tenant}/${t.site}`;
@@ -107,24 +121,26 @@ export class WorkdayAdapter implements SourceAdapter {
       const page = await post({ appliedFacets, offset });
       // a failed page mid-list would make the tail look closed to markStale — all or nothing
       if (!page) return [];
-      const batch = page?.jobPostings ?? [];
+      const batch = Array.isArray(page.jobPostings) ? page.jobPostings.filter((j): j is WdJob => !!j && typeof j === "object") : [];
       if (offset === 0) total = page?.total ?? 0;
       jobs.push(...batch);
       if (batch.length < PAGE) break;
     }
     // the list stopped at the cap with more on the board: a diff against it would stale the
-    // tail (invariant #5) — say so, and let ingest skip markStale (the TTL sweep retires)
+    // tail (invariant #5) — say so, and let ingest skip markStale (the TTL sweep retires).
+    // Counted over EVERY row received, redacted ones included: `total` counts them too.
     const truncated = Number.isFinite(total) && jobs.length < total;
-    const kept = unfiltered && countryName ? jobs.filter((j) => !placedElsewhere(j.locationsText, target.location!, countryName)) : jobs;
+    const { rows: identified, redactedKnown } = splitRedacted(jobs, target.known);
+    const kept = unfiltered && countryName ? identified.filter((j) => !placedElsewhere(j.locationsText, target.location!, countryName)) : identified;
 
-    const idOf = (j: WdJob) => j.externalPath.match(/_([A-Za-z0-9-]+)$/)?.[1] ?? j.externalPath;
     const needDetail = pickForDetail(kept.filter((j) => !target.known?.has(idOf(j))), (j) => j.title, target.limit ?? DETAIL_CAP);
     const details = new Map<string, WdDetail | null>();
     await mapPool(needDetail, 3, async (j) => details.set(j.externalPath, await httpJson<WdDetail>(`${api}${j.externalPath}`)));
 
     const out = kept.map((j) => {
       const info = details.get(j.externalPath)?.jobPostingInfo;
-      const locs = [info?.location ?? j.locationsText, ...(info?.additionalLocations ?? [])].filter(Boolean);
+      const extra = Array.isArray(info?.additionalLocations) ? info.additionalLocations : [];
+      const locs = [info?.location ?? j.locationsText, ...extra].filter((x): x is string => typeof x === "string" && !!x);
       const remote = /remote/i.test(info?.remoteType ?? "") || /\bremote\b/i.test(locs.join(" "));
       return {
         source: "workday",
@@ -133,7 +149,7 @@ export class WorkdayAdapter implements SourceAdapter {
         atsJobId: idOf(j),
         companyName: t.tenant,
         companySlug: target.slug!,
-        title: j.title,
+        title: j.title.trim(),
         jdText: htmlToText(info?.jobDescription),
         jdHtml: info?.jobDescription ?? null,
         // Workday location strings are often "IND - Bangalore" — append the country name when
@@ -146,8 +162,45 @@ export class WorkdayAdapter implements SourceAdapter {
         raw: j as unknown as Record<string, unknown>,
       } satisfies RawPosting;
     });
-    return truncated || unfiltered ? markPartial(out) : out;
+    // A redacted row whose id matches a posting we already store means that posting is still
+    // on the board, only hidden in this answer: diffing would retire it, so don't (§3).
+    return truncated || unfiltered || redactedKnown ? markPartial(out) : out;
   }
+}
+
+type WdRow = WdJob & { title: string; externalPath: string };
+
+/** Workday's job id: the path's trailing "_R-12345" / "_1216477-2". */
+function idOf(j: WdRow): string {
+  return j.externalPath.match(/_([A-Za-z0-9-]+)$/)?.[1] ?? j.externalPath;
+}
+
+/**
+ * Some tenants (Mastercard, PwC, HPE, Citi… seen 2026-11) put REDACTED rows in the list:
+ * `{"bulletFields":["R-293658"]}` with no title and no path. There is nothing to show or
+ * apply to, and the detail endpoint can't be reached without the path, so such a row is
+ * skipped — it used to throw in `idOf` and lose the whole board.
+ *
+ * Staleness (invariant #5): the board's `total` counts redacted rows, so the "did we list
+ * everything" check above runs over every row received and a skipped row never makes a
+ * complete list look complete when it isn't. A complete list minus its redacted rows is
+ * still a safe diff: a redacted row's id never appears as a normal row, so the only posting
+ * a diff could retire is one the board no longer lets anyone open. The exception is a
+ * redacted row whose bullet id matches a posting we already store (`known`): that posting
+ * is still listed, only hidden in this answer, so the fetch is marked partial instead.
+ * Workday paths carry a repost suffix ("1216477-2") the bullet id lacks, hence the prefix.
+ */
+export function splitRedacted(jobs: WdJob[], known?: ReadonlySet<string>): { rows: WdRow[]; redacted: number; redactedKnown: boolean } {
+  const rows: WdRow[] = [];
+  const hidden: string[] = [];
+  for (const j of jobs) {
+    if (typeof j.externalPath === "string" && j.externalPath && typeof j.title === "string" && j.title.trim()) rows.push(j as WdRow);
+    else hidden.push(...(j.bulletFields ?? []).map((b) => String(b).trim()).filter(Boolean));
+  }
+  const redacted = jobs.length - rows.length;
+  const knownIds = known ? [...known] : [];
+  const redactedKnown = hidden.some((b) => knownIds.some((k) => k === b || k.startsWith(`${b}-`)));
+  return { rows, redacted, redactedKnown };
 }
 
 /** an unfiltered fallback list stops here (politeness; the result is marked partial). */

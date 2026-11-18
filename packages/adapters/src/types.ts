@@ -247,10 +247,22 @@ export async function httpJson<T = unknown>(
 export async function httpJsonPolite<T = unknown>(
   url: string,
   init: RequestInit & { timeoutMs?: number } = {},
-  opts: { retries?: number; baseDelayMs?: number; maxDelayMs?: number; sleep?: (ms: number) => Promise<void> } = {},
+  opts: {
+    retries?: number;
+    baseDelayMs?: number;
+    maxDelayMs?: number;
+    sleep?: (ms: number) => Promise<void>;
+    /** told why the call gave up (the last HTTP status, or null for a network error/timeout) */
+    onGiveUp?: (status: number | null) => void;
+  } = {},
 ): Promise<T | null> {
-  const { retries = 3, baseDelayMs = 4000, maxDelayMs = 60_000, sleep = defaultSleep } = opts;
+  const { retries = 3, baseDelayMs = 4000, maxDelayMs = 60_000, sleep = defaultSleep, onGiveUp } = opts;
   const { timeoutMs = 20_000, ...rest } = init;
+  let status: number | null = null;
+  const giveUp = (): null => {
+    onGiveUp?.(status);
+    return null;
+  };
   for (let attempt = 0; ; attempt++) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -262,18 +274,33 @@ export async function httpJsonPolite<T = unknown>(
         headers: { "User-Agent": "JobFlow/0.1 (+personal job-search; contact via app)", Accept: "application/json", ...(rest.headers ?? {}) },
       });
       if (res.ok) return (await res.json()) as T;
-      if (res.status !== 429 && res.status !== 503) return null;
+      status = res.status;
+      if (res.status !== 429 && res.status !== 503) return giveUp();
       const after = Number(res.headers.get("retry-after"));
       wait = Number.isFinite(after) && after > 0 ? after * 1000 : baseDelayMs * 2 ** attempt;
     } catch {
-      return null;
+      status = null;
+      return giveUp();
     } finally {
       clearTimeout(timer);
     }
     // a Retry-After beyond the cap (Workable's Cloudflare says ~23 h) won't clear in this poll
-    if (attempt >= retries || wait > maxDelayMs) return null;
+    if (attempt >= retries || wait > maxDelayMs) return giveUp();
     await sleep(wait);
   }
+}
+
+/**
+ * Say once per process why a source returned nothing (a missing key, a rate limit), on
+ * stderr, so `jobflow sync` / the worker log explain an empty feed instead of hiding it.
+ * Adapters still return [] (never throw); this is only the reason.
+ */
+const NOTICED = new Set<string>();
+export function adapterNotice(source: string, reason: string): void {
+  const key = `${source}\u0000${reason}`;
+  if (NOTICED.has(key)) return;
+  NOTICED.add(key);
+  console.warn(`[${source}] ${reason}`);
 }
 
 function defaultSleep(ms: number): Promise<void> {

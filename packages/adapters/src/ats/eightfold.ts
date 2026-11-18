@@ -1,5 +1,5 @@
 import type { RawPosting } from "@jobflow/core";
-import { COUNTRY_NAMES, DETAIL_CAP, markPartial, pickForDetail, htmlToText, httpJsonPolite, mapPool, type FetchTarget, type SourceAdapter } from "../types.js";
+import { adapterNotice, COUNTRY_NAMES, DETAIL_CAP, markPartial, pickForDetail, htmlToText, httpJsonPolite, mapPool, type FetchTarget, type SourceAdapter } from "../types.js";
 
 /**
  * Eightfold careers APIs (Tier 2: the JSON the careers site calls, no auth). Two
@@ -170,7 +170,15 @@ async function listV2(host: string, domain: string, country: string, headers: Re
   for (let start = 0; start < MAX_LIST; start += PAGE) {
     const qs = new URLSearchParams({ domain, location: country, start: String(start), num: String(PAGE), sort_by: "timestamp" });
     const res = await getPolitely<EfV2Search>(`https://${host}/api/apply/v2/jobs?${qs}`, headers);
-    if (!res || !Array.isArray(res.positions)) return null;
+    if (!res) return null;
+    // v2 answers its whole page config ({domain, branding, facets, …, positions, count}); a
+    // reply with no `positions` list at all is a changed API, not an empty board — say so.
+    // (Bayer, 2026-11: `positions: []`, `count: 0` for every location, and its own careers
+    // page renders the same 0 — the board is empty, which is not an adapter failure.)
+    if (!Array.isArray(res.positions)) {
+      adapterNotice("eightfold", `${domain}: /api/apply/v2 answered without a positions list; the tenant may have moved to PCSX (use the "{host}/{domain}" slug)`);
+      return null;
+    }
     positions.push(...res.positions);
     total = res.count ?? positions.length;
     if (res.positions.length < PAGE || positions.length >= total) break;
