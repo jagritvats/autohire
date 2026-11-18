@@ -417,16 +417,17 @@ textarea {
   text-decoration: none;
 }
 .brand {
-  gap: 3px;
-  align-items: baseline;
+  gap: 9px;
+  align-items: center;
 }
 .brand__name em {
   font-style: italic;
   font-weight: 400;
 }
+/* the tile mark (brand/README.md); its colours come from tokens in AppShell's BrandMark */
 .brand__mark {
   display: block;
-  align-self: baseline;
+  flex: none;
 }
 .app-nav {
   align-self: stretch;
