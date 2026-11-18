@@ -6,6 +6,7 @@ import { getRepo, ensureTenant } from "@/lib/repo";
 import { AppFrame } from "@/components/AppFrame";
 import { SettingsForm } from "@/components/SettingsForm";
 import { PayDisplayForm } from "@/components/PayDisplayForm";
+import { AppearanceSettings } from "@/components/AppearanceSettings";
 import { SectionNav } from "@/components/ui/SectionNav";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +14,7 @@ export const dynamic = "force-dynamic";
 /** Anchors for the settings form — the ids live on SettingsForm's sections. */
 const SETTINGS_SECTIONS = [
   { id: "pay", label: "Pay display" },
+  { id: "appearance", label: "Appearance" },
   { id: "model", label: "Writing model" },
   { id: "applying", label: "Applying & local agent" },
   { id: "data", label: "Data" },
@@ -46,6 +48,7 @@ export default async function SettingsPage() {
         <SectionNav items={SETTINGS_SECTIONS} />
         <div className="settings">
           <PayDisplayForm initial={PayDisplay.parse(prefs?.display ?? {})} homeCurrency={homeCurrency} rateDate={activeFx().asOf} />
+          <AppearanceSettings />
           <SettingsForm initialConfig={config} tenantId={auth.tenantId} effectiveModel={effective.name} />
         </div>
       </div>
