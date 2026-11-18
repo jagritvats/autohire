@@ -3188,3 +3188,27 @@ input[type="range"] {
     padding-bottom: 0;
   }
 }
+@media (max-width: 640px) {
+  .feed-summary {
+    flex-wrap: wrap;
+  }
+  .feed-summary .segmented {
+    width: 100%;
+  }
+  .feed-summary .segmented__item {
+    flex: 1 0 auto;
+  }
+}
+/* long caution lists read in body colour; the amber marker carries the tone */
+.in-warnings,
+.onb-warnings {
+  color: var(--text);
+}
+.in-warnings li::marker,
+.onb-warnings li::marker {
+  color: var(--warn);
+}
+.inputs-strip:has(.in-warnings) {
+  border-color: var(--warn-border);
+  box-shadow: inset 3px 0 0 var(--warn);
+}
