@@ -1,4 +1,9 @@
-# JobFlow
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/social/readme-banner-dark.png">
+    <img alt="JobFlow: every job ranked against your résumé, with an honest match card. It pre-fills the application and stops: you press submit." src="brand/social/readme-banner-light.png" width="100%">
+  </picture>
+</h1>
 
 **A local-first job search engine for one person. It finds roles across hundreds of company
 boards, ranks them against *your* résumé with honest match cards, tailors your documents from
@@ -220,5 +225,9 @@ it privately however you like. If you distribute it, or run a **modified** versi
 service for other people, you must offer them the corresponding source under the same
 licence. The web app links to its source in the footer for exactly that reason
 (`JOBFLOW_SOURCE_URL`).
+
+The logo, posters and other artwork in [`brand/`](brand/README.md) are licensed under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); the scripts that build them are AGPL-3.0
+like the rest of the code.
 
 Salary benchmarks from levels.fyi are shown with attribution.
