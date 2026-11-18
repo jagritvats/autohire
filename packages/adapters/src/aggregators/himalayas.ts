@@ -1,5 +1,5 @@
 import { LevelBandOrder, type LevelBand, type RawPosting, type SearchQuery } from "@jobflow/core";
-import { htmlToText, httpJson, type FetchTarget, type SearchCaps, type SearchTargetContext, type SourceAdapter } from "../types.js";
+import { adapterNotice, htmlToText, httpJsonPolite, type FetchTarget, type SearchCaps, type SearchTargetContext, type SourceAdapter } from "../types.js";
 import { crossCapped, queryCountries, queryTerms } from "../search.js";
 
 /**
@@ -10,6 +10,14 @@ import { crossCapped, queryCountries, queryTerms } from "../search.js";
  * 20 per page; `pubDate`/`expiryDate` are epoch seconds; `seniority` is an array
  * ("Entry-level", "Mid-level", "Senior", …) and filterable server-side (comma list).
  * Terms: link back to the listing (we keep `applicationLink`), don't resubmit elsewhere.
+ *
+ * Keys (docs: himalayas.app/docs/remote-jobs-api, checked 2026-11-18): every endpoint works
+ * without one, but keyless callers share ONE public allowance, and from shared server
+ * egress that answers 429 "get a free API key". A free key (`HIMALAYAS_API_KEY`, sent as
+ * `Authorization: Bearer …`) gets the account its own 60/min and 10,000/day. A keyed 429
+ * carries Retry-After, which `httpJsonPolite` honours. Without a key, a 429 that outlasts
+ * the backoff parks the source for this process (RATE_LIMIT_PAUSE_MS) and logs why, so the
+ * other preset targets don't each wait out the same limit; the feed degrades to [].
  */
 
 interface HimalayasJob {
@@ -35,6 +43,18 @@ interface HimalayasResponse {
 }
 
 const PAGE_SIZE = 20;
+/** keyless and rate-limited: skip Himalayas for this long (the data refreshes daily anyway). */
+const RATE_LIMIT_PAUSE_MS = 15 * 60_000;
+let pausedUntil = 0;
+
+/** test hook: forget a rate-limit pause. */
+export function resetHimalayasPause(): void {
+  pausedUntil = 0;
+}
+
+function apiKey(): string | null {
+  return process.env.HIMALAYAS_API_KEY?.trim() || null;
+}
 
 export class HimalayasAdapter implements SourceAdapter {
   readonly source = "himalayas" as const;
@@ -69,11 +89,24 @@ export class HimalayasAdapter implements SourceAdapter {
     }
     if (target.params?.seniority) params.set("seniority", String(target.params.seniority));
 
+    const key = apiKey();
+    if (!key && Date.now() < pausedUntil) return [];
+    const headers: Record<string, string> = key ? { Authorization: `Bearer ${key}` } : {};
+    let gaveUp: number | null = null;
+
     const out: RawPosting[] = [];
     for (let page = 1; out.length < limit && page <= Math.ceil(limit / PAGE_SIZE); page++) {
       params.set("page", String(page));
-      const data = await httpJson<HimalayasResponse>(`https://himalayas.app/jobs/api/search?${params}`);
-      const jobs = data?.jobs ?? [];
+      const data = await httpJsonPolite<HimalayasResponse>(
+        `https://himalayas.app/jobs/api/search?${params}`,
+        { headers },
+        { retries: 2, baseDelayMs: 5000, onGiveUp: (status) => (gaveUp = status) },
+      );
+      if (!data) {
+        explainFailure(gaveUp, !!key);
+        break;
+      }
+      const jobs = data.jobs ?? [];
       for (const j of jobs) {
         if (j.expiryDate && j.expiryDate * 1000 < Date.now()) continue; // expired listing
         out.push(toRaw(j));
@@ -81,6 +114,18 @@ export class HimalayasAdapter implements SourceAdapter {
       if (jobs.length < PAGE_SIZE) break;
     }
     return out.slice(0, limit);
+  }
+}
+
+/** a failed page: log the reason once, and park a keyless, rate-limited source. */
+function explainFailure(status: number | null, keyed: boolean): void {
+  if (status === 429 && !keyed) {
+    pausedUntil = Date.now() + RATE_LIMIT_PAUSE_MS;
+    adapterNotice("himalayas", "rate-limited (429) without an API key: skipping Himalayas for 15 min. Set HIMALAYAS_API_KEY (free at himalayas.app/api) for a higher allowance.");
+  } else if (status === 429) {
+    adapterNotice("himalayas", "rate-limited (429) even with HIMALAYAS_API_KEY: the key's 60/min or 10,000/day allowance is used up.");
+  } else if (status === 401) {
+    adapterNotice("himalayas", "HIMALAYAS_API_KEY was rejected (401: invalid, revoked or unverified). Fix or unset it.");
   }
 }
 

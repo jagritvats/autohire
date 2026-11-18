@@ -12,6 +12,12 @@ import { crossCapped, queryCountries, queryTerms } from "../search.js";
  * URL in the feed (so `applyUrl` is that URL); no more than one automated pass an hour.
  * Leaving the 7-day window does NOT mean a job closed — only the status endpoint's
  * explicit "closed" does (isLive). Its dates are Jobicy's (REDATED_SOURCES).
+ *
+ * The hourly limit is enforced HERE, not left to whoever schedules the feed: a target
+ * fetched less than MIN_INTERVAL_MS ago answers [] without a request (per process, keyed
+ * by target, like JSearch's spend guard). A request-bound refresh, a second preset or a
+ * saved search can't make it poll faster. [] reads as "unknown" to ingest, and feed rows
+ * only expire through the lastSeen TTL sweep, so a skipped pass loses nothing.
  */
 
 export interface JobicyJob {
@@ -59,6 +65,15 @@ const JOBICY_GEO: Record<string, string> = {
 
 const PAGE_MAX = 100;
 const MAX_PAGES = 3;
+/** Jobicy's terms: no more than one automated pass an hour. */
+export const JOBICY_MIN_INTERVAL_MS = 60 * 60_000;
+/** last pass per target, process-wide (adapter instances may be re-created). */
+const lastPass = new Map<string, number>();
+
+/** test hook: forget the hourly pacing. */
+export function resetJobicyPacing(): void {
+  lastPass.clear();
+}
 
 export class JobicyAdapter implements SourceAdapter {
   readonly source = "jobicy" as const;
@@ -97,6 +112,11 @@ export class JobicyAdapter implements SourceAdapter {
       const v = target.params?.[k];
       if (typeof v === "string" && /^[a-z-]+$/.test(v)) base.set(k, v);
     }
+    const pass = base.toString();
+    const prev = lastPass.get(pass);
+    if (prev != null && Date.now() - prev < JOBICY_MIN_INTERVAL_MS) return [];
+    lastPass.set(pass, Date.now()); // a failed pass counts too: the request was still made
+
     const jobs: JobicyJob[] = [];
     let cursor: string | null = null;
     for (let page = 0; page < MAX_PAGES && jobs.length < limit; page++) {

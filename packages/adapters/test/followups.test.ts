@@ -2,6 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { isPartialFetch } from "../src/types.js";
 import { WorkdayAdapter, splitRedacted } from "../src/ats/workday.js";
 import { GreenhouseAdapter, greenhouseLocation } from "../src/ats/greenhouse.js";
+import { EightfoldAdapter } from "../src/ats/eightfold.js";
+import { HimalayasAdapter, resetHimalayasPause } from "../src/aggregators/himalayas.js";
+import { JobicyAdapter, JOBICY_MIN_INTERVAL_MS, resetJobicyPacing } from "../src/aggregators/jobicy.js";
+import { httpJsonPolite } from "../src/types.js";
 
 /** Regression tests for the follow-ups to the 2026-11 source and preset audits. */
 
@@ -100,5 +104,120 @@ describe("Greenhouse: a work mode in location.name is resolved through offices[]
     );
     const raws = await new GreenhouseAdapter().fetch({ slug: "example" });
     expect(raws.map((r) => r.locationRaw)).toEqual(["Hybrid - New York, NY", "Berlin, Germany"]);
+  });
+});
+
+describe("Eightfold v2: an empty board and a changed API both degrade to []", () => {
+  const SLUG = "careers.example.com/example.com/v2";
+
+  it("a page config with positions: [] is an empty board (no throw, no notice)", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    stub(() => json({ domain: "example.com", branding: { companyName: "Example" }, facets: {}, positions: [], count: 0 }));
+    const run = new EightfoldAdapter().fetch({ slug: SLUG, location: "IN" });
+    await vi.runAllTimersAsync();
+    expect(await run).toEqual([]);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("a reply with no positions list logs why and returns []", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    stub(() => json({ domain: "example.com", branding: {} }));
+    const run = new EightfoldAdapter().fetch({ slug: SLUG });
+    await vi.runAllTimersAsync();
+    expect(await run).toEqual([]);
+    expect(String(warn.mock.calls[0]?.[0])).toMatch(/\[eightfold\] example\.com: .*without a positions list/);
+    warn.mockRestore();
+  });
+});
+
+describe("Himalayas: optional API key, backoff, clean degradation", () => {
+  const page = { totalCount: 1, jobs: [{ title: "Backend Engineer", companyName: "Example Co", guid: "https://himalayas.app/companies/example/jobs/backend", locationRestrictions: ["United States"], pubDate: 1794900000 }] };
+
+  it("sends the key as a Bearer token when HIMALAYAS_API_KEY is set", async () => {
+    vi.stubEnv("HIMALAYAS_API_KEY", "test-key");
+    const calls = stub(() => json(page));
+    const raws = await new HimalayasAdapter().fetch({ query: "backend", limit: 20, params: { country: "US" } });
+    expect(raws.map((r) => r.title)).toEqual(["Backend Engineer"]);
+    const headers = (calls.mock.calls[0]![1] as RequestInit).headers as Record<string, string>;
+    expect(headers.Authorization).toBe("Bearer test-key");
+  });
+
+  it("sends no Authorization header without a key", async () => {
+    vi.stubEnv("HIMALAYAS_API_KEY", "");
+    const calls = stub(() => json(page));
+    await new HimalayasAdapter().fetch({ query: "backend", limit: 20, params: { country: "US" } });
+    expect(((calls.mock.calls[0]![1] as RequestInit).headers as Record<string, string>).Authorization).toBeUndefined();
+  });
+
+  it("waits out a keyed 429 (Retry-After) and keeps going", async () => {
+    vi.stubEnv("HIMALAYAS_API_KEY", "test-key");
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    let n = 0;
+    stub(() => (++n === 1 ? json({ error: "rate limited" }, 429, { "retry-after": "2" }) : json(page)));
+    const run = new HimalayasAdapter().fetch({ query: "backend", limit: 20, params: { country: "US" } });
+    await vi.runAllTimersAsync();
+    expect((await run).length).toBe(1);
+    expect(n).toBe(2);
+  });
+
+  it("keyless and rate-limited: [] with a logged reason, then no requests while paused", async () => {
+    vi.stubEnv("HIMALAYAS_API_KEY", "");
+    resetHimalayasPause();
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const calls = stub(() => json({ message: "Too many requests. Get a free API key." }, 429));
+    const run = new HimalayasAdapter().fetch({ query: "backend", params: { country: "GB" } });
+    await vi.runAllTimersAsync();
+    expect(await run).toEqual([]);
+    expect(calls).toHaveBeenCalledTimes(3); // the first try + 2 backoff retries
+    expect(String(warn.mock.calls[0]?.[0])).toMatch(/\[himalayas\] rate-limited \(429\) without an API key.*HIMALAYAS_API_KEY/);
+    // the next target in the same poll doesn't wait out the same limit again
+    expect(await new HimalayasAdapter().fetch({ query: "frontend", params: { country: "DE" } })).toEqual([]);
+    expect(calls).toHaveBeenCalledTimes(3);
+    resetHimalayasPause();
+    warn.mockRestore();
+  });
+});
+
+describe("Jobicy: at most one pass an hour per target, enforced in the adapter", () => {
+  it("skips a repeat of the same target within the hour, without a request", async () => {
+    resetJobicyPacing();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-18T10:00:00Z"));
+    const calls = stub(() => json({ jobs: [{ id: 1, jobTitle: "Backend Engineer", companyName: "Example Co", url: "https://jobicy.com/jobs/1-x" }], hasMore: false }));
+    const a = new JobicyAdapter();
+    expect(await a.fetch({ query: "backend", params: { geo: "usa" } })).toHaveLength(1);
+    // a second preset, a saved search or a request-bound refresh asks again: no request
+    expect(await new JobicyAdapter().fetch({ query: "backend", params: { geo: "usa" } })).toEqual([]);
+    expect(calls).toHaveBeenCalledTimes(1);
+    // a different target is its own pass
+    expect(await a.fetch({ query: "backend", params: { geo: "canada" } })).toHaveLength(1);
+    expect(calls).toHaveBeenCalledTimes(2);
+    // an hour later the first target may run again
+    vi.setSystemTime(new Date(Date.parse("2026-11-18T10:00:00Z") + JOBICY_MIN_INTERVAL_MS));
+    expect(await a.fetch({ query: "backend", params: { geo: "usa" } })).toHaveLength(1);
+    expect(calls).toHaveBeenCalledTimes(3);
+    resetJobicyPacing();
+  });
+});
+
+describe("httpJsonPolite: onGiveUp says why", () => {
+  it("reports the last status, or null for a network error", async () => {
+    const sleep = async () => {};
+    const seen: Array<number | null> = [];
+    stub(() => json({}, 429));
+    await httpJsonPolite("https://x.example/a", {}, { sleep, retries: 1, onGiveUp: (s) => seen.push(s) });
+    stub(() => json({}, 401));
+    await httpJsonPolite("https://x.example/a", {}, { sleep, onGiveUp: (s) => seen.push(s) });
+    stub(() => {
+      throw new Error("ECONNRESET");
+    });
+    await httpJsonPolite("https://x.example/a", {}, { sleep, onGiveUp: (s) => seen.push(s) });
+    stub(() => json({ ok: true }));
+    await httpJsonPolite("https://x.example/a", {}, { sleep, onGiveUp: (s) => seen.push(s) });
+    expect(seen).toEqual([429, 401, null]);
   });
 });

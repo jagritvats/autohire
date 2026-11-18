@@ -35,7 +35,7 @@ export { TeamtailorAdapter, parseTeamtailorRss, parseTeamtailorItems, teamtailor
 export { BambooHrAdapter, parseBambooJobs } from "./ats/bamboohr.js";
 export { BreezyAdapter, parseBreezyPositions, breezyGoneRedirect } from "./ats/breezy.js";
 export { RemoteOkAdapter, parseRemoteOk } from "./aggregators/remoteok.js";
-export { JobicyAdapter, parseJobicyJobs } from "./aggregators/jobicy.js";
+export { JobicyAdapter, parseJobicyJobs, resetJobicyPacing, JOBICY_MIN_INTERVAL_MS } from "./aggregators/jobicy.js";
 export { WorkdayAdapter, findCountryFacet, findCountrySites, relativePosted, parseWorkdaySlug, splitRedacted } from "./ats/workday.js";
 export { EightfoldAdapter, parseEightfoldSlug } from "./ats/eightfold.js";
 export { AmazonJobsAdapter } from "./ats/amazon.js";
@@ -49,7 +49,7 @@ export { KekaAdapter } from "./ats/keka.js";
 export { ZohoRecruitAdapter } from "./ats/zoho.js";
 export { FreshteamAdapter } from "./ats/freshteam.js";
 export { KulaAdapter } from "./ats/kula.js";
-export { HimalayasAdapter } from "./aggregators/himalayas.js";
+export { HimalayasAdapter, resetHimalayasPause } from "./aggregators/himalayas.js";
 export { HiristAdapter } from "./india/hirist.js";
 export { CutshortAdapter, parseCutshortPage, CUTSHORT_CITY_SLUGS } from "./india/cutshort.js";
 export { TimesJobsAdapter } from "./india/timesjobs.js";
