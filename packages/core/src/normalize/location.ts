@@ -636,7 +636,9 @@ export function parseLocation(locationRaw: string | null, jdText = ""): ParsedLo
   //    a lone stray "US" hint on a "remote" role, or a bare capitalized token with
   //    no resolvable country, is a guess and must NOT read as fact downstream.
   const conflicting = [indiaSignal, usSignal, euSignal].filter(Boolean).length > 1;
-  const confidence = scoreConfidence(mode, country, city, remoteGeo, geoSource, conflicting);
+  // a named place counts as resolved even when it is a country word the city slot drops
+  // ("Germany", "India"): confidence reads the same as when it filled the slot
+  const confidence = scoreConfidence(mode, country, city ?? cityText, remoteGeo, geoSource, conflicting);
 
   return { mode, city, country, ...(countries.length ? { countries } : {}), timezone, remoteGeo, sponsorship, confidence };
 }
