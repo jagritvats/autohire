@@ -38,6 +38,7 @@ import type {
   SalaryCacheEntry,
   UpsertCompany,
 } from "./repository.js";
+import type { PostingNormalizedPatch } from "./repository.js";
 import { pgPoolClient, sqlState, type SqlClient, type SqlRow } from "./sql.js";
 
 /**
@@ -258,14 +259,31 @@ export class PgRepository implements Repository {
       [id, band.min, band.max, band.currency, band.source, band.confidence, salaryRaw !== undefined, salaryRaw ?? null],
     );
   }
-  async updatePostingNormalized(id: string, patch: { location: ParsedLocation; postedByAgency: boolean }): Promise<void> {
+  async updatePostingNormalized(id: string, patch: PostingNormalizedPatch): Promise<void> {
     const l = patch.location;
-    await this.q(
-      `update posting set loc_mode = $2, loc_city = $3, loc_country = $4, loc_tz = $5, remote_geo = $6, sponsorship = $7,
-         location_confidence = $8, loc_countries = $9, posted_by_agency = $10
-       where id = $1`,
-      [id, l.mode, l.city, l.country, l.timezone, l.remoteGeo, l.sponsorship, l.confidence, l.countries ?? null, patch.postedByAgency],
-    );
+    const sets = [
+      "loc_mode = $2", "loc_city = $3", "loc_country = $4", "loc_tz = $5", "remote_geo = $6", "sponsorship = $7",
+      "location_confidence = $8", "loc_countries = $9", "posted_by_agency = $10",
+    ];
+    const params: unknown[] = [id, l.mode, l.city, l.country, l.timezone, l.remoteGeo, l.sponsorship, l.confidence, l.countries ?? null, patch.postedByAgency];
+    // the title / JD derivations only when given — omitted ones stay as stored
+    const opt = (col: string, v: unknown) => {
+      params.push(v);
+      sets.push(`${col} = $${params.length}`);
+    };
+    if (patch.title !== undefined) opt("title", patch.title);
+    if (patch.titleNorm !== undefined) opt("title_norm", patch.titleNorm);
+    if (patch.roleArchetype !== undefined) opt("role_archetype", patch.roleArchetype);
+    if (patch.levelBand !== undefined) opt("level_band", patch.levelBand);
+    if (patch.jdText !== undefined) opt("jd_text", patch.jdText);
+    if (patch.jdSkills !== undefined) opt("jd_skills", patch.jdSkills);
+    if (patch.requirements !== undefined) opt("requirements", JSON.stringify(patch.requirements));
+    if (patch.experience !== undefined) {
+      opt("experience_min", patch.experience.min);
+      opt("experience_max", patch.experience.max);
+    }
+    if (patch.dedupKey !== undefined) opt("dedup_key", patch.dedupKey);
+    await this.q(`update posting set ${sets.join(", ")} where id = $1`, params);
   }
   async saveSalaryEstimates(updates: Array<{ id: string; estimate: SalaryEstimate | null }>): Promise<number> {
     let n = 0;

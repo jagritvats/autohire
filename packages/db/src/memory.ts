@@ -30,6 +30,7 @@ import type {
   CompanyEnrichmentPatch,
   EnqueueJob,
   NewPosting,
+  PostingNormalizedPatch,
   PurgeOptions,
   Repository,
   SalaryCacheEntry,
@@ -264,11 +265,20 @@ export class InMemoryRepository implements Repository {
     }
     return n;
   }
-  async updatePostingNormalized(id: string, patch: { location: ParsedLocation; postedByAgency: boolean }): Promise<void> {
+  async updatePostingNormalized(id: string, patch: PostingNormalizedPatch): Promise<void> {
     const p = this.postings.get(id);
     if (!p) return;
     p.location = patch.location;
     p.postedByAgency = patch.postedByAgency;
+    if (patch.title !== undefined) p.title = patch.title;
+    if (patch.titleNorm !== undefined) p.titleNorm = patch.titleNorm;
+    if (patch.roleArchetype !== undefined) p.roleArchetype = patch.roleArchetype;
+    if (patch.levelBand !== undefined) p.levelBand = patch.levelBand;
+    if (patch.jdText !== undefined) p.jdText = patch.jdText;
+    if (patch.jdSkills !== undefined) p.jdSkills = [...patch.jdSkills];
+    if (patch.requirements !== undefined) p.requirements = patch.requirements.map((r) => ({ ...r }));
+    if (patch.experience !== undefined) p.experience = { ...patch.experience };
+    if (patch.dedupKey !== undefined) p.dedupKey = patch.dedupKey;
   }
   async updatePostingSalary(id: string, band: SalaryBand, salaryRaw?: string | null): Promise<void> {
     const p = this.postings.get(id);
