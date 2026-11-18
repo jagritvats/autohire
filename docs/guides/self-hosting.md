@@ -16,7 +16,8 @@ hosted service).
 - **Sessions** — httpOnly, SameSite=Lax cookies; state-changing requests must come from the
   app's own origin.
 - **API tokens** — Settings → API tokens mints scoped, revocable tokens (`cli`, `extension`,
-  `agent`), shown once and stored as hashes.
+  `agent`), shown once and stored as hashes. (A token is only needed for the browser
+  extension, the local agent, or a CLI talking to the server.)
 - **Admin-only** — instance-wide jobs (discover, full polls, purges) and registry edits.
 - **LLM keys** — users bring their own; the operator's env key is used for them only with
   `JOBFLOW_OPERATOR_LLM=shared`.
@@ -36,8 +37,11 @@ hosted service).
 5. Back up the database privately: it holds people's résumés and contact details. Publish a
    privacy notice.
 
-Docker Compose works for this too: set the variables above in `.env` and change the web bind
-with `JOBFLOW_WEB_BIND=0.0.0.0:3000` (only behind your TLS proxy).
+Docker Compose works for this too. Set the variables above in `.env`, and change the address
+the web port binds to with `JOBFLOW_WEB_BIND=0.0.0.0` (only behind your TLS proxy). It's an
+address, not `host:port`: the published port stays 3000. `pnpm docker:logs` follows the web
+and worker logs. See [Troubleshooting](troubleshooting.md#port-3000-is-already-in-use) for port
+clashes.
 
 ## Licence obligations
 

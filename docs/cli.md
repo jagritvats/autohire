@@ -15,6 +15,10 @@ in a data directory you own (`~/.jobflow` by default).
 - [The never-submit guarantee](#the-never-submit-guarantee)
 - [Scripting: `--json` and exit codes](#scripting---json-and-exit-codes)
 
+Task-oriented guides: [Daily workflow](guides/daily-workflow.md) ·
+[Résumé & profile](guides/resume-and-profile.md) · [Search & discovery](guides/search-and-discovery.md) ·
+[Applying](guides/apply.md) · [Troubleshooting](guides/troubleshooting.md).
+
 ## Install
 
 ```bash
@@ -143,6 +147,8 @@ pnpm jobflow profile import ./cv-2026.pdf [--merge] [--assist]
 pnpm jobflow profile edit                              # $EDITOR on a JSON of your profile
 ```
 
+![jobflow me](screenshots/cli-profile.png)
+
 Fields for `set`: `name first last email phone linkedin github portfolio resume-path
 skills must-haves roles yoe level home markets remote relocate floor currency locations
 about` (`pnpm jobflow profile set --help` explains each). Skills are mapped to canonical
@@ -216,7 +222,7 @@ Saved searches run on every `sync` and double as feed views.
 ```bash
 pnpm jobflow searches                                         # list
 pnpm jobflow searches add go-remote golang --remote --seniority senior
-pnpm jobflow searches add berlin "platform" --loc "Berlin,DE" --no-source   # a view only
+pnpm jobflow searches add berlin "platform" --loc "Berlin,DE" --no-source   # a view only (fetches nothing)
 pnpm jobflow searches run go-remote
 pnpm jobflow feed --search go-remote
 pnpm jobflow searches rm go-remote
@@ -269,6 +275,8 @@ pnpm jobflow feed --preset india           # only #india roles
 pnpm jobflow show 3 [--jd]                 # details, fit, tracker status, drafts, "ready?" + next commands
 ```
 
+![jobflow feed](screenshots/cli-feed.png)
+
 Before you've set up a profile the feed is a **browse** feed — freshest postings, no
 scores. JobFlow never shows a fit score it can't back.
 
@@ -308,6 +316,8 @@ pnpm jobflow apply 1 --open    # open the form in your default browser
 pnpm jobflow apply 1 --fill    # pre-fill it in a local browser, then STOP for your review
 ```
 
+![jobflow apply — the dry run](screenshots/cli-apply.png)
+
 The dry run also lists anything to fix first (no email, no résumé file to attach…) with the
 exact command to fix it. It moves the posting forward in your tracker: **ready** when nothing
 is missing, otherwise **drafting** with the fix as its next step. Nothing is filled or sent by
@@ -342,6 +352,10 @@ size, the model (with a one-token test call — skip with `--offline`), Playwrig
 Chromium, a LaTeX engine, network reachability of two public job-board APIs, and that
 autosubmit is locked off. Exits 1 if anything fails; `--json` for machines.
 
+![jobflow doctor](screenshots/cli-doctor.png)
+
+If something is wrong, [Troubleshooting](guides/troubleshooting.md) covers each failure.
+
 ### `jobflow serve`
 
 ```bash
@@ -358,7 +372,8 @@ The UI's pages mirror the commands: **Jobs** (`/`, like `jobflow feed`), **Searc
 **Profile** (`/profile`, `jobflow init` / `jobflow profile`), **Sources** (`/sources`, `jobflow
 discovery` and `jobflow sync`) and **Settings** (`/settings`, `jobflow config`). Each job has
 a Job page at `/jobs/<id>` with the apply checklist (`jobflow apply`). The old `/searches` and
-`/discovery` addresses redirect to `/search` and `/sources`.
+`/discovery` addresses redirect to `/search` and `/sources`. A tour of every page is in
+[the web app tour](guides/web-app-tour.md).
 
 ### `jobflow demo` / `jobflow harvest`
 
