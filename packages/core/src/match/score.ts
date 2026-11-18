@@ -4,7 +4,7 @@ import { cosine, clamp } from "../util/vector.js";
 import { convertCurrency, formatSalary } from "../salary/fx.js";
 import { stackAdjacency, type StackAdjacencyResult } from "./stack.js";
 import { countryDisplayName, parsedCountryMatches, primaryRemoteGeo, remoteGeosForCountry } from "../normalize/location.js";
-import { effectiveHomeCountry, effectiveRemoteGeos } from "./region.js";
+import { effectiveHomeCountry, effectiveMarkets, effectiveRemoteGeos } from "./region.js";
 import { EVERGREEN_TITLE_RE, REDATED_SOURCES, TALENT_POOL_JD_RE, scoreSourceTrust } from "./trust.js";
 
 /**
@@ -328,11 +328,23 @@ function scoreLocation(
     // plus the geos open from home decide which count as open; the penalty table covers
     // the rest.
     const geoOk = [...(profile.prefs.remoteGeoOk ?? []), ...homeGeos];
-    const geo = geoOk.includes(loc.remoteGeo) ? 1 : geoPenalty(home, loc.remoteGeo);
+    let geo = geoOk.includes(loc.remoteGeo) ? 1 : geoPenalty(home, loc.remoteGeo);
     const primary = home ? primaryRemoteGeo(home) : null;
     const openBonus = loc.remoteGeo === "worldwide" || (primary !== null && loc.remoteGeo === primary) ? 0.1 : 0;
+    // "Remote - Brazil" / "Remote Singapore": remote WITHIN one named country that no RemoteGeo
+    // names (it reads `unknown`). Open from there or one of your markets; from anywhere else
+    // it usually needs residency — as closed as a geo named for somewhere else (soft, §11.3).
+    const countryOnly = loc.remoteGeo === "unknown" && loc.country != null && loc.country !== "Europe" && home !== "";
+    if (countryOnly) {
+      const places = [home, ...effectiveMarkets(profile.prefs)];
+      if (places.some((c) => parsedCountryMatches(loc.country, c) === true)) geo = 1;
+      else {
+        geo = GEO_PENALTY_ELSEWHERE.india_ok;
+        flags.push(`"Remote" within ${loc.country} — usually requires living there`);
+      }
+    }
     score = clamp(labelScore * geo + openBonus);
-    note = `Remote (${loc.remoteGeo}).`;
+    note = countryOnly ? `Remote (${loc.country}).` : `Remote (${loc.remoteGeo}).`;
     // restricted geos not open from home get an honest flag (home unknown: say what it is)
     const closed = !homeGeos.includes(loc.remoteGeo);
     if (loc.remoteGeo === "us_only" && closed) {

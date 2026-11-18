@@ -14,12 +14,73 @@ import type { LocationMode, RemoteGeo } from "../schema/enums.js";
 
 const INDIA_CITIES = /\b(bengaluru|bangalore|mumbai|navi mumbai|thane|pune|hyderabad|secunderabad|delhi|new delhi|ncr|gurgaon|gurugram|noida|chennai|kolkata|ahmedabad|gandhinagar|gift city|vadodara|jaipur|indore|kochi|cochin|trivandrum|thiruvananthapuram|coimbatore|mysore|mysuru|mangalore|mangaluru|chandigarh|mohali|bhubaneswar|visakhapatnam|vizag|nagpur|lucknow|india)\b/i;
 /** US signal in a LOCATION string (short, structured) — case-insensitive is safe here. */
-const US_HINT = /\b(united states|usa|u\.s\.a?\.?|us|new york|nyc|san francisco|sf|bay area|seattle|austin|boston|chicago|los angeles|denver|atlanta|miami|palo alto|mountain view|menlo park|sunnyvale|san jose|san mateo|redwood city|oakland|portland|dallas|houston|philadelphia|pittsburgh|washington,? d\.?c\.?|remote[ -]?us|us[ -]?based)\b|,\s*(CA|NY|WA|TX|MA|IL|CO|GA|FL|OR|UT|NC|VA|NJ|PA|AZ|MN|MI|OH|DC)\b/i;
-const CANADA_HINT = /\b(canada|toronto|vancouver|montreal|ottawa|calgary|waterloo)\b/i;
+const US_HINT = /\b(united states|usa|u\.s\.a?\.?|us|new york|nyc|san francisco|sf|bay area|seattle|austin|boston|chicago|los angeles|denver|atlanta|miami|palo alto|mountain view|menlo park|sunnyvale|san jose|san mateo|redwood city|oakland|portland|dallas|houston|philadelphia|pittsburgh|washington,? d\.?c\.?|remote[ -]?us|us[ -]?based|bellevue|redmond|kirkland|santa clara|cupertino|san diego|irvine|nashville|raleigh|durham|charlotte|phoenix|tempe|salt lake city|minneapolis|detroit|columbus|st\.? louis|kansas city|baltimore|arlington|reston|herndon|mclean|plano|irving|jersey city|hoboken|honolulu|pleasanton|schenectady|alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming)\b|,\s*(CA|NY|WA|TX|MA|IL|CO|GA|FL|OR|UT|NC|VA|NJ|PA|AZ|MN|MI|OH|DC)\b|\bUS-[A-Z]{2}\b/i;
+const CANADA_HINT = /\b(canada|toronto|vancouver|montreal|ottawa|calgary|waterloo|edmonton|ontario|quebec|british columbia|alberta|manitoba|nova scotia)\b/i;
 /** Region-level restrictions that are NOT open to someone in India (Americas-only). */
 const AMERICAS_HINT = /\b(north america|americas|latam|latin america|canada)\b/i;
-const EU_HINT = /\b(europe|eu|germany|berlin|munich|london|uk|united kingdom|ireland|dublin|amsterdam|netherlands|paris|france|spain|madrid|barcelona|lisbon|portugal|poland|warsaw|emea)\b/i;
+/** a multi-country Americas region (Canada alone is a country — `geoFromLoc`) */
+const AMERICAS_REGION = /\b(north america|americas|latam|latin america)\b/i;
+const EU_HINT = /\b(europe|eu|germany|berlin|munich|hamburg|frankfurt|cologne|stuttgart|london|manchester|edinburgh|glasgow|bristol|uk|united kingdom|england|scotland|ireland|dublin|cork|amsterdam|rotterdam|utrecht|eindhoven|netherlands|paris|lyon|france|spain|madrid|barcelona|valencia|lisbon|porto|portugal|poland|warsaw|krakow|kraków|wroclaw|wrocław|gdansk|italy|milan|rome|switzerland|zurich|zürich|geneva|austria|vienna|belgium|brussels|sweden|stockholm|denmark|copenhagen|aarhus|norway|oslo|finland|helsinki|czechia|czech republic|prague|brno|romania|bucharest|cluj|hungary|budapest|greece|athens|luxembourg|estonia|tallinn|latvia|riga|lithuania|vilnius|croatia|zagreb|serbia|belgrade|bulgaria|sofia|ukraine|kyiv|kiev|lviv|slovakia|bratislava|slovenia|ljubljana|cyprus|malta|iceland|emea)\b/i;
 const APAC_HINT = /\b(apac|asia[- ]pacific|asia)\b/i;
+
+/**
+ * Countries the region hints above don't cover, named by the display name `parseLocation`
+ * reports. Without them an onsite Tokyo / Singapore / São Paulo role had no country — never
+ * "abroad", so never discounted or flagged for a user in India or the US (audit 2026-11:
+ * 13–19% of onsite postings).
+ */
+const OTHER_COUNTRIES: ReadonlyArray<readonly [string, string, RegExp]> = [
+  ["SG", "Singapore", /\bsingapore\b/i],
+  ["JP", "Japan", /\b(japan|tokyo|osaka|yokohama|kyoto|fukuoka)\b/i],
+  ["KR", "South Korea", /\b(south korea|korea|seoul|busan|pangyo)\b/i],
+  ["AU", "Australia", /\b(australia|sydney|melbourne|brisbane|perth|canberra|adelaide)\b/i],
+  ["NZ", "New Zealand", /\b(new zealand|auckland|wellington)\b/i],
+  ["CN", "China", /\b(china|beijing|shanghai|shenzhen|guangzhou|hangzhou|chengdu)\b/i],
+  ["HK", "Hong Kong", /\bhong kong\b/i],
+  ["TW", "Taiwan", /\b(taiwan|taipei|hsinchu)\b/i],
+  ["PH", "Philippines", /\b(philippines|manila|makati|taguig|cebu)\b/i],
+  ["MY", "Malaysia", /\b(malaysia|kuala lumpur|penang)\b/i],
+  ["TH", "Thailand", /\b(thailand|bangkok)\b/i],
+  ["ID", "Indonesia", /\b(indonesia|jakarta)\b/i],
+  ["VN", "Vietnam", /\b(vietnam|viet nam|ho chi minh|hanoi)\b/i],
+  ["AE", "United Arab Emirates", /\b(united arab emirates|uae|dubai|abu dhabi)\b/i],
+  ["SA", "Saudi Arabia", /\b(saudi arabia|ksa|riyadh|jeddah)\b/i],
+  ["QA", "Qatar", /\b(qatar|doha)\b/i],
+  ["KW", "Kuwait", /\bkuwait\b/i],
+  ["EG", "Egypt", /\b(egypt|cairo)\b/i],
+  ["IL", "Israel", /\b(israel|tel aviv|herzliya|haifa|jerusalem)\b/i],
+  ["TR", "Turkey", /\b(turkey|türkiye|turkiye|istanbul|ankara)\b/i],
+  ["ZA", "South Africa", /\b(south africa|johannesburg|cape town)\b/i],
+  ["NG", "Nigeria", /\b(nigeria|lagos)\b/i],
+  ["KE", "Kenya", /\b(kenya|nairobi)\b/i],
+  ["MX", "Mexico", /\b(mexico|guadalajara|monterrey)\b/i],
+  ["BR", "Brazil", /\b(brazil|brasil|s[aã]o paulo|rio de janeiro|curitiba|florian[oó]polis|belo horizonte)\b/i],
+  ["AR", "Argentina", /\b(argentina|buenos aires)\b/i],
+  ["CO", "Colombia", /\b(colombia|bogot[aá]|medell[ií]n)\b/i],
+  ["CL", "Chile", /\bchile\b/i],
+  ["PE", "Peru", /\bperu\b/i],
+  ["CR", "Costa Rica", /\bcosta rica\b/i],
+  ["UY", "Uruguay", /\b(uruguay|montevideo)\b/i],
+  ["DO", "Dominican Republic", /\bdominican republic\b/i],
+  ["PK", "Pakistan", /\b(pakistan|karachi|lahore|islamabad)\b/i],
+  ["BD", "Bangladesh", /\b(bangladesh|dhaka)\b/i],
+  ["LK", "Sri Lanka", /\b(sri lanka|colombo)\b/i],
+];
+
+function otherCountry(loc: string): (typeof OTHER_COUNTRIES)[number] | null {
+  for (const row of OTHER_COUNTRIES) if (row[2].test(loc)) return row;
+  return null;
+}
+
+/** Ashby-style "US-CA-Menlo Park", "JP-Tokyo", "Fins Only-AU-Sydney-MSO", "6 Locations" → the place words. */
+function cleanForCity(loc: string): string {
+  return loc
+    .replace(/\b\d+\s+locations?\b/gi, " ")
+    .replace(/\b(?:fins only|n\/a|multiple locations|various locations|locations?)\b/gi, " ")
+    .replace(/\b[A-Z]{2}-\s?(?:[A-Z]{2}-)?(?=[A-Z])/g, "")
+    .replace(/-(?:remote|mso|observe|office|hq)\b/gi, " ")
+    .replace(/\b(?:hq|office|campus)\b/gi, " ");
+}
 
 /**
  * US signal in free JD TEXT. The location-string regex above can't be reused: run
@@ -45,7 +106,12 @@ const STRONG_REMOTE_RE = /\b(fully remote|100% remote|remote[- ]first|remote rol
 const US_ONLY_RE = /\b(remote[ ,-]*(within )?(the )?(us|usa|united states)|us[ -]?only|usa[ -]?only|must (be|reside|live).{0,30}(united states|\bus\b|usa)|(located|based|reside) in the (us|united states)|us work authorization|authorized to work in the (us|united states)|eligible to work in the (us|united states)|us citizens?(hip)?|green card|us persons?|w-?2 (only|employees?))\b/i;
 const EU_ONLY_RE = /\b(remote[ ,-]*(within )?(the )?(eu|europe|emea|uk)|eu[ -]?only|uk[ -]?only|must (be|reside|live).{0,30}(europe|\beu\b|\buk\b)|right to work in the (uk|eu))\b/i;
 const INDIA_OK_RE = /\b(remote[ ,-]*\(?india|india[ -]?(based|remote)|anywhere in india|remote,? india|pan[ -]india|open to (candidates in )?india|work from home.{0,20}india)\b/i;
-const WORLDWIDE_RE = /\b(remote[ ,-]*\(?(anywhere|worldwide|global)|work from anywhere|anywhere in the world|fully remote worldwide|worldwide|globally remote)\b/i;
+/**
+ * JD phrasing that opens a remote ROLE to the world. Not a bare "worldwide": that is company
+ * boilerplate ("customers worldwide", "offices worldwide") and made restricted roles read as
+ * worldwide at 0.9 confidence (audit 2026-11: "Remote - California" → worldwide).
+ */
+const WORLDWIDE_RE = /\b(remote[ ,-]*\(?(anywhere|worldwide|global)|work from anywhere|anywhere in the world|(fully |100% )?remote[^.\n]{0,25}\b(worldwide|globally)|hire (from )?anywhere|globally remote|location[- ]independent)\b/i;
 
 const SPONSORSHIP_NEG = /(no (visa )?sponsorship|not (able|eligible) to sponsor|(do|does|will|can) ?n[o']t (provide|offer|sponsor)[^.]{0,20}sponsor|without sponsorship|unable to sponsor|cannot sponsor)/i;
 const SPONSORSHIP_POS = /\b(visa sponsorship|will sponsor|relocation (provided|assistance|support|package)|sponsorship available)\b/i;
@@ -59,7 +125,7 @@ const TZ_HINTS: Array<[RegExp, string]> = [
 ];
 
 /** Where the remote geo came from — drives the honest confidence below (§11.3). */
-type GeoSource = "loc" | "jd_explicit" | "jd_inferred" | "none";
+type GeoSource = "loc" | "loc_country" | "jd_explicit" | "jd_inferred" | "none";
 
 /**
  * Remote geo from the LOCATION string (Remotive's candidate_required_location, Ashby's
@@ -71,7 +137,10 @@ function geoFromLoc(loc: string): RemoteGeo | null {
   if (INDIA_CITIES.test(loc)) return "india_ok";
   if (/\b(anywhere|worldwide|global|international)\b/i.test(loc)) return "worldwide";
   if (APAC_HINT.test(loc)) return "apac_ok";
-  const us = US_HINT.test(loc) || AMERICAS_HINT.test(loc);
+  // Canada ALONE is one country, not the Americas: filed under us_only it read as open to a
+  // US resident (Affirm's separate "Remote - Canada" reqs ranked top-20 for a US profile).
+  // It stays a single-country remote (see parseLocation); "US or Canada" is still us_only.
+  const us = US_HINT.test(loc) || AMERICAS_REGION.test(loc);
   const eu = EU_HINT.test(loc);
   if (us && eu) return "us_eu";
   if (us) return "us_only";
@@ -80,7 +149,9 @@ function geoFromLoc(loc: string): RemoteGeo | null {
 }
 
 export function parseLocation(locationRaw: string | null, jdText = ""): ParsedLocation {
-  const loc = (locationRaw ?? "").trim();
+  const raw = (locationRaw ?? "").trim();
+  // hints read "US-CA-Dublin" as the US, not as Dublin, Ireland (Ashby's ISO-prefixed form)
+  const loc = raw.replace(/\bUS-[A-Z]{2}-[^;,|]*/g, "US");
   const jd = jdText ?? "";
 
   // 1. mode — location string first; JD prose only fills a gap
@@ -105,8 +176,8 @@ export function parseLocation(locationRaw: string | null, jdText = ""): ParsedLo
         ? "Canada"
         : EU_HINT.test(loc)
           ? "Europe"
-          : null;
-  const locForCity = loc.replace(/\b(remote|hybrid|on[ -]?site|in[ -]?office|anywhere|worldwide|global)\b/gi, " ");
+          : (otherCountry(loc)?.[1] ?? null);
+  const locForCity = cleanForCity(raw).replace(/\b(remote|hybrid|on[ -]?site|in[ -]?office|anywhere|worldwide|global)\b/gi, " ");
   // up to three capitalised words ending at a separator: "San Francisco, CA", "New York
   // City", "Tel Aviv" — not just their first word
   const cityMatch =
@@ -126,9 +197,14 @@ export function parseLocation(locationRaw: string | null, jdText = ""): ParsedLo
     if (fromLoc) {
       remoteGeo = fromLoc;
       geoSource = "loc";
+    } else if (country && (country === "Canada" || otherCountry(loc))) {
+      // "Remote - Brazil": remote WITHIN one named country. No RemoteGeo names it, so the geo
+      // stays unknown, but the country is a structured claim — JD boilerplate ("customers
+      // worldwide", a stray "US") must not reinterpret it.
+      geoSource = "loc_country";
     }
     // an explicit JD restriction beats a generic "worldwide" label, never a named India option
-    if (remoteGeo === "unknown" || remoteGeo === "worldwide") {
+    if ((remoteGeo === "unknown" || remoteGeo === "worldwide") && geoSource !== "loc_country") {
       if (US_ONLY_RE.test(jd)) {
         remoteGeo = "us_only";
         geoSource = "jd_explicit";
@@ -137,14 +213,14 @@ export function parseLocation(locationRaw: string | null, jdText = ""): ParsedLo
         geoSource = "jd_explicit";
       }
     }
-    if (remoteGeo === "unknown") {
+    if (remoteGeo === "unknown" && geoSource !== "loc_country") {
       if (INDIA_OK_RE.test(jd)) remoteGeo = "india_ok";
       else if (WORLDWIDE_RE.test(jd)) remoteGeo = "worldwide";
       else if (/\b(apac|asia[- ]pacific)\b/i.test(jd)) remoteGeo = "apac_ok";
       if (remoteGeo !== "unknown") geoSource = "jd_explicit";
     }
     // a "remote" role whose only geo hint is US, with no india/worldwide signal → likely us_only
-    if (remoteGeo === "unknown" && usSignal && !INDIA_CITIES.test(`${loc} ${jd}`)) {
+    if (remoteGeo === "unknown" && geoSource !== "loc_country" && usSignal && !INDIA_CITIES.test(`${loc} ${jd}`)) {
       remoteGeo = "us_only";
       geoSource = "jd_inferred";
     }
@@ -189,6 +265,7 @@ function scoreConfidence(
   if (mode === "remote") {
     // the location field is a structured claim; JD prose disagreeing with it lowers trust
     if (geoSource === "loc") return conflicting && remoteGeo !== "india_ok" ? 0.6 : 0.9;
+    if (geoSource === "loc_country") return 0.8; // the country is stated; no RemoteGeo names it
     if (conflicting) return 0.4; // multiple, competing geo hints — unsure which binds
     if (geoSource === "jd_explicit") return remoteGeo === "worldwide" || remoteGeo === "india_ok" ? 0.9 : 0.85;
     if (remoteGeo === "unknown") return 0.35; // "remote" with zero geo info
@@ -220,6 +297,7 @@ export const PARSED_COUNTRY_NAME: Readonly<Record<string, string>> = {
   IN: "India",
   US: "United States",
   CA: "Canada",
+  ...Object.fromEntries(OTHER_COUNTRIES.map(([code, name]) => [code, name])),
 };
 
 /**
@@ -288,8 +366,8 @@ export function parsedCountryMatches(parsed: string | null | undefined, code: st
   if (!parsed || !c) return null;
   if (parsed === "Europe") return EUROPE_CODES.has(c) ? null : false;
   const name = PARSED_COUNTRY_NAME[c];
-  // the parser only ever names India / United States / Canada / Europe, so a country
-  // outside those is definitely not where this posting is
+  // every country the parser names is in PARSED_COUNTRY_NAME, so for a code it has no name
+  // for, the parsed country is definitely somewhere else
   return name ? parsed === name : false;
 }
 
@@ -317,7 +395,7 @@ export function isWorkableIn(
   return false;
 }
 
-/** place names → ISO-2 the parser itself doesn't resolve (it only knows IN/US/CA + "Europe"). */
+/** European place names → ISO-2 (the parser itself only resolves them to the region "Europe"). */
 const COUNTRY_WORDS: Array<[RegExp, string]> = [
   [/\b(united kingdom|uk|england|scotland|wales|london|manchester|edinburgh|cambridge|oxford|bristol)\b/i, "GB"],
   [/\b(germany|deutschland|berlin|munich|hamburg|frankfurt|cologne|stuttgart)\b/i, "DE"],
@@ -347,5 +425,5 @@ export function countryCodeFromText(text: string | null | undefined): string | n
   for (const [re, code] of COUNTRY_WORDS) if (re.test(t)) return code;
   if (CANADA_HINT.test(t)) return "CA";
   if (US_HINT.test(t)) return "US";
-  return null;
+  return otherCountry(t)?.[0] ?? null;
 }

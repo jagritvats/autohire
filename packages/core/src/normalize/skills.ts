@@ -23,13 +23,14 @@ const SKILL_ALIASES: Record<string, string[]> = {
   scala: ["scala", "akka"],
   rust: ["rust", "tokio"],
   csharp: ["c#", "\\.net", "dotnet", "asp\\.net"],
-  python: ["python", "django", "flask", "fastapi"],
+  python: ["python3?", "django", "flask", "fastapi"],
   typescript: ["typescript", "\\bts\\b"],
   php: ["\\bphp\\b", "laravel", "symfony", "codeigniter"],
   ruby: ["\\bruby\\b", "\\brails\\b", "ruby on rails"],
   cpp: ["c\\+\\+", "\\bcpp\\b"],
-  javascript: ["javascript", "node\\.?js", "\\bnode\\b", "\\bjs\\b"],
-  react: ["react", "next\\.?js", "redux"],
+  javascript: ["javascript", "node\\.?js", "\\bnode\\b(?=\\s*(\\.js|js|,|/|\\)|backend|developer|engineer|services?|apis?|ecosystem|and (typescript|express|react)))", "\\bjs\\b", "express\\.?js"],
+  // "react" is also the verb ("react to incidents") — the library needs a tech cue
+  react: ["react\\.?js", "react(?=\\s*(native|hooks|query|router|components?|developer|engineer|frontend|front-end|,|;|/|\\)|\\+|$|and (redux|typescript|next)))", "(?<=\\b(in|with|using|of|knowledge of|experience (in|with))\\s)react", "next\\.?js", "redux"],
   kafka: ["kafka", "kafka streams", "ksql", "confluent"],
   rabbitmq: ["rabbitmq", "amqp"],
   postgres: ["postgres", "postgresql", "psql"],
@@ -41,9 +42,10 @@ const SKILL_ALIASES: Record<string, string[]> = {
   grpc: ["grpc", "protobuf", "protocol buffers"],
   graphql: ["graphql", "apollo"],
   rest: ["rest api", "restful", "\\brest\\b(?=\\s*(api|service|endpoint))"],
-  microservices: ["microservices", "micro-services", "service oriented", "\\bsoa\\b"],
-  distributed_systems: ["distributed systems", "distributed system", "consensus", "raft", "paxos"],
-  docker: ["docker", "containers", "containerization"],
+  microservices: ["micro-?services?", "service[- ]oriented", "\\bsoa\\b"],
+  // not "consensus": "build consensus with stakeholders" is in half of all JDs
+  distributed_systems: ["distributed systems?", "raft consensus", "\\braft\\b(?=\\s*(,|/|\\)|and paxos|protocol|algorithm))", "paxos"],
+  docker: ["docker(s|ized|ised|file|files|compose)?", "containers", "containeri[sz](ation|ed)"],
   kubernetes: ["kubernetes", "k8s", "helm", "eks", "gke"],
   aws: ["\\baws\\b", "amazon web services", "ec2", "\\bs3\\b", "lambda", "dynamodb"],
   gcp: ["\\bgcp\\b", "google cloud", "bigquery"],
@@ -52,7 +54,7 @@ const SKILL_ALIASES: Record<string, string[]> = {
   ci_cd: ["ci/cd", "continuous integration", "jenkins", "github actions", "gitlab ci"],
   spark: ["apache spark", "\\bspark\\b", "pyspark"],
   airflow: ["airflow", "dagster", "prefect"],
-  ml: ["machine learning", "\\bml\\b", "pytorch", "tensorflow", "llm", "rag"],
+  ml: ["machine learning", "\\bml\\b", "pytorch", "tensorflow", "llms?", "\\brag\\b"],
   fintech_domain: ["payments", "ledger", "double[- ]entry", "wallet", "settlement", "trading", "fintech", "banking", "\\bkyc\\b", "\\bsip\\b"],
 };
 
@@ -62,18 +64,29 @@ const MUST_HAVE_CUES = [
 ];
 const NICE_CUES = [/\b(nice to have|preferred|bonus|plus|a plus|good to have|familiarity)\b/i];
 
-const COMPILED: Array<[string, RegExp]> = Object.entries(SKILL_ALIASES).map(
-  ([skill, aliases]) => [skill, new RegExp(`(${aliases.join("|")})`, "i")],
-);
-
-/** Extract the set of canonical skills mentioned anywhere in a JD. */
+/**
+ * Extract the set of canonical skills mentioned anywhere in a JD. Aliases match whole words:
+ * as substrings, "scalable" read as Scala, "trust" as Rust, "storage"/"leverage" as RAG (ML)
+ * and "weeks" as EKS (Kubernetes) — 90% of the Scala and 97% of the Rust tags on a live
+ * corpus were false (audit 2026-11), feeding stack scores and "JD requires X" flags.
+ */
 export function extractSkills(text: string): string[] {
   if (!text) return [];
-  const found = new Set<string>();
-  for (const [skill, re] of COMPILED) {
-    if (re.test(text)) found.add(skill);
-  }
-  return [...found];
+  return matchAliases(text);
+}
+
+/**
+ * Skills whose name is also an English word, recognised by their capitalised proper-noun
+ * form — "React and CSS" is the library, "react to incidents" is the verb.
+ */
+const CASED: ReadonlyArray<readonly [string, RegExp]> = [
+  ["react", /(?<![\w])React(?![\w])(?!\s+(?:to|quickly|swiftly|fast|calmly|appropriately|accordingly|positively)\b)/],
+];
+
+function matchAliases(text: string): string[] {
+  const found = TOKEN_COMPILED.filter(([, re]) => re.test(text)).map(([skill]) => skill);
+  for (const [skill, re] of CASED) if (!found.includes(skill) && re.test(text)) found.push(skill);
+  return found;
 }
 
 /**
@@ -118,6 +131,7 @@ export const CANONICAL_SKILLS: readonly string[] = Object.keys(SKILL_ALIASES);
  */
 const EXACT_SKILL_TOKENS: Record<string, string> = {
   go: "go",
+  node: "javascript",
   "c#": "csharp",
   "c++": "cpp",
   rest: "rest",
@@ -139,12 +153,13 @@ const TOKEN_COMPILED: Array<[string, RegExp]> = Object.entries(SKILL_ALIASES).ma
 );
 
 /**
- * `extractSkills` with whole-word aliases on both sides — for a candidate's own prose,
- * where the JD extractor's substring aliases misfire ("storage" ⊃ "rag", "weeks" ⊃ "eks").
+ * Whole-word skill extraction for a candidate's own prose. Since the JD extractor went
+ * whole-word too (it misfired the same way: "storage" ⊃ "rag", "weeks" ⊃ "eks") this is
+ * the same matcher; kept as its own name for its callers.
  */
 export function extractSkillsStrict(text: string): string[] {
   if (!text) return [];
-  return TOKEN_COMPILED.filter(([, re]) => re.test(text)).map(([skill]) => skill);
+  return matchAliases(text);
 }
 
 /**
