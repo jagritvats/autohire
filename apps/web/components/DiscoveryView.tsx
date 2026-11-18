@@ -86,7 +86,7 @@ export function DiscoveryView() {
     }
   }
 
-  if (!data) return <p className="hint">loading…</p>;
+  if (!data) return <p className="hint" role="status">loading…</p>;
   const active = data.presets.filter((p) => p.active);
 
   return (
@@ -101,7 +101,7 @@ export function DiscoveryView() {
               key={p.id}
               type="button"
               className="onb-preset"
-              data-on={p.active}
+              data-on={p.active} aria-pressed={p.active}
               disabled={busy || (p.active && active.length === 1)}
               title={p.active && active.length === 1 ? "keep at least one preset on" : p.active ? "click to switch off" : "click to switch on"}
               onClick={() => void op({ op: "preset", id: p.id, enabled: !p.active })}
@@ -119,7 +119,7 @@ export function DiscoveryView() {
             <p className="hint" style={{ marginTop: 12 }}>Feeds in “{a.label}” (click to turn off/on):</p>
             <div className="chip-row">
               {a.feeds.map((f) => (
-                <button key={f.id} type="button" className="chip" data-on={f.enabled} onClick={() => void op({ op: "preset_feed", feedId: f.id, enabled: !f.enabled })}>
+                <button key={f.id} type="button" className="chip" data-on={f.enabled} aria-pressed={f.enabled} onClick={() => void op({ op: "preset_feed", feedId: f.id, enabled: !f.enabled })}>
                   {f.source} · {f.id}
                 </button>
               ))}
@@ -157,7 +157,7 @@ export function DiscoveryView() {
             add
           </button>
         </div>
-        {error && <p className="auth-error">{error}</p>}
+        {error && <p className="auth-error" role="alert">{error}</p>}
         <ul className="tokens-list" style={{ marginTop: 14 }}>
           {data.sources.map((s) => (
             <li key={s.id} data-revoked={!s.enabled}>
