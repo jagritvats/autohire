@@ -116,6 +116,9 @@ const PERIOD_BEFORE: Array<[RegExp, Period]> = [
 ];
 const ANNUALISE: Record<Period, number> = { year: 1, month: 12, week: 52, day: 260, hour: 2080 };
 
+/** ₹3 L/yr (₹25k/month): below it, an INR figure with no stated period may be a month's pay */
+const INR_ANNUAL_MIN = 300_000;
+
 /** dollar currencies a bare "$" may actually mean, per the posting's location */
 const DOLLARS = new Set(["USD", "CAD", "AUD", "SGD", "NZD", "HKD"]);
 
@@ -245,9 +248,12 @@ function buildCandidate(text: string, a: Token, b: Token | null, opts: SalaryPar
 
   // ── confidence (see header) ──
   const annualish = period == null || period === "year" || period === "month";
+  // an undated INR band below a full-time annual wage is as likely MONTHLY ("₹2L – ₹2.5L" for
+  // a senior backend role, 4+ yrs — audit 2026-11): it can't be the high band a hard floor acts on
+  const periodUnclear = period == null && currency === "INR" && Math.max(lo, hi ?? 0) < INR_ANNUAL_MIN;
   let confidence: SalaryConfidence;
   if (!explicit) confidence = "medium";
-  else if (!ambiguous && kwNear && annualish && (kind === "range" || kind === "cap")) confidence = "high";
+  else if (!ambiguous && !periodUnclear && kwNear && annualish && (kind === "range" || kind === "cap")) confidence = "high";
   else if (kwNear || kind === "range") confidence = "medium_high";
   else return null; // a lone currency figure in prose with no pay word: too weak to state
 

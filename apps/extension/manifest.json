@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "JobFlow Capture",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "description": "Capture postings + show match score inline on pages you're already viewing. Read-only, local, no background crawling (§7.1).",
   "permissions": ["activeTab", "storage"],
   "host_permissions": [

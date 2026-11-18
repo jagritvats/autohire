@@ -21,6 +21,9 @@ export const US_PRESET: DiscoveryPreset = {
       ],
     },
     { id: "us.remotive", source: "remotive", targets: [{ query: "software engineer", limit: 60 }] },
+    // Jobicy: remote roles by Jobicy geo, last 7 days. Its terms allow one automated pass an
+    // hour, which the adapter enforces per target; `slow` keeps request-bound refreshes off it.
+    { id: "us.jobicy", source: "jobicy", slow: true, targets: [{ limit: 100, params: { geo: "usa", industry: "engineering" } }] },
     { id: "us.hn_whoishiring", source: "hn_whoishiring", targets: [{ query: "backend", limit: 60 }, { query: "remote", limit: 60 }] },
     {
       id: "us.adzuna",

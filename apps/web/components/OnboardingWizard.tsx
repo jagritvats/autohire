@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { LevelBand, RemoteGeo, ResumeDraft, RoleArchetype, StoredFile } from "@jobflow/core";
+import type { PresetOption, PresetSuggestions } from "@/lib/presets";
 
 /**
  * Onboarding: your résumé → a DRAFT you review → preferences → discovery preset. Nothing
@@ -9,12 +10,6 @@ import type { LevelBand, RemoteGeo, ResumeDraft, RoleArchetype, StoredFile } fro
  * Evidence Bank holds only claims from your own material).
  */
 
-const PRESETS = [
-  { id: "india", label: "India", detail: "Indian product companies, India offices of global firms, India job boards" },
-  { id: "global-remote", label: "Global remote", detail: "Remote-first companies and remote boards, any country" },
-  { id: "us", label: "United States", detail: "US companies on Greenhouse / Lever / Ashby + US aggregators" },
-  { id: "eu-uk", label: "Europe & UK", detail: "EU/UK companies and boards (Arbeitnow, Adzuna GB/DE…)" },
-];
 const ARCHETYPES: RoleArchetype[] = ["backend", "platform", "fullstack", "infra_devops", "data_ml", "frontend", "mobile", "sre"];
 const LEVELS: LevelBand[] = ["intern", "junior", "mid", "senior", "staff", "lead", "principal", "manager", "director"];
 const GEOS: { id: RemoteGeo; label: string }[] = [
@@ -25,11 +20,36 @@ const GEOS: { id: RemoteGeo; label: string }[] = [
   { id: "india_ok", label: "India OK" },
   { id: "apac_ok", label: "APAC OK" },
 ];
+const CONTACT_LABEL: Record<string, string> = {
+  firstName: "first name",
+  lastName: "last name",
+  email: "email",
+  phone: "phone",
+  linkedin: "LinkedIn",
+  github: "GitHub",
+  portfolio: "portfolio",
+};
 const CURRENCIES = ["USD", "EUR", "GBP", "INR", "CAD", "AUD", "SGD"];
 
 type Step = "resume" | "review" | "prefs" | "discovery";
+const STEP_LABEL: Record<Step, string> = { resume: "Your résumé", review: "Check what we found", prefs: "What you want", discovery: "Where to look" };
 
-export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
+/**
+ * Presets that fit a home country — the server's `suggestPreset` answer (CA → canada, DE →
+ * eu-uk…), always plus the market-neutral preset. A suggestion the user can change.
+ */
+function presetsFor(country: string, suggest: PresetSuggestions): string[] {
+  const local = suggest.byCountry[country.trim().toUpperCase()];
+  return local && local !== suggest.fallback ? [local, suggest.fallback] : [suggest.fallback];
+}
+/** remote regions someone in this country can usually take: the suggested preset's defaults */
+function geosFor(country: string, suggest: PresetSuggestions, presets: PresetOption[]): RemoteGeo[] {
+  const local = suggest.byCountry[country.trim().toUpperCase()];
+  const geos = local && local !== suggest.fallback ? presets.find((p) => p.id === local)?.remoteGeoOk : null;
+  return geos?.length ? geos : ["worldwide"];
+}
+
+export function OnboardingWizard({ llmReady, presetOptions, suggest }: { llmReady: boolean; presetOptions: PresetOption[]; suggest: PresetSuggestions }) {
   const [step, setStep] = useState<Step>("resume");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +75,20 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
   const [currency, setCurrency] = useState("USD");
   const [archetypes, setArchetypes] = useState<RoleArchetype[]>([]);
   const [locations, setLocations] = useState("remote");
-  const [presets, setPresets] = useState<string[]>(["global-remote"]);
+  const [presets, setPresets] = useState<string[]>([suggest.fallback]);
+  const [presetsTouched, setPresetsTouched] = useState(false);
+  const [geosTouched, setGeosTouched] = useState(false);
+
+  /** home country → suggested markets, remote regions and presets (until the user changes them) */
+  function setHome(v: string) {
+    const c = v.toUpperCase();
+    setHomeCountry(c);
+    if (/^[A-Z]{2}$/.test(c)) {
+      if (!markets.trim()) setMarkets(c);
+      if (!geosTouched) setGeos(geosFor(c, suggest, presetOptions));
+      if (!presetsTouched) setPresets(presetsFor(c, suggest));
+    }
+  }
 
   function seedFromDraft(d: ResumeDraft) {
     setDraft(d);
@@ -78,6 +111,14 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
     if (d.locations[0]) setLocations(["remote", ...d.locations.map((l) => l.toLowerCase())].join(", "));
   }
 
+  /** no résumé to hand: type the essentials instead (skills are the minimum to rank against) */
+  function startManual() {
+    setDraft(null);
+    setFile(null);
+    setError(null);
+    setStep("review");
+  }
+
   async function upload(f: File | null) {
     if (!f) return;
     setBusy(true);
@@ -87,7 +128,8 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
       fd.append("file", f);
       const res = await fetch(`/api/resume/import${assist ? "?assist=1" : ""}`, { method: "POST", body: fd });
       const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? "Could not read that file.");
+      if (!res.ok)
+        throw new Error(`${body.error ?? "Couldn't read that file."} Try a PDF with selectable text or a DOCX — or paste the text below.`);
       setFile(body.file);
       seedFromDraft(body.draft);
       setStep("review");
@@ -122,7 +164,7 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
   async function loadSample() {
     setBusy(true);
     await fetch("/api/onboarding/sample", { method: "POST" });
-    window.location.href = "/";
+    window.location.href = "/?welcome=sample";
   }
 
   async function finish() {
@@ -160,8 +202,8 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
         }),
       });
       const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? "Could not save.");
-      window.location.href = "/";
+      if (!res.ok) throw new Error(body.error ?? "Couldn't save your profile.");
+      window.location.href = "/?welcome=1";
     } catch (e) {
       setError((e as Error).message);
       setBusy(false);
@@ -172,20 +214,21 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
 
   return (
     <div className="settings onboarding">
-      <ol className="onb-steps">
+      <ol className="onb-steps" aria-label="Setup steps">
         {(["resume", "review", "prefs", "discovery"] as Step[]).map((s, i) => (
-          <li key={s} data-on={s === step}>
-            {i + 1}. {s === "resume" ? "résumé" : s === "review" ? "review" : s === "prefs" ? "preferences" : "discovery"}
+          <li key={s} data-on={s === step} aria-current={s === step ? "step" : undefined}>
+            {i + 1}. {STEP_LABEL[s]}
           </li>
         ))}
       </ol>
+      <p className="hint">Nothing is saved until the last step. You can change all of it later under Profile.</p>
       {error && <p className="auth-error" role="alert">{error}</p>}
 
       {step === "resume" && (
         <section className="card-block">
-          <h3>
+          <h2>
             Your résumé <span className="hint">— PDF, DOCX, LaTeX, Markdown, text, JSON Resume or a LinkedIn data export</span>
-          </h3>
+          </h2>
           <p className="hint">
             JobFlow copies what&apos;s in your file — it never adds claims. You&apos;ll review everything before it&apos;s saved.
           </p>
@@ -200,23 +243,33 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
             </label>
           </div>
           <p className="hint" style={{ marginTop: 14 }}>or paste the text:</p>
-          <textarea className="onb-paste" rows={8} value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="Paste your résumé…" />
+          <textarea className="onb-paste" aria-label="Résumé text" rows={8} value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="Paste your résumé…" />
           <div className="onb-actions">
             <button type="button" className="save" disabled={busy || !paste.trim()} onClick={usePaste}>
-              {busy ? "reading…" : "use pasted text"}
+              {busy ? "reading…" : "Read pasted text"}
             </button>
-            <button type="button" className="save ghost" disabled={busy} onClick={loadSample}>
-              try with a fictional sample profile
+            <button type="button" className="save ghost" disabled={busy} onClick={startManual}>
+              No résumé handy — type my skills instead
+            </button>
+            <button type="button" className="save ghost" disabled={busy} onClick={loadSample} title="Alex Example — invented, for trying JobFlow out">
+              Just exploring — use a fictional sample
             </button>
           </div>
+          {busy && <p className="hint" role="status">Reading your résumé…</p>}
         </section>
       )}
 
-      {step === "review" && draft && (
+      {step === "review" && (
         <>
-          {draft.warnings.length > 0 && (
+          {!draft && (
+            <p className="hint">
+              Without a résumé, JobFlow ranks jobs on your skills and level alone, and drafts can only use what you type here. You can upload one
+              later under Profile.
+            </p>
+          )}
+          {draft && draft.warnings.length > 0 && (
             <section className="card-block danger">
-              <h3>Heads-up</h3>
+              <h2>Heads-up</h2>
               <ul className="onb-warnings">
                 {draft.warnings.map((w) => (
                   <li key={w}>{w}</li>
@@ -225,25 +278,25 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
             </section>
           )}
           <section className="card-block">
-            <h3>Contact <span className="hint">— only what you keep here is ever typed into a form, and the filler always stops at review</span></h3>
+            <h2>Contact <span className="hint">— only what you keep here is ever typed into a form, and the filler always stops at review</span></h2>
             <div className="field-row">
               {(Object.keys(contact) as (keyof typeof contact)[]).map((k) => (
                 <label key={k}>
-                  {k}
+                  {CONTACT_LABEL[k] ?? k}
                   <input value={contact[k]} onChange={(e) => setContact({ ...contact, [k]: e.target.value })} />
                 </label>
               ))}
             </div>
           </section>
           <section className="card-block">
-            <h3>Skills <span className="hint">— your stack drives stack-adjacency scoring</span></h3>
+            <h2>Skills <span className="hint">— your stack drives stack-adjacency scoring</span></h2>
             <div className="chip-row">
               {skills.map((s) => (
-                <button key={s} type="button" className="chip" data-on="true" onClick={() => setSkills(skills.filter((x) => x !== s))}>
+                <button key={s} type="button" className="chip" data-on="true" aria-label={`Remove ${s}`} onClick={() => setSkills(skills.filter((x) => x !== s))}>
                   {s} ✕
                 </button>
               ))}
-              {draft.skills.unrecognized.slice(0, 20).map((s) => (
+              {(draft?.skills.unrecognized ?? []).slice(0, 20).map((s) => (
                 <button key={`u-${s}`} type="button" className="chip" title="not in the skill dictionary — add as custom" onClick={() => setSkills([...skills, s.toLowerCase()])}>
                   + {s}
                 </button>
@@ -265,7 +318,7 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
                 />
               </label>
               <label>
-                years of experience <span className="hint">{draft.yoe.basis}</span>
+                years of experience <span className="hint">{draft?.yoe.basis}</span>
                 <input type="number" min={0} max={60} step={0.5} value={yoe} onChange={(e) => setYoe(Number(e.target.value))} />
               </label>
               <label>
@@ -278,11 +331,12 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
               </label>
             </div>
           </section>
+          {draft && (
           <section className="card-block">
-            <h3>
+            <h2>
               Evidence Bank <span className="hint">— the claims tailoring may cite; each is copied verbatim from your résumé</span>
-            </h3>
-            {draft.evidence.length === 0 && <p className="hint">No bullet points found — you can add evidence later in Settings.</p>}
+            </h2>
+            {draft.evidence.length === 0 && <p className="hint">No bullet points found — you can add evidence later under Profile.</p>}
             <ul className="onb-evidence">
               {draft.evidence.map((e, i) => (
                 <li key={i}>
@@ -297,12 +351,19 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
               ))}
             </ul>
           </section>
+          )}
           <div className="onb-actions">
             <button type="button" className="save ghost" onClick={() => setStep("resume")}>
               back
             </button>
-            <button type="button" className="save" onClick={() => setStep("prefs")}>
-              looks right
+            <button
+              type="button"
+              className="save"
+              disabled={!draft && skills.length === 0}
+              title={!draft && skills.length === 0 ? "Add at least one skill — there's nothing to rank jobs against otherwise" : ""}
+              onClick={() => setStep("prefs")}
+            >
+              Looks right — next
             </button>
           </div>
         </>
@@ -311,11 +372,11 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
       {step === "prefs" && (
         <>
           <section className="card-block">
-            <h3>Where you work <span className="hint">— weighted signals, not filters: nothing is hidden for being elsewhere</span></h3>
+            <h2>Where you work <span className="hint">— weighted signals, not filters: nothing is hidden for being elsewhere</span></h2>
             <div className="field-row">
               <label>
                 home country (ISO code)
-                <input value={homeCountry} maxLength={2} placeholder="e.g. US, DE, IN" onChange={(e) => setHomeCountry(e.target.value)} />
+                <input value={homeCountry} maxLength={2} placeholder="e.g. US, DE, IN" onChange={(e) => setHome(e.target.value)} />
               </label>
               <label>
                 markets to search
@@ -333,14 +394,24 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
             <p className="hint" style={{ marginTop: 12 }}>Remote roles you can take:</p>
             <div className="chip-row">
               {GEOS.map((g) => (
-                <button key={g.id} type="button" className="chip" data-on={geos.includes(g.id)} onClick={() => setGeos(toggle(geos, g.id))}>
+                <button
+                  key={g.id}
+                  type="button"
+                  className="chip"
+                  data-on={geos.includes(g.id)}
+                  aria-pressed={geos.includes(g.id)}
+                  onClick={() => {
+                    setGeosTouched(true);
+                    setGeos(toggle(geos, g.id));
+                  }}
+                >
                   {g.label}
                 </button>
               ))}
             </div>
           </section>
           <section className="card-block">
-            <h3>Pay & roles <span className="hint">— only a confidently-stated salary below your floor is excluded</span></h3>
+            <h2>Pay & roles <span className="hint">— only a confidently-stated salary below your floor is excluded</span></h2>
             <div className="field-row">
               <label>
                 salary floor (yearly)
@@ -358,7 +429,7 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
             <p className="hint" style={{ marginTop: 12 }}>Role types you want:</p>
             <div className="chip-row">
               {ARCHETYPES.map((a) => (
-                <button key={a} type="button" className="chip" data-on={archetypes.includes(a)} onClick={() => setArchetypes(toggle(archetypes, a))}>
+                <button key={a} type="button" className="chip" data-on={archetypes.includes(a)} aria-pressed={archetypes.includes(a)} onClick={() => setArchetypes(toggle(archetypes, a))}>
                   {a}
                 </button>
               ))}
@@ -369,7 +440,7 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
               back
             </button>
             <button type="button" className="save" onClick={() => setStep("discovery")}>
-              next
+              Next — where to look
             </button>
           </div>
         </>
@@ -378,18 +449,23 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
       {step === "discovery" && (
         <>
           <section className="card-block">
-            <h3>Where to look <span className="hint">— pick one or more starting sets of companies and boards; add your own anytime</span></h3>
+            <h2>Where to look <span className="hint">— pick one or more starting sets of companies and boards; add your own anytime under Sources</span></h2>
+            {homeCountry && !presetsTouched && <p className="hint">Suggested from your home country ({homeCountry}). Pick as many as you like.</p>}
             <div className="onb-presets">
-              {PRESETS.map((p) => (
+              {presetOptions.map((p) => (
                 <button
                   key={p.id}
                   type="button"
                   className="onb-preset"
                   data-on={presets.includes(p.id)}
-                  onClick={() => setPresets(presets.includes(p.id) ? (presets.length > 1 ? presets.filter((x) => x !== p.id) : presets) : [...presets, p.id])}
+                  aria-pressed={presets.includes(p.id)}
+                  onClick={() => {
+                    setPresetsTouched(true);
+                    setPresets(presets.includes(p.id) ? (presets.length > 1 ? presets.filter((x) => x !== p.id) : presets) : [...presets, p.id]);
+                  }}
                 >
                   <b>{p.label}</b>
-                  <span className="hint">{p.detail}</span>
+                  <span className="hint">{p.description}</span>
                 </button>
               ))}
             </div>
@@ -399,9 +475,10 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
               back
             </button>
             <button type="button" className="save" disabled={busy} onClick={finish}>
-              {busy ? "saving…" : "finish & build my feed"}
+              {busy ? "saving…" : "Finish — find my jobs"}
             </button>
           </div>
+          <p className="hint">Next: JobFlow fetches jobs from these boards (a minute or two the first time) and ranks every one against you.</p>
         </>
       )}
     </div>

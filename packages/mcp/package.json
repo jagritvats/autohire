@@ -1,0 +1,28 @@
+{
+  "name": "@jobflow/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "JobFlow as an MCP server: live search, ranked feed, job detail, tracker, apply plan and grounded drafting for AI agents (Claude Code, Claude Desktop, any MCP client).",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@jobflow/adapters": "workspace:*",
+    "@jobflow/core": "workspace:*",
+    "@jobflow/db": "workspace:*",
+    "@jobflow/llm": "workspace:*",
+    "@jobflow/pipeline": "workspace:*",
+    "@jobflow/service": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^3.25.76"
+  },
+  "license": "AGPL-3.0-only"
+}

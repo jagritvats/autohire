@@ -1,3 +1,6 @@
+/// <reference path="./pdf-parse.d.ts" />
+// (the reference makes the lib-subpath declaration travel with this module when other
+// packages compile it from source — e.g. the worker via @jobflow/service)
 import { strFromU8, unzipSync } from "fflate";
 import {
   jsonResumeToDraft,

@@ -21,6 +21,9 @@ export const SOURCE_TRUST: Partial<Record<SourceKind, number>> = {
   smartrecruiters: 0.85,
   recruitee: 0.85,
   personio: 0.85,
+  teamtailor: 0.85, // the employer's own career site (public RSS)
+  bamboohr: 0.85, // the employer's own careers page; datePosted is the opening's own
+  breezy: 0.85, // the employer's own portal; published_date is the position's
   workday: 0.85,
   eightfold: 0.85,
   amazon: 0.85,
@@ -83,12 +86,35 @@ export const EVERGREEN_TITLE_RE = /\b(talent (community|pool|network)|future opp
 /** Employer hidden behind a placeholder — typical of recruiter reposts. */
 const HIDDEN_EMPLOYER_RE = /^(confidential|leading (mnc|company|product company)|top (mnc|product company|startup)|(a )?(reputed|well[- ]known|stealth) (company|startup|mnc)|stealth|undisclosed|unknown)$/i;
 
-/** third-party recruiters posting "for a client" — slower, lower-signal pipelines. */
-const CONSULTANCY_RE = /\b(on behalf of (our|a) client|our client is|for (one of )?our (esteemed |reputed )?clients?|staffing (agency|firm|solutions)|manpower|placement (agency|consultants?)|recruitment (agency|consultants?|partner)|hr consultancy|c2h|contract[- ]to[- ]hire|third[- ]party payroll)\b/i;
+/**
+ * third-party recruiters posting "for a client" — slower, lower-signal pipelines. Not an
+ * employer's own "value for our clients" / "work for our clients" (a services company
+ * describing its customers), and not "manpower" as a plain noun (2026-11 corpus: GE
+ * Vernova's "erection tools, manpower, working hours" read as an agency).
+ */
+const CONSULTANCY_RE = /\b(on behalf of (our|a|one of our) (esteemed |reputed )?clients?|our (esteemed |reputed )?client,? (is|a|an)\b|(hiring|recruiting) for (our|a|one of our) (esteemed |reputed )?clients?|for one of our (esteemed |reputed )?clients|for our (esteemed |reputed )?client(?=,| is\b| who\b| based\b| in\b)|client of ours|staffing (agency|firm|solutions)|manpower (agency|consultan\w*|supply|services|provider)|placement (agency|consultants?)|recruitment (agency|consultants?|partner)|hr consultancy|c2h|c2c|corp[- ]to[- ]corp|w2 or c2c|contract[- ]to[- ]hire|third[- ]party payroll|on (our|the) payroll of)\b/i;
 
-/** a poster whose NAME says it's an intermediary (common on Naukri / Hirist / Cutshort). */
-/** (not a bare "consult…": Tata Consultancy Services / BCG are employers, not intermediaries) */
-const CONSULTANCY_NAME_RE = /\b(staffing|manpower|placements?|placement consultants?|hr (solutions|services|consultancy|consultants)|recruitment|recruiters?|outsourcing|talent solutions)\b/i;
+/**
+ * A poster whose NAME says it's an intermediary (common on Naukri / Hirist / Cutshort /
+ * Himalayas): staffing / recruitment / placement words, a "… Consultancy" or "… HireTech"
+ * brand, or a hiring-brand compound ("HiringBlaze", "Staffision"). Not a bare "consult…"
+ * (Boston Consulting Group is an employer), not "Tata Consultancy Services", and not a
+ * name that only contains "staff" or "recruit" as part of a product (Staffbase, Recruit
+ * Holdings) — those are employers hiring for themselves.
+ */
+const CONSULTANCY_NAME_RE = /\b(staffing|manpower|placements?|placement consultants?|hr (solutions|services|consultancy|consultants)|recruitment|recruiters?|recruiting (solutions|partners?|services)|outsourcing|talent (solutions|acquisition|hunt\w*|scouts?)|headhunt\w*|hire ?tech|consultancy)\b|hiring|staffision|\bstaff(ing|ify)\w*/i;
+const NOT_AN_INTERMEDIARY_RE = /\btata consultancy\b/i;
+
+/**
+ * Does this posting come from a third-party recruiter rather than the employer? The
+ * company name or the JD's own words ("on behalf of our client", "C2C", "third-party
+ * payroll"). Exported so ingest can set `postedByAgency` for sources that don't say.
+ */
+export function looksLikeAgency(posting: Pick<Posting, "companyName" | "jdText">): boolean {
+  const name = posting.companyName ?? "";
+  if (CONSULTANCY_NAME_RE.test(name) && !NOT_AN_INTERMEDIARY_RE.test(name)) return true;
+  return CONSULTANCY_RE.test(`${name}\n${(posting.jdText ?? "").slice(0, 3000)}`);
+}
 
 /**
  * AI-training marketplaces (2026-09): hourly contracts writing / rating data for AI labs,
@@ -128,11 +154,7 @@ export function scoreSourceTrust(posting: Posting): TrustResult {
   if (posting.atsType === "unknown" && posting.applyUrl && classifyLink(posting.applyUrl).kind === "ats") score += 0.1;
   // a stated salary is a real-req signal (evergreen / fishing posts rarely commit to one)
   if (posting.salary.source === "jd_direct") score += 0.05;
-  if (
-    posting.postedByAgency ||
-    CONSULTANCY_RE.test(`${posting.companyName}\n${posting.jdText.slice(0, 3000)}`) ||
-    CONSULTANCY_NAME_RE.test(posting.companyName)
-  ) {
+  if (posting.postedByAgency || looksLikeAgency(posting)) {
     score -= 0.2;
     flags.push("Posted by a staffing agency / consultancy — expect slower replies");
   }
