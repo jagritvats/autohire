@@ -112,6 +112,8 @@ export interface FeedOptions {
 }
 
 let corpusSync: Promise<void> | null = null;
+/** what to run once the current sync finishes — every caller's, including ones that JOINED it */
+let afterSync: Array<() => Promise<void>> = [];
 
 /** Is a background corpus sync running in this process? */
 export function corpusSyncing(): boolean {
@@ -120,18 +122,29 @@ export function corpusSyncing(): boolean {
 
 /**
  * Start (or join) a background discover → poll of the shared corpus. Deduped: concurrent
- * callers share one run. Request handlers never await it — the UI shows "syncing".
+ * callers share one run, and each joiner's `after` still runs when it ends (e.g. a person
+ * who finishes onboarding while the first browse sync is running still gets ranked).
+ * Request handlers never await it — the UI shows "syncing".
  */
-export function startCorpusSync(repo: Repository, after?: () => Promise<void>): Promise<void> {
+export function startCorpusSync(repo: Repository, after?: () => Promise<void>, sync: (repo: Repository) => Promise<unknown> = syncCorpus): Promise<void> {
+  if (after) afterSync.push(after);
   corpusSync ??= (async () => {
     try {
-      await syncCorpus(repo);
-      if (after) await after();
+      await sync(repo);
     } catch (e) {
       console.error("[jobflow] corpus sync failed:", e instanceof Error ? e.message : e);
-    } finally {
-      corpusSync = null;
     }
+    // still "syncing" until every follow-up (ranking) is done, so the UI never reads a
+    // finished-but-unranked feed; steps added meanwhile run in this same loop
+    while (afterSync.length) {
+      const fn = afterSync.shift()!;
+      try {
+        await fn();
+      } catch (e) {
+        console.error("[jobflow] after-sync step failed:", e instanceof Error ? e.message : e);
+      }
+    }
+    corpusSync = null;
   })();
   return corpusSync;
 }

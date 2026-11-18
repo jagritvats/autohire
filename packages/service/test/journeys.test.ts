@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { InMemoryRepository } from "@jobflow/db";
 import { normCompany, normalizePosting, type RawPosting } from "@jobflow/core";
 import { toNewPosting } from "@jobflow/pipeline";
-import { getFeed, getJob, JobNotFoundError, loadSampleProfile, rankTenant, saveSearch, setupProgress, toCards, trackApplication } from "../src/index.js";
+import { corpusSyncing, getFeed, getJob, JobNotFoundError, startCorpusSync, loadSampleProfile, rankTenant, saveSearch, setupProgress, toCards, trackApplication } from "../src/index.js";
 
 const embed = Object.assign(async () => [1, 0, 0], { id: "test" });
 
@@ -89,6 +89,30 @@ describe("getJob (the job page)", () => {
     const repo = new InMemoryRepository();
     const t = await repo.createTenant({ name: "t" });
     await expect(getJob(repo, null, t.id, "00000000-0000-4000-8000-000000000000")).rejects.toBeInstanceOf(JobNotFoundError);
+  });
+});
+
+describe("background sync", () => {
+  it("someone who JOINS a running sync still gets their follow-up (ranking) — and it's 'syncing' until then", async () => {
+    const repo = new InMemoryRepository();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const order: string[] = [];
+    const first = startCorpusSync(repo, undefined, async () => {
+      await gate;
+      order.push("sync");
+    });
+    expect(corpusSyncing()).toBe(true);
+    // a second caller (e.g. onboarding finished mid-sync) joins with its own follow-up
+    const joined = startCorpusSync(repo, async () => {
+      expect(corpusSyncing()).toBe(true);
+      order.push("rank");
+    });
+    expect(joined).toBe(first);
+    release();
+    await first;
+    expect(order).toEqual(["sync", "rank"]);
+    expect(corpusSyncing()).toBe(false);
   });
 });
 

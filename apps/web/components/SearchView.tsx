@@ -91,6 +91,7 @@ export function SearchView() {
   const [saved, setSaved] = useState<SavedSearchDTO[] | null>(null);
   const [saveName, setSaveName] = useState("");
   const [savedMsg, setSavedMsg] = useState<{ id: string; name: string } | null>(null);
+  const [saveErr, setSaveErr] = useState<string | null>(null);
   const [runMsg, setRunMsg] = useState<Record<string, string>>({});
   const [tags, setTags] = useState<string[]>([]);
   const withTags = (q: string) => (tags.length && !/--presets?\b|--tag\b/.test(q) ? `${q} --preset ${tags.join(",")}` : q);
@@ -134,16 +135,19 @@ export function SearchView() {
     }
   }
 
-  async function op(body: Record<string, unknown>) {
+  async function op(body: Record<string, unknown>, onError: (msg: string) => void = setError) {
     const r = await fetch("/api/searches", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     const out = await r.json().catch(() => ({}));
-    if (!r.ok) setError(out.error ?? "Request failed.");
+    if (!r.ok) onError(out.error ?? "Request failed.");
     await loadSaved();
     return r.ok ? out : null;
   }
 
   async function saveCurrent() {
-    const out = await op({ op: "save", name: saveName.trim(), text: lastQuery || withTags(text) });
+    setSaveErr(null);
+    const existing = saved?.find((s) => s.name.toLowerCase() === saveName.trim().toLowerCase());
+    if (existing && !window.confirm(`You already have a saved search called “${existing.name}”. Replace its query with this one?`)) return;
+    const out = await op({ op: "save", id: existing?.id, name: saveName.trim(), text: lastQuery || withTags(text) }, setSaveErr);
     if (out?.search) setSavedMsg({ id: out.search.id, name: out.search.name });
   }
 
@@ -334,6 +338,11 @@ export function SearchView() {
                 Save search
               </button>
             </div>
+            {saveErr && (
+              <p className="auth-error" role="alert">
+                {saveErr}
+              </p>
+            )}
             {savedMsg && (
               <p className="notice" role="status">
                 Saved “{savedMsg.name}”. <a href={`/?view=${savedMsg.id}`}>Open it in Jobs →</a>
