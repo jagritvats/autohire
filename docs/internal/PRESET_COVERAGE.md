@@ -150,6 +150,9 @@ ASML.
 
 ## Adapter TODOs found by the audit (packages/adapters, not changed here)
 
+All six were handled in the follow-up the same day; see "Follow-up (2026-11-18)" below and
+`SOURCE_HEALTH.md`.
+
 1. **Workday: a row without `externalPath` crashes the whole board.** Some tenants return a
    redacted posting (`{"bulletFields":["1211153"]}`, no title or path) in the list. The
    adapter's `idOf` then throws `Cannot read properties of undefined (reading 'match')`.
@@ -171,6 +174,8 @@ ASML.
    `HIMALAYAS_API_KEY` (Bearer) and back off on 429.
 
 ## Wiring TODOs for new adapter sources
+
+Done in the follow-up below except the `apac` preset and the global-remote discovery quirk.
 
 Once the adapters agent lands these sources, wire them in as preset feeds or seeds. Use new
 stable feed ids, never renamed ones.
@@ -207,3 +212,69 @@ from `packages/adapters/src`, `parseLocation` / `isWorkableIn` from `packages/co
 in-market engineering and recent counts, plus the probe status on empty boards. With
 concurrency 3, the india preset takes about 4 minutes (Workday paging dominates) and the
 rest about 1 minute. Concurrency above 3 makes Workday lists fail intermittently.
+
+## Follow-up (2026-11-18, later the same day)
+
+Adapter fixes (details and live numbers in `SOURCE_HEALTH.md`): Workday redacted rows,
+Greenhouse work-mode locations, Himalayas key and backoff, Jobicy pacing, Eightfold v2. The
+Workable "36 vs 76" gap was the duplicate rows (76 widget rows = 36 jobs; all 9 jobs with an
+India city are returned), so nothing was missing.
+
+### Feeds wired
+
+| Feed id | Source | Targets | Live (this run) |
+|---|---|---|---|
+| `global-remote.remoteok` | remoteok | tags `engineer`, `dev` (Remote OK has no region filter, so only here) | 99 / 98 rows, mostly "Remote" (worldwide) |
+| `global-remote.jobicy` | jobicy | geo `anywhere` (every function: ~30 a week) | 29 rows, ~14 engineering |
+| `us.jobicy` | jobicy | geo `usa`, industry `engineering` | 97 rows, 95 workable in US |
+| `eu-uk.jobicy` | jobicy | geo `uk` / `germany` / `netherlands`, industry `engineering` | uk 66 rows (65 in GB), germany 46 (45 in DE); netherlands not run (Jobicy pacing) |
+| `canada.jobicy` | jobicy | geo `canada`, industry `engineering` | 32 rows, 22 workable in CA |
+
+All Jobicy feeds are `slow` (request-bound refreshes skip them) and the adapter allows one
+pass an hour per target. **`india` is unchanged** (golden): Jobicy has no India geo, and its
+`anywhere` roles (~6 engineering a week) already reach India users through
+`global-remote.jobicy`, so a new India feed would add little and change the golden fixture
+for every existing install.
+
+### Seeds
+
+Method as above (the audit script with `file` input), at most 4 boards in flight and 2 per
+ATS domain. 146 slug guesses on the new ATSes (Teamtailor, Recruitee, Personio) plus 59
+careers pages / name probes for well-known EU employers.
+
+**eu-uk: 99 → 133 seeds (+34)**, adding 516 roles workable in GB/DE/NL (151 engineering):
+
+| ATS | Added (in-market roles / engineering) |
+|---|---|
+| Personio | 1KOMMA5° (91 / 13), tado (2 / 0), Clark (1 / 0) |
+| Recruitee | bunq (16 / 3), Channable (8 / 3), Funda (8 / 5), Helloprint (5 / 4), Hostaway (6 / 2) |
+| Teamtailor | Tibber (5 / 2), Quinyx (6 / 1), Templafy (1 / 1), Polestar (4 / 0), Oatly (2 / 0), Instabee (Budbee's parent, 7 / 0), Natural Cycles (1 / 0), Storytel (1 / 0) |
+| Re-probed, found on Ashby / Greenhouse / SmartRecruiters | Scalable Capital (101 / 45), Iceye (56 / 36), Docplanner (32 / 11), Moss (29 / 3), Too Good To Go (25 / 1), Staffbase (20 / 10), Bynder (17 / 1), Pliant (17 / 0), Bitpanda (17 / 1), GoStudent (9 / 0), Babbel (7 / 4), Forto (6 / 0), Smartly.io (5 / 4), Epidemic Sound (3 / 0), Aleph Alpha (3 / 0), Holidu (2 / 0), Billie (2 / 1), Mentimeter (1 / 0) |
+
+**Cloudflare** (Greenhouse offices fix): us 0 → 278 (139), eu-uk 1 → 88 (42); added to
+**canada** (35 / 14; 42 → 43 seeds) and **india** (17 / 8, "Remote India"). **Bayer** is
+dropped from india (its Eightfold board is empty), so india stays at 239.
+
+Probed and **not** added:
+
+- **Live board, 0 roles in GB/DE/NL** (Nordic-only or unparsed places): Lunar (Copenhagen),
+  Anyfin, Vipps, Detectify, Doktor, Hemnet, Bannerflow, Brite, Mynewsdesk, Funnel
+  (Teamtailor); ottonova ("München; Köln", not parsed), Finanzguru (Personio); Bitvavo
+  ("Headquarters"), Storyblok, refurbed, Truecaller, Flink (Ashby / Greenhouse). The eu-uk
+  markets are GB/DE/NL, and core doesn't place Danish, Norwegian, Finnish or Austrian cities.
+- **Personio itself**: `personio.jobs.personio.de` lists 2 roles, one of them "Test Job";
+  its careers site answered 429 to every request, so its real board wasn't found.
+- **No supported board found**: Klarna (careers page 202, bot wall), Voi, Kry, Einride,
+  Mambu, Taxfix, Blinkist, Revolut, Vinted, Skyscanner, Zalando, monday.com, Picnic, Tiqets,
+  Sendcloud, Mews, sennder, Ecosia, Mondu, Swappie, Kahoot, Vivino, Sinch, Oda, Aiven,
+  Northvolt, Framer, Factorial, Productboard, Backbase, WeTransfer, Freeletics. Pipedrive,
+  Bolt and Trustly resolve to empty boards.
+- **Not on the guessed slug**: most Teamtailor / Recruitee / Personio guesses (Epidemic
+  Sound, Klarna, Northvolt, Mentimeter, Trustly… on Teamtailor; Picnic, Bitvavo, Mews… on
+  Recruitee; Holidu, Circula, Aleph Alpha… on Personio) answered 404 or an empty feed.
+
+### Web
+
+The onboarding wizard and the Search chips now read `listPresets()` from their page server
+component, and onboarding's default comes from `suggestPreset()` per country
+(`apps/web/lib/presets.ts`), so CA → `canada`. The CLI already read `listPresets()`.

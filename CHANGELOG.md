@@ -17,8 +17,26 @@ All notable changes to JobFlow are documented here. The format follows
   Resources: `jobflow://profile`, `jobflow://job/{id}`. The local database is opened per call
   and released after 20 s idle, so the CLI and web app keep working. See
   `docs/guides/ai-agents-mcp.md`.
+- **New job sources**: company boards on Recruitee, Personio, Teamtailor, BambooHR and
+  Breezy (detected from a careers URL, each with a per-job liveness check), and the Remote OK
+  and Jobicy remote boards (links go back to their listings, as their terms require).
+- **`canada` discovery preset**: 43 employers hiring in Canada plus Canada-eligible remote
+  roles and Canadian aggregators. Onboarding suggests it for a Canadian home country.
+- **Remote OK and Jobicy in the presets**: `global-remote.remoteok`, and Jobicy by region in
+  `global-remote`, `us`, `eu-uk` and `canada` (new feed ids; `india` is unchanged).
+- **Optional `HIMALAYAS_API_KEY`**: Himalayas works without a key, but keyless callers share
+  one allowance and busy servers get 429s. A free key gives your account 60/min, 10,000/day.
+- **Liveness checks** for Ashby and Himalayas postings (a definitive 404/410 retires a role).
 
 ### Changed
+- **Bigger, verified presets.** Every non-India seed now carries a board URL checked live
+  with at least one role in the preset's markets. Seeds: `us` 47 → 130, `eu-uk` 27 → 133,
+  `global-remote` 24 → 31, `india` 230 → 239 (dead and India-less boards dropped, 18
+  employers added). See `docs/internal/PRESET_COVERAGE.md`.
+- Jobicy is polled at most once an hour per search, enforced by the adapter (its terms).
+- Postings from staffing agencies are recognised by more names ("… Consultancy", hiring
+  brands) and JD wording ("on behalf of our client", C2C, third-party payroll), and lose
+  trust accordingly.
 - **New design system** ("calm ledger"): neutral Radix-based palette with one action colour
   and fixed semantic colours, Inter type, light/dark/system themes at WCAG AA, a shared
   navigation shell, responsive down to 375px with a filter drawer, and accessibility passes
@@ -35,6 +53,19 @@ All notable changes to JobFlow are documented here. The format follows
   instead of an in-memory fallback, and keeps the feed synced on a schedule while open.
 
 ### Fixed
+- **Staleness**: a board list cut at a page cap (Amazon, SmartRecruiters, Eightfold, Oracle,
+  Jibe, TalentBrew) is marked partial, so a role past the cap is never retired as closed.
+- **Eightfold** waits out 429 bursts instead of losing the whole list (Microsoft: 0 → ~200
+  India roles per poll).
+- **Workday** skips redacted list rows instead of failing the whole board (Mastercard, PwC,
+  HPE, Citi: 0 → 160–400 India roles each), and a malformed answer can no longer throw.
+- **Greenhouse** reads `offices[]` when a board gives a work mode ("Hybrid") as the
+  location: Cloudflare's roles now count in their markets (US 0 → 278, UK/EU 1 → 88).
+- **Duplicates**: Workable rows repeated per city fold into one posting with every city;
+  Hirist and Qualcomm (Eightfold) no longer return the same job twice in one fetch.
+- **HN "Who is hiring"**: job seekers' self-posts are no longer ingested as jobs.
+- **Web**: the onboarding wizard and the Search preset chips list every preset (they showed
+  only the original four), and a Canadian home country no longer defaults to `us`.
 - Finishing onboarding during the first background sync no longer leaves the feed unranked.
 - Search before onboarding no longer makes fit claims about an empty profile.
 

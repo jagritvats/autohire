@@ -74,8 +74,9 @@ it. To change what it fetches, edit its `targets` and keep the id.
 5. Mention it in the [search and discovery guide](../guides/search-and-discovery.md) and
    the CHANGELOG.
 
-The CLI (`--preset`, `jobflow discovery use`) and the web Sources page read the list from
-`listPresets()`, so no UI change is needed.
+The CLI (`--preset`, `jobflow discovery use`) and the web app (Sources page, onboarding
+wizard, Search chips) read the list from `listPresets()`, and onboarding's default comes from
+`suggestPreset()` on the server (`apps/web/lib/presets.ts`), so no UI change is needed.
 
 ## The discovery plan
 

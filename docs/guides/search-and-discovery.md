@@ -45,9 +45,12 @@ hidden only when the value is *known* (a confidently parsed location, a stated s
 detected level) — unknown values always pass — and every search reports how many it hid and
 why. Scores are never changed by a filter.
 
-Which sources answer depends on the query: Himalayas, Remotive, Arbeitnow, HN "Who is
-hiring", Hirist, TimesJobs, Instahyre, Wellfound and Cutshort need no keys; Adzuna and
-Careerjet need free keys; JSearch is paid and only used when you name it in `--sources`.
+Which sources answer depends on the query: Himalayas, Remotive, Remote OK, Jobicy,
+Arbeitnow, HN "Who is hiring", Hirist, TimesJobs, Instahyre, Wellfound and Cutshort need no
+keys; Adzuna and Careerjet need free keys; JSearch is paid and only used when you name it in
+`--sources`. Himalayas works without a key but rate-limits busy shared servers; a free
+`HIMALAYAS_API_KEY` lifts that ([configuration](../configuration.md#optional-sources)).
+Jobicy answers each search at most once an hour (its terms).
 
 ## Saved searches
 
@@ -82,10 +85,10 @@ JobFlow polls the union:
 | Preset | What it covers |
 |---|---|
 | `india` | ~240 employers: Indian product companies, India engineering centres of global firms (Workday, Eightfold, Oracle…), India job boards, community channels |
-| `global-remote` | ~30 remote-first employers with roles open worldwide, plus remote boards (Himalayas, Remotive) and HN — any country |
-| `us` | ~130 US employers (product, AI, fintech, infra, big tech) plus US-eligible remote roles and US aggregators |
-| `eu-uk` | ~100 employers hiring in the UK, Ireland, Germany, the Netherlands, France, Spain and the Nordics, plus Arbeitnow and UK/DE/NL aggregators |
-| `canada` | ~40 employers hiring in Toronto, Vancouver, Montréal and Canada-remote, plus Canada-eligible remote roles and Canadian aggregators |
+| `global-remote` | ~30 remote-first employers with roles open worldwide, plus remote boards (Himalayas, Remotive, Remote OK, Jobicy) and HN — any country |
+| `us` | ~130 US employers (product, AI, fintech, infra, big tech) plus US-eligible remote roles (Himalayas, Jobicy) and US aggregators |
+| `eu-uk` | ~130 employers hiring in the UK, Ireland, Germany, the Netherlands, France, Spain and the Nordics (including boards on Personio, Recruitee and Teamtailor), plus Arbeitnow, Jobicy and UK/DE/NL aggregators |
+| `canada` | ~40 employers hiring in Toronto, Vancouver, Montréal and Canada-remote, plus Canada-eligible remote roles (Himalayas, Jobicy) and Canadian aggregators |
 
 ```bash
 pnpm jobflow discovery presets              # all presets, on/off

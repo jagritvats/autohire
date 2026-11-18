@@ -63,7 +63,16 @@ export interface SourceAdapter {
   onto the next page), so the same id can arrive twice. Dedupe by id before returning.
 - If the source rate-limits bursts (429/503), fetch with `httpJsonPolite`: it backs off
   (honouring `Retry-After`) and retries, and gives up at once on any other error.
-  `ats/eightfold.ts` uses it for Microsoft's tenant.
+  `ats/eightfold.ts` uses it for Microsoft's tenant. Its `onGiveUp` hook reports the last
+  status, so you can say why a source returned nothing: `adapterNotice(source, reason)`
+  logs a reason once per process (`aggregators/himalayas.ts` does this for a keyless 429).
+- If the source's terms cap how often you may poll it, enforce the cap **in the adapter**,
+  not only in presets: a saved search, a second preset or a page-load refresh can call it
+  too. `aggregators/jobicy.ts` (one pass an hour per target) and `aggregators/jsearch.ts`
+  (a spend guard) keep a per-process "last fetched" map and return `[]` without a request.
+- A malformed answer must never throw into the pipeline. If the mapping code can trip on
+  a field the source sometimes leaves out, guard it or wrap `fetch` and return `[]`
+  (`ats/workday.ts` skips redacted rows and is total).
 - Fill `RawPosting` (`packages/core/src/schema/entities.ts`) with what the source **states**.
   Put the raw salary text in `salaryRaw` and let `normalize/salary.ts` parse it. Don't
   invent a `postedAt`; leave it `null` when the source has none.
