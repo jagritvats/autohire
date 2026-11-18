@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { JobType, JOB_RUNTIME } from "@jobflow/core";
 import { atsAdapter } from "@jobflow/adapters";
 import type { Repository } from "@jobflow/db";
-import { getRepo } from "@/lib/repo";
+import { getRepo, wakeJobRunner } from "@/lib/repo";
 import { guard } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +21,9 @@ export async function GET(req: Request) {
 }
 
 /**
- * Enqueue a job. CLOUD jobs (discover/poll/rank/enrich_t1) run on the worker. LOCAL
+ * Enqueue a job. CLOUD jobs (discover/poll/rank/enrich_t1/recheck/purge/liveness) run on
+ * the worker — or, on the single-writer local store, in this server's own job runner
+ * (lib/repo.ts). LOCAL
  * jobs (tier3_poll/enrich_t3/form_fill) are picked up by the local agent in YOUR
  * session — the agent enforces the flags/opt-ins and the review gate; the web never
  * runs them. Dispatching a local job while the agent is offline just queues it.
@@ -40,6 +42,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Only an admin can run instance-wide jobs; your feed re-ranks after each scheduled poll." }, { status: 403 });
   }
   const job = await repo.enqueueJob({ tenantId: auth.tenantId, type: jobType, runtime: JOB_RUNTIME[jobType], payload: payload ?? {} });
+  // local store: the in-process runner picks cloud jobs up now (it never claims local ones)
+  if (job.runtime === "cloud") wakeJobRunner();
   return NextResponse.json(job);
 }
 

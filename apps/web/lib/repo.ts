@@ -1,6 +1,14 @@
 import "server-only";
 import { createRepository, defaultDataDir, storeKind, type Repository } from "@jobflow/db";
-import { ensureTenant as ensureTenantFor, rankTenant, seedDemoCorpus, startCorpusSync } from "@jobflow/service";
+import {
+  ensureTenant as ensureTenantFor,
+  operatorJobCtx,
+  rankTenant,
+  seedDemoCorpus,
+  startCloudJobDrainer,
+  startCorpusSync,
+  type CloudJobDrainer,
+} from "@jobflow/service";
 import { DEFAULT_TENANT_ID } from "./tenant-constant";
 
 /**
@@ -22,7 +30,10 @@ export function getRepo(): Promise<Repository> {
       .then(async (repo) => {
         // JOBFLOW_DEMO_DATA=1: an offline, fully fictional corpus (screenshots / UI dev)
         if (process.env.JOBFLOW_DEMO_DATA === "1") await seedDemoCorpus(repo, DEFAULT_TENANT_ID);
-        else scheduleLocalSync(repo);
+        else {
+          scheduleLocalSync(repo);
+          startLocalJobRunner(repo);
+        }
         return repo;
       })
       .catch((e: unknown) => {
@@ -48,7 +59,7 @@ export function getRepo(): Promise<Repository> {
  */
 let scheduled = false;
 function scheduleLocalSync(repo: Repository): void {
-  if (scheduled || process.env.JOBFLOW_AUTH === "password" || process.env.DATABASE_URL) return;
+  if (scheduled || !isLocalMode()) return;
   const hours = Number(process.env.JOBFLOW_POLL_EVERY_HOURS?.trim() || 6);
   if (!(hours > 0)) return;
   scheduled = true;
@@ -65,6 +76,33 @@ function scheduleLocalSync(repo: Repository): void {
     }
   };
   setInterval(() => void tick(), 15 * 60_000).unref?.();
+}
+
+/** True when this server is the only process on its store (local-first, single user). */
+function isLocalMode(): boolean {
+  return process.env.JOBFLOW_AUTH !== "password" && !process.env.DATABASE_URL;
+}
+
+/**
+ * Run queued CLOUD jobs in-process (Sources → Maintenance: recheck, retire old, Discover,
+ * Poll, Re-rank, Enrich comp…). On the local store the web server holds the single-writer
+ * database, so the worker can't run beside it — without this those buttons queued work
+ * that never ran. One job at a time; idle it costs one claim query every few seconds.
+ * Only runtime='cloud' jobs are ever claimed: LOCAL jobs (tier-3, form_fill, local board
+ * polls) stay queued for the local agent (invariant #1). Hosted / Postgres deployments
+ * leave this to the worker.
+ */
+let jobRunner: CloudJobDrainer | null = null;
+function startLocalJobRunner(repo: Repository): void {
+  if (jobRunner || !isLocalMode()) return;
+  jobRunner = startCloudJobDrainer(repo, operatorJobCtx, {
+    log: (m) => console.log(`[jobflow] job ${m}`),
+  });
+}
+
+/** Check the job queue now (after enqueueing) instead of at the drainer's next tick. */
+export function wakeJobRunner(): void {
+  jobRunner?.wake();
 }
 
 /** Ensure the tenant's profile + config exist (blank profile; sample only on request). */

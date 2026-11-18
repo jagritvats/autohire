@@ -14,7 +14,8 @@ import {
 import { createProvider, providerEmbedder } from "@jobflow/llm";
 import { loadRootEnv } from "@jobflow/db";
 import { makeRepository } from "./repo.js";
-import { handleJob, runLoop } from "./jobs.js";
+import { runCloudJob } from "@jobflow/service";
+import { runLoop } from "./jobs.js";
 import type { Job } from "@jobflow/core";
 
 loadRootEnv();
@@ -46,7 +47,7 @@ async function rank(): Promise<void> {
   // the same per-tenant fan-out the scheduled rank job runs (never ranks an un-onboarded profile)
   const llm = createProvider();
   const job = { id: "cli", tenantId: DEFAULT_TENANT, type: "rank", runtime: "cloud", payload: { scheduled: true } } as unknown as Job;
-  const r = await handleJob(repo, job, { embedder: providerEmbedder(llm), llm });
+  const r = await runCloudJob(repo, job, { embedder: providerEmbedder(llm), llm });
   log(`rank: ${r.tenants} tenant(s) ranked, ${r.skipped} not onboarded yet · ${r.scored} scored → ${r.ranked} ranked, ${r.narrated} narrated`);
 }
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Badge, Banner } from "./ui";
+import { LOCAL_AGENT_GUIDE } from "@/lib/docs";
 
 interface Job {
   id: string;
@@ -19,7 +20,7 @@ const COMMANDS: Array<{ type: string; label: string }> = [
   { type: "poll", label: "Poll all" },
   { type: "rank", label: "Re-rank" },
   { type: "enrich_t1", label: "Enrich comp" },
-  { type: "recheck", label: "Recheck all" }, // empty payload → worker rechecks all active postings
+  { type: "recheck", label: "Recheck all" }, // empty payload → rechecks all active postings
 ];
 
 export function ActivityPanel() {
@@ -69,7 +70,11 @@ export function ActivityPanel() {
   };
 
   const pending = jobs.filter((j) => j.status === "queued" || j.status === "running").length;
-  const stale = jobs.find((j) => j.status === "queued" && Date.now() - new Date(j.createdAt).getTime() > 12_000);
+  // cloud jobs run one at a time, so a queued one behind a running poll is just waiting;
+  // "nothing is draining" only when a cloud job sits queued and NOTHING runs
+  const queuedLong = (j: Job) => j.status === "queued" && Date.now() - new Date(j.createdAt).getTime() > 12_000;
+  const cloudStuck = !jobs.some((j) => j.runtime === "cloud" && j.status === "running") && jobs.some((j) => j.runtime === "cloud" && queuedLong(j));
+  const localWaiting = !agentOnline && jobs.some((j) => j.runtime === "local" && queuedLong(j));
 
   return (
     <section className="activity" aria-label="Commands and background jobs">
@@ -92,9 +97,18 @@ export function ActivityPanel() {
         <span aria-live="polite">{pending > 0 && <span className="pending">{pending} active</span>}</span>
       </div>
 
-      {stale && (
+      {cloudStuck && (
         <Banner tone="warn" live className="worker-hint">
-          jobs are queued but nothing is draining — run <code>pnpm --filter @jobflow/worker runner</code>
+          jobs are queued but nothing is running them — on a shared database (Docker / Postgres) start the worker:{" "}
+          <code>pnpm --filter @jobflow/worker runner</code>
+        </Banner>
+      )}
+      {localWaiting && (
+        <Banner tone="info" live className="worker-hint">
+          local-agent jobs wait here until your local agent is online — see the{" "}
+          <a href={LOCAL_AGENT_GUIDE} target="_blank" rel="noreferrer">
+            local agent guide
+          </a>
         </Banner>
       )}
 
