@@ -162,7 +162,8 @@ const SESSIONS = [
   // stills for docs/screenshots/cli-*.png (cli-shots.mjs): the `jobflow` binary itself
   ["shot-feed", "node apps/cli/bin/jobflow.mjs feed -n 3", { display: "jobflow feed -n 3" }],
   ["shot-search", "node apps/cli/bin/jobflow.mjs search '\"backend engineer\"' --remote -n 3", { display: "jobflow search '\"backend engineer\"' --remote -n 3" }],
-  ["shot-apply", "node apps/cli/bin/jobflow.mjs apply 2", { display: "jobflow apply 2" }],
+  // the job `apply` already planned, so the MCP capture still finds the next one untracked
+  ["shot-apply", "node apps/cli/bin/jobflow.mjs apply 1", { display: "jobflow apply 1" }],
   ["shot-doctor", "node apps/cli/bin/jobflow.mjs doctor --offline", { display: "jobflow doctor --offline" }],
   ["shot-profile", "node apps/cli/bin/jobflow.mjs me", { display: "jobflow me" }],
   ["serve", "pnpm jobflow serve", { killAfter: 14 }],

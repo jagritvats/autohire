@@ -57,7 +57,10 @@ export function conversation() {
   const job = mcpOut("job");
   const prep = mcpOut("prepare");
   const id = job.args.id;
-  const first = (s) => s.text.split("\n");
+  // the assistant's words below restate THESE results; if the capture changed, rewrite them
+  if (!/Pied Piper/.test(job.text) || !/new to you: AWS/.test(job.text) || !/The query hid 5/.test(search.text)) {
+    throw new Error("the captured MCP output no longer matches the conversation's wording — update conversation() in specs/_common.mjs");
+  }
   return {
     ask: { kind: "user", text: "Find remote backend roles I'd actually get, and explain the gaps." },
     search: { kind: "tool", tool: "search_jobs", args: search.args, result: search.text, maxLines: 18, hl: ["The query hid 5 (remote 5)", "Remote · Canada only"] },
