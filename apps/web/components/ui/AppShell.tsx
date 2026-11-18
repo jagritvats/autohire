@@ -2,34 +2,41 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { NAV, activeNav } from "@/lib/nav";
 import { AccountMenu } from "../AccountMenu";
 import { SyncIndicator } from "../SyncIndicator";
 import { MARK_DOT, MARK_J, MARK_RX } from "./brandMark";
 import { Icon } from "./Icon";
 import { ThemeToggle } from "./ThemeToggle";
+import { useThemeColorMeta } from "./themeColor";
 
 const BARE = ["/login", "/signup"]; // auth screens: brand + theme only, no app nav
 
 /**
  * The JobFlow mark (brand/README.md): a J and a full stop on a tile. JobFlow goes this far and
- * stops; the next move is yours, so the stop is the accent ("you can act here"). Drawn with
- * theme tokens so it follows light/dark and any appearance style: the tile is the ink
- * (currentColor), the J is cut from the page colour, and the stop is the accent nudged toward
- * the page so it stays bright on an ink tile and deep on a paper one.
+ * stops; the next move is yours, so the stop is the accent ("you can act here"). It follows
+ * every style and theme without its own colours: the tile is the header's ink (currentColor),
+ * the J is cut out of it (a mask, so whatever is behind the header shows through — paper,
+ * night, Spark's gradient), and the stop is the accent nudged toward the page colour so it
+ * stays bright on a dark tile and deep on a light one (a style may name its own stop colour
+ * with --brand-mark-dot, as Spark does with its coral).
  */
 export function BrandMark({ size = 26 }: { size?: number }) {
+  const mask = `jf-mark-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   return (
     <svg className="brand__mark" viewBox="0 0 100 100" width={size} height={size} aria-hidden="true" focusable="false">
-      <rect width="100" height="100" rx={MARK_RX} fill="currentColor" />
-      <path d={MARK_J} fill="var(--bg)" />
+      <mask id={mask}>
+        <rect width="100" height="100" fill="#fff" />
+        <path d={MARK_J} fill="#000" />
+      </mask>
+      <rect width="100" height="100" rx={MARK_RX} fill="currentColor" mask={`url(#${mask})`} />
       <circle
         cx={MARK_DOT.cx}
         cy={MARK_DOT.cy}
         r={MARK_DOT.r}
         fill="var(--accent-solid)"
-        style={{ fill: "color-mix(in oklab, var(--accent-solid) 78%, var(--bg))" }}
+        style={{ fill: "var(--brand-mark-dot, color-mix(in oklab, var(--accent-solid) 78%, var(--bg)))" }}
       />
     </svg>
   );
@@ -55,6 +62,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const bare = BARE.some((p) => pathname.startsWith(p));
   const current = activeNav(pathname);
   const [open, setOpen] = useState(false);
+  useThemeColorMeta();
   const menuBtn = useRef<HTMLButtonElement>(null);
 
   useEffect(() => setOpen(false), [pathname]);

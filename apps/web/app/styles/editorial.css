@@ -266,12 +266,13 @@
   color: var(--text-3);
 }
 :where([data-style="editorial"]) .brand {
-  gap: 3px;
-  align-items: baseline;
+  gap: 9px;
+  align-items: center;
 }
+/* the tile mark (brand/README.md); its colours come from tokens in AppShell's BrandMark */
 :where([data-style="editorial"]) .brand__mark {
   display: block;
-  align-self: baseline;
+  flex: none;
 }
 :where([data-style="editorial"]) .app-nav__link::after {
   content: "";

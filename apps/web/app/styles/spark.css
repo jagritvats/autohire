@@ -305,6 +305,8 @@
 }
 :where([data-style="spark"]) .brand__mark {
   display: block;
+  /* the mark's full stop is Spark's coral: the brand bar keeps the tile white in both themes */
+  --brand-mark-dot: var(--spark);
   filter: drop-shadow(0 2px 6px rgba(20, 6, 70, 0.35));
   transition: transform 300ms var(--ease-bounce);
 }
