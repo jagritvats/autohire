@@ -13,7 +13,9 @@ import {
   RemoteGeo,
   RequirementStrength,
   RoleArchetype,
+  SalaryBasis,
   SalaryConfidence,
+  SalaryPeriod,
   SourceKind,
 } from "./enums.js";
 
@@ -76,12 +78,26 @@ export const ExperienceRange = z.object({
 });
 export type ExperienceRange = z.infer<typeof ExperienceRange>;
 
+/**
+ * What a posting STATES about pay (§11.4). `min`/`max` are ANNUAL figures in `currency` —
+ * every comparison (floor, filters, sort, score) reads them — and `period` is how the
+ * posting wrote them: the stated figure is `min ÷ PERIOD_FACTOR[period]` (hour ×2080,
+ * day ×260, week ×52, month ×12 — `core/salary/period.ts`). Rows parsed before `period`
+ * existed read as "year", which is what they were annualised to.
+ */
 export const SalaryBand = z.object({
   min: z.number().nullable().default(null),
   max: z.number().nullable().default(null),
   currency: z.string().default("USD"),
   source: z.string().default("none"),
   confidence: SalaryConfidence.default("low"),
+  // Optional so every existing band literal stays valid; absent reads as year / not said / no.
+  /** the period the figures were STATED in (min/max are always annual); absent = "year" */
+  period: SalaryPeriod.optional().catch(undefined),
+  /** base / OTE / total comp, when the posting says (null/absent = not said) */
+  basis: SalaryBasis.nullable().optional().catch(null),
+  /** the posting mentions equity / stock / options on top — never counted as pay */
+  equity: z.boolean().optional(),
 });
 export type SalaryBand = z.infer<typeof SalaryBand>;
 
@@ -319,9 +335,25 @@ export const Contact = z.object({
 });
 export type Contact = z.infer<typeof Contact>;
 
+/**
+ * How pay is SHOWN — never how it's compared (comparisons always run on annual figures in
+ * one currency). The posting's own currency and period lead; a converted figure in
+ * `currency` follows: "₹30L–45L / yr (≈ $36k–54k)" (`formatPay`, core/salary/format.ts).
+ */
+export const PayDisplay = z.object({
+  /** "auto" = the home country's currency · "none" = original only · or an ISO code ("USD") */
+  currency: z.string().default("auto"),
+  /** the period the converted figure is shown per */
+  period: z.enum(["year", "month"]).default("year").catch("year"),
+});
+export type PayDisplay = z.infer<typeof PayDisplay>;
+
 export const ProfilePrefs = z.object({
+  /** ANNUAL, in `currency` */
   salaryFloor: z.number().default(0),
   currency: z.string().default("USD"),
+  /** how pay is shown on cards ("show pay in"), tenant-scoped with the profile */
+  display: PayDisplay.default({}),
   /**
    * ISO-3166 alpha-2 country the candidate lives/works in ("" = not set). Drives the
    * "onsite in my own country" check and default polling markets — nothing is assumed.

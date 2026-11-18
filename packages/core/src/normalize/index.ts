@@ -9,7 +9,7 @@ import type {
 import type { ExperienceRange, ParsedLocation, Requirement, SalaryBand } from "../schema/entities.js";
 import { dedupTitleKey, normCompany, parseTitle, slugify } from "./titles.js";
 import { extractSkills, parseRequirements } from "./skills.js";
-import { parseLocation } from "./location.js";
+import { locationCountryCodes, parseLocation } from "./location.js";
 import { parseExperience } from "./experience.js";
 import { extractSalaryFromText } from "./salary.js";
 import { currencyHintFor } from "../salary/market.js";
@@ -118,9 +118,10 @@ export function normalizePosting(raw: RawPosting): NormalizedPosting {
  */
 export function parseStatedSalary(salaryRaw: string | null, jdText: string, location: ParsedLocation): SalaryBand {
   const currencyHint = currencyHintFor(location);
+  const country = salaryCountryOf(location);
   return (
-    extractSalaryFromText(salaryRaw ?? "", { structured: true, currencyHint }) ??
-    extractSalaryFromText(jdText, { currencyHint }) ?? {
+    extractSalaryFromText(salaryRaw ?? "", { structured: true, currencyHint, country }) ??
+    extractSalaryFromText(jdText, { currencyHint, country }) ?? {
       min: null,
       max: null,
       currency: currencyHint ?? "USD",
@@ -128,6 +129,19 @@ export function parseStatedSalary(salaryRaw: string | null, jdText: string, loca
       confidence: "low",
     }
   );
+}
+
+/**
+ * The country whose currency a bare "$" / "kr" / "¥" in this posting is read in: its
+ * primary place, else the country a remote restriction names (US-only remote → US).
+ * null = unknown, so a "$" stays USD but at reduced confidence.
+ */
+function salaryCountryOf(location: ParsedLocation): string | null {
+  const primary = locationCountryCodes(location)[0];
+  if (primary) return primary;
+  if (location.mode === "remote" && (location.remoteGeo === "us_only" || location.remoteGeo === "us_eu")) return "US";
+  if (location.mode === "remote" && location.remoteGeo === "india_ok") return "IN";
+  return null;
 }
 
 /**
