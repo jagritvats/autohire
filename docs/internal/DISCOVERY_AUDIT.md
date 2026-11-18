@@ -521,3 +521,52 @@ polled again; `renormalize` does not re-derive titles (a re-poll does); the stor
 is not refreshed by a re-normalize (dedup recomputes keys, the don't-double-apply guard reads
 the stored one); "Toronto, ON, Canada, New York, NY" keeps the US as primary (US hints outrank
 Canada's), with both countries listed.
+
+
+## Feed review (2026-11-18, fourth pass): would a job seeker trust the top 50?
+
+Four fictional personas, each a throwaway PGlite store synced twice with its presets: the
+sample persona (India, Java backend, 3 yrs; `india`, 9,381 postings), a senior frontend
+developer in Germany wanting EU remote (`eu-uk,global-remote`, 5,497), a new-grad data analyst
+in the US (`us`, 5,965) and a Canadian backend developer open to US remote
+(`canada,global-remote`, 3,110). The top 50 of `jobflow feed --json` and ~10 `jobflow show`
+per persona were read by hand and counted with a script (not committed); "after" is a
+`jobflow rank` of the same stores with the fixed code. Regression tests:
+`packages/core/test/card-copy.test.ts`, `packages/service/test/feed-cards.test.ts`,
+`packages/adapters/test/text-cleanup.test.ts`.
+
+| In the top 50 (IN / DE-FE / US-DA / CA-BE) | before | after |
+|---|---|---|
+| broken location line (empty for remote, "Canada, Canada", "Poland, Europe", "GURGAON") | 10 / 13 / 7 / 22 | 0 / 0 / 0 / 0 |
+| fit note names the wrong main language | 5 / 6 / 1 / 4 | 0 / 1 / 0 / 0 |
+| card notes with jargon ("direct match", "~1-2wk ramp", `distributed_systems`) | 50 / 49 / 45 / 44 | 0 / 0 / 0 / 0 |
+| "JD requires x (you don't list it — stretch)" flags | 10 / 6 / 10 / 9 | 0 / 0 / 0 / 0 |
+| open > 90 days | 1 / 14 / 10 / 8 | 0 / 2 / 4 / 0 |
+| far-off role type (data/ML/SRE/mobile for a frontend dev; SWE for an analyst) | 1 / 7 / 34 / 0 | 0 / 2 / 20 / 0 |
+| data/analytics-titled roles for the analyst | 0 | 7 |
+| intermediaries flagged (agency, freelance marketplace) | 1 / 0 / 0 / 0 | 1 / 2 / 0 / 0 |
+| company legal-form noise ("Pvt. Ltd.", ", Inc.") | 2 / 1 / 0 / 0 | 0 / 0 / 0 / 0 |
+
+Root causes and fixes (match, service card, adapters, CLI/web/MCP card text):
+
+- **Location line**: three surfaces each built their own from `city` + the legacy `country`
+  ("Europe" for most of Europe; remote roles had an empty label). `describeLocation`
+  (`core/match/display.ts`) builds one line from `countries`, used by the card DTO, the CLI, the
+  web and MCP.
+- **Main language**: `jdSkills` come in dictionary order, so `jdLangs[0]` named Java on Go and
+  Kotlin roles. `primaryLanguage` reads the title, then the most-mentioned language in the JD.
+- **Role-type fit** was one flat 0.65 for any non-target engineering role; it is now a
+  directional table per target. "Data Analyst" / "Analytics Engineer" titles are filed under
+  `other` by the title normalizer (76 of 82 analyst titles on the US corpus); for a data target
+  the scorer reads them as data roles (normalizer fix still wanted, see below).
+- **Stale reqs**: freshness weighs 0.08, so a 300-day req sat among this week's; a soft
+  ×0.95/0.9/0.85 past 60/120/180 days.
+- **Company spread** deferred a company's 4th role below everything; it now comes back once the
+  next card would score more than 12 points less, with "+N more at … further down".
+- **Markup**: Greenhouse sends entity-escaped HTML, which `htmlToText` unescaped after stripping
+  tags; numeric entities were never decoded. On the IN corpus 4,155 of 9,381 JDs carried markup
+  or entities (166 after, all truncation artefacts of the dump; a live GitLab board: 0), 1,294
+  hid "N+ years" and 234 hid C++. Stored rows clean up on their next poll.
+
+Left for other owners: see the report of this pass (title normalizer, skills dictionary,
+salary display, presets tags, same role posted per country).

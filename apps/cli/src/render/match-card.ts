@@ -1,4 +1,4 @@
-import { formatSalary, postingAgeDays, type Match, type Posting } from "@jobflow/core";
+import { describeLocation, formatSalary, postingAgeDays, type Match, type Posting } from "@jobflow/core";
 
 /** Render the §11.6 match card — the actual product surface. */
 export function renderMatchCard(m: Match & { posting: Posting }, idx: number): string {
@@ -23,11 +23,9 @@ export function renderMatchCard(m: Match & { posting: Posting }, idx: number): s
   return lines.join("\n");
 }
 
+/** the same plain-language line the feed cards use (`describeLocation`) */
 function locationLine(p: Posting): string {
-  const l = p.location;
-  if (l.mode === "remote") return `Remote (${l.remoteGeo === "country_only" && l.country ? `${l.country} only` : l.remoteGeo})`;
-  const where = [l.city, l.country].filter(Boolean).join(", ");
-  return `${cap(l.mode)}${where ? ` · ${where}` : ""}`;
+  return describeLocation(p.location).label;
 }
 
 function freshnessLine(p: Posting): string {
@@ -71,7 +69,4 @@ function bold(s: string): string {
 }
 function pad(n: number): string {
   return String(n).padStart(2, " ");
-}
-function cap(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
 }

@@ -1,3 +1,5 @@
+import { matchSkillToken } from "../normalize/skills.js";
+
 /**
  * Stack adjacency (§11.1). A Java backend engineer should SEE Go/Kotlin/Scala/Node
  * roles — the transferable core (distributed systems, Kafka, data modelling,
@@ -113,16 +115,118 @@ export interface StackAdjacencyResult {
   note: string;
 }
 
+/** What the posting says beyond its skill list — lets the note name the RIGHT main language. */
+export interface StackContext {
+  title?: string;
+  jdText?: string;
+}
+
+/**
+ * Mention patterns per language, only to ORDER the languages a JD lists (which one is the
+ * role's main one). `jdSkills` comes in dictionary order, so "the first language listed"
+ * called a Go/Python streaming role "Primary language java" (2026-11 feed review).
+ */
+const LANGUAGE_MENTION: Readonly<Record<string, RegExp>> = {
+  java: /\bjava\b(?![\s-]?script)|\bspring boot\b|\bjvm\b/gi,
+  kotlin: /\bkotlin\b/gi,
+  go: /\bgolang\b|\bgo\b(?=\s*(?:programming|developer|engineer|lang|routines?|services|\(|,|\/))|(?<=\b(?:in|with|using|writing)\s)go\b/gi,
+  scala: /\bscala\b/gi,
+  rust: /\brust\b/gi,
+  csharp: /c#|\.net\b|\bdotnet\b/gi,
+  python: /\bpython3?\b|\bdjango\b|\bfastapi\b|\bflask\b/gi,
+  typescript: /\btypescript\b/gi,
+  javascript: /\bjavascript\b|\bnode\.?js\b/gi,
+  php: /\bphp\b|\blaravel\b/gi,
+  ruby: /\bruby\b|\brails\b/gi,
+  cpp: /c\+\+/gi,
+};
+
+/** the role's main language: named in the title, else the most-mentioned (then earliest) in the JD */
+export function primaryLanguage(jdLangs: readonly string[], ctx: StackContext = {}): string | null {
+  if (jdLangs.length <= 1 || (!ctx.title && !ctx.jdText)) return jdLangs[0] ?? null;
+  const inTitle = jdLangs.filter((l) => countMentions(l, ctx.title ?? "") > 0);
+  if (inTitle.length === 1) return inTitle[0]!;
+  const pool = inTitle.length ? inTitle : jdLangs;
+  const jd = (ctx.jdText ?? "").slice(0, 8000);
+  const ranked = pool
+    .map((l, i) => ({ l, i, n: countMentions(l, jd), first: firstMention(l, jd) }))
+    .sort((a, b) => b.n - a.n || a.first - b.first || a.i - b.i);
+  return ranked[0]?.l ?? null;
+}
+
+function countMentions(lang: string, text: string): number {
+  const re = LANGUAGE_MENTION[lang];
+  if (!re || !text) return 0;
+  return text.match(new RegExp(re.source, re.flags))?.length ?? 0;
+}
+function firstMention(lang: string, text: string): number {
+  const re = LANGUAGE_MENTION[lang];
+  if (!re) return Infinity;
+  const i = text.search(new RegExp(re.source, re.flags.replace("g", "")));
+  return i < 0 ? Infinity : i;
+}
+
+/** "distributed_systems" → "distributed systems", "ci_cd" → "CI/CD" — card copy, not ids */
+export function skillText(skill: string): string {
+  // a short free-form skill the user typed ("sql", "r") reads as the acronym it is
+  return SKILL_TEXT[skill] ?? LANG_TEXT[skill] ?? (/^[a-z]{1,3}$/.test(skill) ? skill.toUpperCase() : skill.replace(/_/g, " "));
+}
+const SKILL_TEXT: Readonly<Record<string, string>> = {
+  ci_cd: "CI/CD",
+  fintech_domain: "fintech",
+  distributed_systems: "distributed systems",
+  csharp: "C#",
+  cpp: "C++",
+  ml: "ML",
+  aws: "AWS",
+  gcp: "GCP",
+  grpc: "gRPC",
+  rest: "REST APIs",
+  kafka: "Kafka",
+  rabbitmq: "RabbitMQ",
+  postgres: "Postgres",
+  mysql: "MySQL",
+  mongodb: "MongoDB",
+  redis: "Redis",
+  elasticsearch: "Elasticsearch",
+  cassandra: "Cassandra",
+  graphql: "GraphQL",
+  docker: "Docker",
+  kubernetes: "Kubernetes",
+  azure: "Azure",
+  terraform: "Terraform",
+  spark: "Spark",
+  airflow: "Airflow",
+  react: "React",
+};
+const LANG_TEXT: Readonly<Record<string, string>> = {
+  java: "Java", kotlin: "Kotlin", go: "Go", scala: "Scala", rust: "Rust", csharp: "C#", python: "Python",
+  typescript: "TypeScript", javascript: "JavaScript", php: "PHP", ruby: "Ruby", cpp: "C++",
+};
+const langText = (l: string) => LANG_TEXT[l] ?? l;
+const list = (xs: readonly string[], f: (s: string) => string = skillText) => {
+  const t = xs.map(f);
+  return t.length <= 1 ? (t[0] ?? "") : `${t.slice(0, -1).join(", ")} and ${t.at(-1)}`;
+};
+
 /**
  * Score how transferable the candidate's stack is to a posting's required stack.
  * Domain/systems fit is weighted high; specific-language fit weighted low — so a Go
  * fintech+Kafka role scores ABOVE a Java CRUD role you don't care about (§11.1).
+ *
+ * `ctx` (title + JD text) decides which listed language is the MAIN one, and lets a
+ * declared skill the dictionary doesn't know ("sql", "tableau", "vue") count when the JD
+ * names it as a word — otherwise an analyst's or a frontend dev's real overlap is invisible.
  */
 export function stackAdjacency(
   ownedSkills: string[],
-  jdSkills: string[],
+  jdSkillsIn: string[],
+  ctx: StackContext = {},
 ): StackAdjacencyResult {
   const owned = new Set(ownedSkills);
+  // declared skills outside the dictionary, found in the JD as whole words (title or text)
+  const extra = ctx.jdText || ctx.title ? ownedSkills.filter((s) => !jdSkillsIn.includes(s) && isFreeSkill(s) && mentions(`${ctx.title ?? ""}\n${(ctx.jdText ?? "").slice(0, 8000)}`, s)) : [];
+  const jdSkills = [...jdSkillsIn, ...extra];
   const jdLangs = jdSkills.filter(isLanguage);
   const jdNonLangs = jdSkills.filter((s) => !isLanguage(s));
 
@@ -147,34 +251,53 @@ export function stackAdjacency(
 
   const score = clamp01(0.65 * domainScore + 0.25 * langScore + coreBonus);
 
-  // narrative
-  const jdPrimaryLanguage = jdLangs[0] ?? null;
+  // narrative — plain words, and only what the posting supports
+  const jdPrimaryLanguage = primaryLanguage(jdLangs, ctx);
   const haveLang = jdLangs.some((l) => owned.has(l));
   const languageStretch = jdLangs.length > 0 && !haveLang && langScore >= 0.5;
+  const have = jdNonLangs.filter((s) => owned.has(s));
+  const missing = jdNonLangs.filter((s) => !owned.has(s));
+  const tools =
+    jdNonLangs.length === 0
+      ? ""
+      : have.length === 0
+        ? ` It also names ${list(missing.slice(0, 4))}${missing.length > 4 ? " …" : ""} — not on your list.`
+        : ` You have ${list(have.slice(0, 4))}${have.length > 4 ? ` +${have.length - 4} more` : ""}${missing.length ? `; new to you: ${list(missing.slice(0, 3))}${missing.length > 3 ? " …" : ""}` : ""}.`;
 
   let note: string;
   if (jdLangs.length === 0) {
-    note = "No hard language requirement; systems/domain fit is what matters.";
+    note = jdNonLangs.length
+      ? `No specific language asked.${tools}`
+      : "The posting names no languages or tools we recognise — judge the fit from the description.";
   } else if (jdPrimaryLanguage && owned.has(jdPrimaryLanguage)) {
-    note = `Primary language ${jdPrimaryLanguage} — direct match.`;
+    note = `Main language ${langText(jdPrimaryLanguage)} — you have it.${tools}`;
   } else if (haveLang && jdPrimaryLanguage) {
-    // you have ANOTHER language the JD lists, not its primary one — say exactly that, never
-    // "direct match" (honest card: the main language is still new to you)
+    // you have ANOTHER language the JD lists, not its main one — say exactly that, never
+    // "you have it" (honest card: the main language is still new to you)
     const yours = jdLangs.filter((l) => owned.has(l));
-    const t = bestTransfer(jdPrimaryLanguage);
-    const ramp = t >= 0.7 ? "~1-2wk ramp" : t >= 0.5 ? "~3-4wk ramp" : "a real ramp";
-    note = `Primary language ${jdPrimaryLanguage} is new to you (${ramp}); the role also lists ${yours.join(", ")}, which you have.`;
-  } else if (languageStretch) {
-    const ramp = langScore >= 0.7 ? "~1-2wk ramp" : "~3-4wk ramp";
-    const coreNote = coreOverlap.length
-      ? `; your ${coreOverlap.join(" + ")} depth covers the hard part`
-      : "";
-    note = `Primary language ${jdPrimaryLanguage} (transferable, ${ramp})${coreNote}.`;
+    note = `Main language ${langText(jdPrimaryLanguage)} is new to you; it also lists ${list(yours, langText)}, which you have.${tools}`;
+  } else if (languageStretch && jdPrimaryLanguage) {
+    const from = [...owned].filter((o) => isLanguage(o) && transfer(o, jdPrimaryLanguage) >= 0.5).sort((a, b) => transfer(b, jdPrimaryLanguage) - transfer(a, jdPrimaryLanguage))[0];
+    const coreNote = coreOverlap.length ? ` Your ${list(coreOverlap)} experience is the harder part to find.` : "";
+    note = `Main language ${langText(jdPrimaryLanguage)} is new to you${from ? ` — close to ${langText(from)}, which you know` : ""}.${coreNote}${tools}`;
   } else {
-    note = `Primary language ${jdPrimaryLanguage} is a real stretch from your stack.`;
+    note = `Main language ${langText(jdPrimaryLanguage ?? jdLangs[0]!)} is new to you and not close to the languages you list.${tools}`;
   }
 
-  return { score, jdPrimaryLanguage, languageStretch, note };
+  return { score, jdPrimaryLanguage, languageStretch, note: note.replace(/\s+/g, " ").trim() };
+}
+
+/** a declared skill the dictionary has no id for: "sql", "tableau", "power bi", "vue" */
+function isFreeSkill(skill: string): boolean {
+  // a dictionary skill the JD parse didn't find is absent on purpose ("react to incidents")
+  return !isLanguage(skill) && matchSkillToken(skill) == null && skill.trim().length >= 1;
+}
+
+function mentions(text: string, skill: string): boolean {
+  const w = skill.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+  // whole word; a one/two-letter skill ("r") only as a standalone capital ("R, Python")
+  if (skill.trim().length <= 2) return new RegExp(`(^|[^\\p{L}\\p{N}])${w.toUpperCase()}(?=[,/;)]|\\s+(and|or)\\b)`, "u").test(text);
+  return new RegExp(`(^|[^\\p{L}\\p{N}])${w}($|[^\\p{L}\\p{N}])`, "iu").test(text);
 }
 
 function avg(xs: number[]): number {

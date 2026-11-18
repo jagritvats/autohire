@@ -65,6 +65,15 @@ All notable changes to JobFlow are documented here. The format follows
   otherwise. New "one country only" filter chip; cards say "Remote · Canada only".
 - Every source's postings get the staffing-agency flag at ingest (Naukri's own flag still
   wins); employers mentioning "our clients" or "manpower" are no longer misread as agencies.
+- **More locations understood**: comma-separated place lists ("London, Berlin") count every
+  country while "City, State" stays one place; European postings name their country
+  ("Germany", not "Europe"); HR-system country codes, US state codes, "U.S." and "Home
+  based" (remote) are read. Unplaced postings fell from 4.1% to 2.5%.
+- Duplicate detection and salary estimates consider every country a posting names; a posting
+  that states its pay currency is priced in that country.
+- **Stored postings re-parse automatically** once after an upgrade (on the next sync), and
+  `jobflow renormalize` runs it by hand.
+- Cutshort's "hiring for a client" marks a posting as from a recruiter.
 - **New design system** ("calm ledger"): neutral Radix-based palette with one action colour
   and fixed semantic colours, Inter type, light/dark/system themes at WCAG AA, a shared
   navigation shell, responsive down to 375px with a filter drawer, and accessibility passes
@@ -81,6 +90,35 @@ All notable changes to JobFlow are documented here. The format follows
   instead of an in-memory fallback, and keeps the feed synced on a schedule while open.
 
 ### Fixed
+- **Feed cards read the same, plainly, everywhere**: one location line built once for the
+  web, `jobflow feed`/`show` and the MCP tools — remote roles always say where they can be done
+  from ("Remote · worldwide", "Remote · APAC", "Remote · Canada only"), onsite/hybrid roles
+  name the real country ("Hybrid · München, Germany", not "München, Europe"), other offices are
+  shown ("Onsite · Bengaluru, India + Singapore"; every place on the Job page), and no more
+  "Canada, Canada", "Poland, Europe" or "GURGAON". Company names drop legal-form noise
+  ("… Pvt. Ltd.", ", Inc.").
+- **Fit notes name the right language**: the "main language" now comes from the title or the
+  most-mentioned language in the posting, not the first one in the skill dictionary (a
+  Go/Python role was "Primary language java"). Notes are plain ("Main language Go — you have
+  it. You have Kafka; new to you: Kubernetes.") with no ramp-time guesses or internal ids;
+  level notes too ("Senior role; you're mid-level — a common step up"). Must-haves you lack are
+  one flag, skipping ones a close language covers. Declared skills the dictionary doesn't know
+  ("SQL", "Tableau") count when a posting names them.
+- **Ranking a skeptical user would trust**: role-type fit is directional (a frontend
+  developer's data, ML and SRE roles no longer score like a backend developer's); data and
+  analytics titles count for someone targeting data roles; a req open for months is
+  down-weighted (soft, ×0.95–0.85 past 60 days, still flagged); unpaid/volunteer roles and
+  freelance marketplaces are flagged; a staffing-agency post always says so on the card
+  (badge in the web app and CLI, `agency` in MCP), however many other flags it has.
+- **Company spread no longer buries strong jobs**: a company's 4th role at 87 used to land
+  below a 42; held-back cards now come back as soon as the next card would score more than 12
+  points less, and the company's last card says "+N more at … further down".
+- **Job descriptions without markup**: Greenhouse's entity-escaped HTML and numeric entities
+  ("C&#43;&#43;", "3&#43; years") are decoded, so the Job page shows text and the parsers see
+  C++ and "3+ years". Amazon titles no longer repeat team names; Remote OK titles are decoded.
+- **Region-neutral "workable"**: the India-only `indiaWorkable` card field is replaced by
+  `workable` (your home country, markets and remote regions); `/api/postings?workable=1`
+  (`?india=1` still accepted).
 - **Staleness**: a board list cut at a page cap (Amazon, SmartRecruiters, Eightfold, Oracle,
   Jibe, TalentBrew) is marked partial, so a role past the cap is never retired as closed.
 - **Eightfold** waits out 429 bursts instead of losing the whole list (Microsoft: 0 → ~200

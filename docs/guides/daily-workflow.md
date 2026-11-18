@@ -65,7 +65,8 @@ In the web app, filters only hide, and the page tells you how many they hid and 
 jobs stay under **Hidden** if you change your mind.
 
 The list is spread across employers: one company never has more than 3 cards in any 20, and
-its other good matches follow further down. Scores don't change and nothing is hidden by
+its other good matches follow further down (never below jobs that score much lower; the
+company's last card says "+N more at … further down" and links to the company). Scores don't change and nothing is hidden by
 this; it just stops one big board with many similar roles from filling the first page. For
 a strict score order use **score order only** (Filters → order) or `jobflow feed --no-diversify`.
 

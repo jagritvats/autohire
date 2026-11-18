@@ -22,7 +22,8 @@ export const JobSummaryOut = z.object({
   id: z.string().describe("posting id — pass it (or a unique prefix of ≥ 4 characters) to get_job, track_application, prepare_application, draft_document"),
   title: z.string(),
   company: z.string(),
-  location: z.string().describe('human label, e.g. "Remote (worldwide)" or "Hybrid · Bengaluru, IN"'),
+  location: z.string().describe('the card\'s plain-language location, e.g. "Remote · worldwide", "Remote · Canada only", "Hybrid · München, Germany", "Onsite · Bengaluru, India + Singapore"'),
+  places: z.array(z.string()).describe("every place the posting names, primary first"),
   workMode: z.string().describe("remote | hybrid | onsite | unknown"),
   remoteGeo: z.string().describe("where a remote role may be done from (worldwide, us_only, eu_only, india_ok, country_only = residents of `country` only, …)"),
   score: z.number().nullable().describe("0–100 fit against the user's profile; null when unscored (no profile yet)"),
@@ -38,20 +39,14 @@ export const JobSummaryOut = z.object({
   presets: z.array(z.string()).describe("discovery-preset tags: india, us, eu-uk, global-remote"),
   applyUrl: z.string().nullable(),
   applied: z.boolean().describe("the user already applied to this company+role"),
+  agency: z.boolean().describe("posted by a staffing agency / third-party recruiter, not the employer — tell the user"),
+  workable: z.boolean().nullable().describe("workable for the user (an office in their home country or a market, or remote open to where they live); null = can't tell"),
 });
 export type JobSummary = z.infer<typeof JobSummaryOut>;
 
+/** the card's own plain-language location line — the same words the web and the CLI show */
 export function locationLabel(c: Pick<FeedCard, "location">): string {
-  const l = c.location;
-  if (l.mode === "remote") {
-    const geo =
-      l.remoteGeo === "country_only" && l.country
-        ? ` (${l.country} only)`
-        : l.remoteGeo && l.remoteGeo !== "unknown" ? ` (${l.remoteGeo.replace(/_/g, " ")})` : "";
-    return `Remote${geo}${l.label ? ` · ${l.label}` : ""}`;
-  }
-  const mode = l.mode === "unknown" ? "" : l.mode.charAt(0).toUpperCase() + l.mode.slice(1);
-  return [mode, l.label].filter(Boolean).join(" · ") || "location not stated";
+  return c.location.label || "Location not stated";
 }
 
 export function payOf(c: FeedCard): JobSummary["pay"] {
@@ -77,6 +72,7 @@ export function summarize(c: FeedCard, scored: boolean): JobSummary {
     title: c.title,
     company: c.company,
     location: locationLabel(c),
+    places: c.location.places,
     workMode: c.location.mode,
     remoteGeo: c.location.remoteGeo,
     score: scored ? c.score : null,
@@ -92,6 +88,8 @@ export function summarize(c: FeedCard, scored: boolean): JobSummary {
     presets: c.presets ?? [],
     applyUrl: c.applyUrl,
     applied: c.applied,
+    agency: c.agency,
+    workable: c.workable,
   };
 }
 
@@ -102,7 +100,8 @@ export function jobLines(j: JobSummary, i?: number): string {
     payText(j.pay),
     j.ageDays <= 0 ? "today" : `${j.ageDays}d old`,
     j.source + (j.atsDirect ? "" : " (aggregator)"),
-    j.experience.min != null ? `${j.experience.min}${j.experience.max != null ? `–${j.experience.max}` : "+"} yrs${j.experience.fit && j.experience.fit !== "ok" ? ` (${j.experience.fit})` : ""}` : null,
+    j.agency ? "staffing agency, not the employer" : null,
+    experienceText(j.experience),
     j.presets.length ? j.presets.map((p) => `#${p}`).join(" ") : null,
     j.applied ? "already applied" : null,
   ].filter(Boolean);
@@ -112,6 +111,13 @@ export function jobLines(j: JobSummary, i?: number): string {
   if (j.redFlags.length) lines.push(`   watch: ${j.redFlags.join(" · ")}`);
   lines.push(`   id: ${j.id}`);
   return lines.join("\n");
+}
+
+/** "asks 3–5 yrs", "asks 4 yrs (stretch)" — null when the posting states none */
+export function experienceText(e: JobSummary["experience"]): string | null {
+  if (e.min == null && e.max == null) return null;
+  const range = e.min != null && e.max != null ? (e.min === e.max ? `${e.min}` : `${e.min}–${e.max}`) : e.min != null ? `${e.min}+` : `up to ${e.max}`;
+  return `asks ${range} yrs${e.fit && e.fit !== "ok" ? ` (${e.fit})` : ""}`;
 }
 
 export function hiddenText(hidden: Record<string, number> | undefined, total: number | undefined, what: string): string | null {
