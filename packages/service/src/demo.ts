@@ -46,6 +46,23 @@ const JOBS: DemoJob[] = [
     jd: "Public APIs for our compression platform: TypeScript, Node.js, PostgreSQL, Redis, AWS. 2+ years experience." },
   { company: "Massive Dynamic", ats: "lever", title: "Engineering Manager, Infrastructure", location: "Pune, India", daysAgo: 20,
     jd: "Lead a team of 8 infrastructure engineers. Kubernetes, AWS, Terraform. 10+ years of experience including 3 years managing." },
+  // Shows the newer card states: several offices in one posting, a remote role open in one
+  // country only, a local-spelling city, a staffing-agency post, and one employer with many
+  // roles (the feed spreads them out instead of stacking them at the top).
+  { company: "Acme Pay", ats: "greenhouse", title: "Senior Backend Engineer, Payouts", location: "Hybrid - Bengaluru, India; Singapore", daysAgo: 3,
+    jd: "Payouts platform: Java, Spring Boot, Kafka, PostgreSQL, distributed transactions. 4+ years of experience. Offices in Bengaluru and Singapore." },
+  { company: "Acme Pay", ats: "greenhouse", title: "Backend Engineer, Risk", location: "Bengaluru, India", daysAgo: 5,
+    jd: "Risk scoring services in Java and Kafka Streams, PostgreSQL, Redis. 2-5 years of experience." },
+  { company: "Acme Pay", ats: "greenhouse", title: "Software Engineer, Ledger Tooling", location: "Bengaluru, India", daysAgo: 8,
+    jd: "Internal tools for the ledger team: Java, TypeScript, PostgreSQL, REST APIs. 2+ years of experience." },
+  { company: "Acme Pay", ats: "greenhouse", title: "Backend Engineer, Reconciliation", location: "Pune, India", daysAgo: 10,
+    jd: "Reconciliation pipelines: Java, Kafka, PostgreSQL, batch and streaming. 2-4 years of experience." },
+  { company: "Northwind Health", ats: "lever", title: "Backend Developer", location: "Remote - Canada", daysAgo: 4, salary: "CA$120,000 – CA$150,000",
+    jd: "Backend developer for our clinical scheduling APIs: Java, Spring, PostgreSQL, AWS. 3+ years. Must live in Canada." },
+  { company: "Tyrell Mobility", ats: "ashby", title: "Backend Engineer, Fleet APIs", location: "München, Deutschland (Hybrid)", daysAgo: 6, salary: "€70,000 – €90,000",
+    jd: "Fleet telemetry APIs in Kotlin and Java, Kafka, PostgreSQL, Kubernetes. 3+ years. Hybrid in Munich; visa sponsorship available." },
+  { company: "TalentBridge Consultancy", ats: "lever", title: "Java Developer", location: "Bengaluru, India", daysAgo: 2,
+    jd: "We are hiring on behalf of our client, a leading fintech. Java, Spring Boot, Microservices, Kafka. 2-5 years. Immediate joiners preferred." },
 ];
 
 let seeded = false;
