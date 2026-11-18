@@ -1416,3 +1416,13 @@
   border-radius: var(--r-lg);
   background: var(--warn-soft);
 }
+
+/* "Also posted for …" (sibling postings): each place is a pill, so the commas between them
+   step aside visually (still read by screen readers) */
+:where([data-style="spark"]) .match__more > span {
+  font-size: 0;
+}
+:where([data-style="spark"]) .match__more > span a {
+  margin-left: 6px;
+  font-size: var(--fs-sm);
+}

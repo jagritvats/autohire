@@ -5491,6 +5491,12 @@ section[id] {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+/* figures with punctuation ("9.4 s", "1,284"): proportional. Some faces (Schibsted Grotesk)
+   draw a tabular "." and "," a full figure wide, which reads "9 . 4 s" */
+.sync-table td.num,
+.sync-step__meta {
+  font-variant-numeric: lining-nums proportional-nums;
+}
 .sync-table th.num:last-child,
 .sync-table td.num:last-child {
   padding-right: 0;

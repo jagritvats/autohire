@@ -684,3 +684,17 @@
   border-radius: var(--r-md);
   background: var(--warn-soft);
 }
+
+/* "Also posted for …" (sibling postings): the places read as links */
+:where([data-style="classic"]) .match__more {
+  margin-top: var(--s-1);
+}
+:where([data-style="classic"]) .match__more a {
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 2px;
+}
+:where([data-style="classic"]) .match__more a:hover {
+  color: var(--accent-text);
+  text-decoration-color: currentColor;
+}
