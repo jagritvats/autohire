@@ -151,7 +151,7 @@ corpus: 0 bands changed (the re-poll had already re-parsed them), 5,347 estimate
 the location fixes: remote roles once mislabelled "worldwide" moved from the REMOTE pay
 market (41 comparables → 1) into US, and ~3,000 formerly hidden postings joined the
 comparables. **Follow-up (pipeline/salary.ts):** re-fit the confidence calibration on the
-new market mix.
+new market mix. *Done (per market × role family): see Follow-ups.*
 
 ### 7. Freshness, staleness and scheduling (fixed)
 
@@ -167,7 +167,7 @@ new market mix.
 - **The cap itself is the bottleneck.** With 25 boards a sync, a 243-board registry gets each
   board, daily ones included, re-polled every 5–10 days whatever the order. **Recommendation
   (service/CLI owners):** size the default `maxBoards` from the registry (or a time budget)
-  rather than a fixed 25.
+  rather than a fixed 25. *Done (every due board inside a time budget): see Follow-ups.*
 - **TTL sweep without a fetch.** The 21-day board sweep retired every posting unseen for 21
   days, including postings of boards the cap simply hadn't reached: a stale mark with no
   fetch behind it (invariant #5). On a registry where a rotation takes longer than 21 days,
@@ -248,6 +248,124 @@ Remaining ranking observations, not fixed here:
 - **db** (`packages/db/src/postgres.ts`, `memory.ts`): the upsert does not refresh
   `dedup_key` (or `company_id`) on conflict, so stored keys keep whatever key existed when the
   row was first written; `dedup()` now recomputes them. `setCanonical` should accept `null`
-  (the pipeline passes it with a cast to clear a stale pointer).
+  (the pipeline passes it with a cast to clear a stale pointer). *Done: see Follow-ups.*
 - **service / CLI**: scale the default sync's `maxBoards` with the registry; consider a
-  per-company interleave in the feed.
+  per-company interleave in the feed. *Done: see Follow-ups.*
+
+## Follow-ups (2026-11-18, second pass)
+
+The db, sync, feed and salary items above, done; the single-country remote geo, designed.
+
+### db: dedup key refresh and clearing canonical pointers (done)
+
+The posting upsert now refreshes `dedup_key` and `company_name` on conflict; the row's
+identity (`company_id`, `source`, `tier`, `first_seen`) stays with the first write, and
+`InMemoryRepository` behaves the same (it used to overwrite all of them through a spread).
+`setCanonical(id, null)` clears a pointer, so `rebuildMatches` drops its cast. Both are in
+the contract test on memory and PGlite. `dedup()` still recomputes the key from the posting
+on purpose: a row not re-polled since a key-algorithm change keeps the old key until its
+next poll.
+
+### Sync coverage: every due board, inside a time budget (done)
+
+`pollAll`'s default board budget is now `"auto"`: every **due** board (the `dueForPoll` list
+already encodes cadence: daily boards come due after 20 h, weekly ones after 6 days, new ones
+at once), so the budget grows with the registry. Two bounds keep a run sane: a time budget
+(no new board starts after it; the rest stay due and lead the next run: 5 min for `jobflow
+sync` and the web app, 10 min for the worker, 60 s for the request-bound refresh, none for
+`--full`), and the existing concurrency (8) and per-host limit (2). A registry's very first
+sync is capped at 25 boards / 90 s so the first feed comes fast; the web app's local
+schedule then syncs every quarter-hour while any board has never been polled. Polled boards
+are ordered by lateness (time since the last poll ÷ cadence period) instead of plain age:
+oldest-first starved the daily boards whenever a weekly cohort came due together, and under
+a cap it gave every board the same absolute gap. Knobs: `JOBFLOW_SYNC_MAX_BOARDS` (a fixed cap),
+`JOBFLOW_SYNC_MINUTES`, `jobflow sync --max-boards N`.
+
+Simulated on the real preset registries (`packages/pipeline/test/sync-budget.test.ts`;
+fetch time modelled per ATS: Workday 12 s, Greenhouse 1.5 s, Lever 1 s, Ashby 2 s, others
+4 s; 8 at once, ≤2 per host; 21 days):
+
+| Schedule | Registry | First sync | Every board polled after | Max re-poll gap, daily / weekly boards | Longest board phase |
+|---|---|---|---|---|---|
+| old: 25 boards, oldest first, 2 syncs/day | india (239, 41 daily) | 25 boards | 108 h | **120 h** / 6.5 d | 48 s |
+| old: 25 boards, oldest first, 4 syncs/day | india | 25 boards | 54 h | **60 h** / 6.25 d | 48 s |
+| web app, every 6 h + catch-up | india | 25 boards, 24 s | 0.3 h | 24 h / 6.25 d | 194 s |
+| web app, every 6 h + catch-up | every preset (421) | 25 boards, 22 s | 0.3 h | 24 h / 6.25 d | 247 s |
+| worker, every 6 h | every preset | 25 boards | 6.1 h | 24 h / 6.25 d | 247 s |
+| `jobflow sync` once a day | india | 25 boards | 24 h | 24 h / 7 d | 211 s |
+
+Live, on a fresh scratch store with the sample persona (india preset, `LLM_PROVIDER=echo`):
+the first `jobflow sync` polled 25 of 232 due boards (181 s, most of it registering the 239
+seed employers); the second polled all 207 remaining (202 fetched, 5 Workday boards threw
+the known adapter error) in 291 s, 0 deferred, 20,376 postings fetched, 9,084 active; the
+third, minutes later, found 0 boards due (61 s, feeds only). The old default needed 10
+syncs to reach every board.
+
+### Feed: company spread (done)
+
+`diversifyByCompany` (`packages/core/src/match/view.ts`) reorders a ranked list so no company
+has more than 3 cards in any 20; the cards it moves down follow later. It is greedy and
+stable: nothing is dropped, no score changes, each company's own cards keep their order, and
+other companies keep their relative order (invariant #4: an order, not a score or a filter).
+`getFeed` applies it by default (`diversify: false` opts out); the CLI (`jobflow feed
+--no-diversify`) and MCP `list_jobs` (`diversify`) spread what they actually return, after
+`--min-score` and applied-filtering; the web Jobs page re-spreads what its filters show and
+has a **score order only** chip (Filters → order). On a ranking like the audit's IN one (Amazon 19
+of the top 50) the first 20 cards hold at most 3 Amazon roles by construction; the rest
+appear further down at their true scores. Pinned by `packages/core/test/diversify.test.ts`
+and `packages/service/test/feed.test.ts`.
+
+### Salary calibration: per market × role family (done)
+
+Cause of the 19% / 21% inversion: non-engineering postings ("other": sales, legal, people,
+operations) are priced from loosely related titles (a different title weighs 0.2), and their
+many weak comparables saturate the sample-size term, so they sat at confidence ~0.45–0.5
+whatever their evidence and missed by ~21%. Engineering estimates at 0.5–0.7 missed by ~15%.
+On the IN corpus 1,491 of the 1,961 US-market backtests are "other", 1,132 of them at 0.5.
+
+Fix: `calibrateSalaryScores` (core) keeps the per-market step and adds a role-family step
+within each market: a family whose errors exceed what the market's other family achieves at
+the same confidence is scaled down by the same expected ÷ actual rule (floored at 0.35,
+shrunk toward 1 by n/(n+30), never above 1). Stored per segment (`cal:v2:<market>:<family>`;
+the v2 stamp recalibrates on the next poll), named in the basis line ("from 900 backtested
+non-engineering US postings"). The estimator's formula is unchanged. A first attempt that
+weighted confidence by √fit fixed the IN corpus and broke the US one (22% / 24% / 14% / 15%),
+so it was dropped: the calibration step learns the correction per corpus instead.
+
+Leak-free backtest, calibrated, median error by confidence band (`< 0.30 / 0.30–0.50 /
+0.50–0.70 / ≥ 0.70`), the same corpora and code apart from the calibration:
+
+| Corpus | Before (per market) | After (market × family) | Segment factors < 1 |
+|---|---|---|---|
+| IN re-polled (2,313 backtested) | 40% / **19% / 21%** / 10% | 39% / 20% / 15% / 10% | US:other ×0.91, IN:eng ×0.56, IN:other ×0.52, CA:other ×0.56, EU ×0.79, GB:other ×0.89 |
+| US re-polled (6,730) | 49% / 23% / 16% / 14% | 44% / 23% / 16% / 14% | EU:other ×0.53, CA:other ×0.6, GB ×0.75–0.81, REMOTE ×0.87 |
+
+Both are monotonic again; overall median error is unchanged (18% / 21%), since calibration
+only relabels confidence. `pnpm --filter @jobflow/worker salary` then `salary-backtest` on a
+copy of the IN corpus reproduce the IN row (its all-evidence table reads 38% / 24% / 17% / 7%),
+and both commands now exit when done (the one-shot worker used to hold the store open). Pinned by `packages/core/test/salary-estimate.test.ts` ("per market ×
+role family calibration").
+
+### Single-country remote (designed, not built)
+
+"Remote - Canada" / "Remote - Brazil" keep `remoteGeo: unknown` plus the country, and the
+scorer down-weights a remote role restricted to a foreign country softly, with a flag. A
+proper representation is a `country_only` `RemoteGeo` ("remote for residents of
+`location.country`"):
+
+- **Storage:** `posting.remote_geo` is plain `text`, so no migration; the Zod enum gains the
+  value. Old processes reading a new row would fail to parse it, so the enum should take it
+  with `.catch("unknown")` on read.
+- **Parser** (`core/normalize/location.ts`): emit `country_only` where it now emits `unknown` +
+  a country for a remote-anchored single country (the cases audit finding 5 lists).
+- **Scoring** (`core/match/score.ts`): workable when the country is the user's home or one of
+  their markets; otherwise the existing soft down-weight and flag. `hardExclude` may treat it
+  like `us_only` / `eu_only` only at confidence ≥ 0.85 and only when the user can't live
+  there (home and markets), per invariant #4.
+- **Views and UI:** the remote-region filter and chips (`FeedView` GEOS, saved-search
+  `remote` facet) need a "this country only" entry; `remoteGeoOk` stays region-level, since
+  markets already say which countries the user can work from.
+
+Not done now: the parser lives in `core/normalize`, which another change is reworking
+(multi-country locations), and the soft down-weight already keeps these roles honest. It is
+a small change once that lands.
