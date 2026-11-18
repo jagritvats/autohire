@@ -4,13 +4,39 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FeedCard, FeedData } from "@/lib/feed";
 import type { SetupProgress } from "@jobflow/service";
 import { MatchCard } from "./MatchCard";
-import { Badge, Banner, Button, ButtonLink, Chip, EmptyState, Panel, Segmented, Skeleton, Stat } from "./ui";
+import {
+  Badge,
+  Banner,
+  Button,
+  ButtonLink,
+  Chip,
+  EmptyState,
+  Panel,
+  Segmented,
+  Skeleton,
+  Stat,
+} from "./ui";
 import { FilterDrawer } from "./ui/FilterDrawer";
 import { roleText } from "@/lib/cardText";
-import { DIVERSIFY_WINDOW, diversifyByCompany, diversifyKey, moreBelow } from "@jobflow/core";
+import {
+  DIVERSIFY_WINDOW,
+  diversifyByCompany,
+  diversifyKey,
+  moreBelow,
+} from "@jobflow/core";
 
-const ARCHETYPES = ["backend", "platform", "infra_devops", "fullstack", "data_ml", "sre", "frontend", "mobile"];
+const ARCHETYPES = [
+  "backend",
+  "platform",
+  "infra_devops",
+  "fullstack",
+  "data_ml",
+  "sre",
+  "frontend",
+  "mobile",
+];
 const MODES = ["remote", "hybrid", "onsite"];
+/** remote-region chips; only the regions present in YOUR jobs are offered (region-neutral). */
 const GEOS: Array<{ id: string; label: string }> = [
   { id: "worldwide", label: "anywhere" },
   { id: "india_ok", label: "India OK" },
@@ -21,7 +47,11 @@ const GEOS: Array<{ id: string; label: string }> = [
 ];
 
 /** a tab: the whole ranked list, one of your saved searches, or a collection */
-type Tab = { kind: "all" } | { kind: "view"; id: string } | { kind: "saved" } | { kind: "hidden" };
+type Tab =
+  | { kind: "all" }
+  | { kind: "view"; id: string }
+  | { kind: "saved" }
+  | { kind: "hidden" };
 const tabKey = (t: Tab) => (t.kind === "view" ? `view:${t.id}` : t.kind);
 
 interface Filters {
@@ -33,19 +63,47 @@ interface Filters {
   geos: Set<string>;
   hideUsOnly: boolean;
   hideServices: boolean;
+  hideAgency: boolean;
+  hideUnworkable: boolean;
   minTrust: number;
 }
-const NO_FILTERS: Filters = { minScore: 0, maxYears: 0, presets: new Set(), roles: new Set(), modes: new Set(), geos: new Set(), hideUsOnly: false, hideServices: false, minTrust: 0 };
+const NO_FILTERS: Filters = {
+  minScore: 0,
+  maxYears: 0,
+  presets: new Set(),
+  roles: new Set(),
+  modes: new Set(),
+  geos: new Set(),
+  hideUsOnly: false,
+  hideServices: false,
+  hideAgency: false,
+  hideUnworkable: false,
+  minTrust: 0,
+};
 
 /** the FIRST filter that hides a card (so the hidden report adds up), or null */
 function hiddenBy(c: FeedCard, f: Filters): string | null {
   if (f.minScore && c.score < f.minScore) return "min score";
-  if (f.maxYears > 0 && c.experience.min != null && c.experience.min > f.maxYears) return "years asked"; // unknown YoE is never hidden
+  if (
+    f.maxYears > 0 &&
+    c.experience.min != null &&
+    c.experience.min > f.maxYears
+  )
+    return "years asked"; // unknown YoE is never hidden
   if (f.roles.size && !f.roles.has(c.archetype)) return "role type";
-  if (f.presets.size && !(c.presets ?? []).some((p) => f.presets.has(p))) return "preset";
+  if (f.presets.size && !(c.presets ?? []).some((p) => f.presets.has(p)))
+    return "preset";
   if (f.modes.size && !f.modes.has(c.location.mode)) return "work mode";
-  if (f.geos.size && c.location.mode === "remote" && !f.geos.has(c.location.remoteGeo)) return "remote region";
-  if (f.hideUsOnly && c.location.remoteGeo === "us_only") return "US-only remote";
+  if (
+    f.geos.size &&
+    c.location.mode === "remote" &&
+    !f.geos.has(c.location.remoteGeo)
+  )
+    return "remote region";
+  if (f.hideUsOnly && c.location.remoteGeo === "us_only")
+    return "US-only remote";
+  if (f.hideUnworkable && c.workable === false) return "not workable for you";
+  if (f.hideAgency && c.agency) return "staffing agency";
   if (f.hideServices && c.services) return "IT services";
   if (f.minTrust > 0 && c.trust * 100 < f.minTrust) return "source trust";
   return null;
@@ -74,10 +132,24 @@ export function FeedView({
 }) {
   const [data, setData] = useState(initial);
   const [progress, setProgress] = useState(initialProgress);
-  const [tab, setTab] = useState<Tab>(initialView ? { kind: "view", id: initialView } : { kind: "all" });
-  const [tabCards, setTabCards] = useState<Record<string, FeedCard[]>>(() => (initialView && initialViewData ? { [`view:${initialView}`]: initialViewData.cards } : {}));
-  const [viewHidden, setViewHidden] = useState<{ total: number; by: Record<string, number> } | null>(
-    initialViewData ? { total: initialViewData.stats.hiddenTotal ?? 0, by: initialViewData.stats.hidden ?? {} } : null,
+  const [tab, setTab] = useState<Tab>(
+    initialView ? { kind: "view", id: initialView } : { kind: "all" },
+  );
+  const [tabCards, setTabCards] = useState<Record<string, FeedCard[]>>(() =>
+    initialView && initialViewData
+      ? { [`view:${initialView}`]: initialViewData.cards }
+      : {},
+  );
+  const [viewHidden, setViewHidden] = useState<{
+    total: number;
+    by: Record<string, number>;
+  } | null>(
+    initialViewData
+      ? {
+          total: initialViewData.stats.hiddenTotal ?? 0,
+          by: initialViewData.stats.hidden ?? {},
+        }
+      : null,
   );
   const [loadingTab, setLoadingTab] = useState(false);
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
@@ -126,20 +198,31 @@ export function FeedView({
     }
     setLoadingTab(true);
     try {
-      const url = t.kind === "view" ? `/api/postings?search=${encodeURIComponent(t.id)}` : `/api/postings?view=${t.kind === "saved" ? "bookmarks" : "archived"}`;
+      const url =
+        t.kind === "view"
+          ? `/api/postings?search=${encodeURIComponent(t.id)}`
+          : `/api/postings?view=${t.kind === "saved" ? "bookmarks" : "archived"}`;
       const r = await fetch(url, { cache: "no-store" });
       const d = r.ok ? await r.json() : { cards: [] };
-      setTabCards((s) => ({ ...s, [tabKey(t)]: (d.cards as FeedCard[]) ?? [] }));
+      setTabCards((s) => ({
+        ...s,
+        [tabKey(t)]: (d.cards as FeedCard[]) ?? [],
+      }));
       if (t.kind === "view") {
         setViewHidden({ total: d.hiddenTotal ?? 0, by: d.hidden ?? {} });
-        window.history.replaceState(null, "", `/?view=${encodeURIComponent(t.id)}`);
+        window.history.replaceState(
+          null,
+          "",
+          `/?view=${encodeURIComponent(t.id)}`,
+        );
       } else window.history.replaceState(null, "", "/");
     } finally {
       setLoadingTab(false);
     }
   }, []);
 
-  const baseCards = tab.kind === "all" ? data.cards : tabCards[tabKey(tab)] ?? [];
+  const baseCards =
+    tab.kind === "all" ? data.cards : (tabCards[tabKey(tab)] ?? []);
 
   // ── filters as a view: count what they hide, per reason ──
   // then the ORDER: by default no company fills the page (at most 3 in any 20 cards, the
@@ -154,20 +237,57 @@ export function FeedView({
       else shown.push(c);
     }
     const spread = !(scored && scoreOrder);
-    const ordered = spread ? diversifyByCompany(shown, (c) => diversifyKey(c.company), scored ? { scoreOf: (c) => c.score } : {}) : [...shown].sort((a, b) => b.score - a.score);
+    const ordered = spread
+      ? diversifyByCompany(
+          shown,
+          (c) => diversifyKey(c.company),
+          scored ? { scoreOf: (c) => c.score } : {},
+        )
+      : [...shown].sort((a, b) => b.score - a.score);
     // "+N more at Acme further down" on a company's last card in the first screenful
-    const more = spread ? moreBelow(ordered, (c) => diversifyKey(c.company), DIVERSIFY_WINDOW) : new Map<number, number>();
+    const more = spread
+      ? moreBelow(ordered, (c) => diversifyKey(c.company), DIVERSIFY_WINDOW)
+      : new Map<number, number>();
     return { cards: ordered, hidden: by, more };
   }, [baseCards, filters, scored, scoreOrder]);
   const hiddenTotal = Object.values(hidden).reduce((a, b) => a + b, 0);
-  const filtersOn = hiddenTotal > 0 || JSON.stringify(filters, (_k, v) => (v instanceof Set ? [...v] : v)) !== JSON.stringify(NO_FILTERS, (_k, v) => (v instanceof Set ? [...v] : v));
-  const feedPresets = useMemo(() => [...new Set(baseCards.flatMap((c) => c.presets ?? []))].sort(), [baseCards]);
+  const filtersOn =
+    hiddenTotal > 0 ||
+    JSON.stringify(filters, (_k, v) => (v instanceof Set ? [...v] : v)) !==
+      JSON.stringify(NO_FILTERS, (_k, v) => (v instanceof Set ? [...v] : v));
+  // offer only the chips that can hide something in YOUR jobs (no region-specific defaults)
+  const presentGeos = useMemo(
+    () =>
+      new Set(
+        baseCards
+          .filter((c) => c.location.mode === "remote")
+          .map((c) => c.location.remoteGeo),
+      ),
+    [baseCards],
+  );
+  const present = useMemo(
+    () => ({
+      unworkable: baseCards.some((c) => c.workable === false),
+      usOnly: baseCards.some((c) => c.location.remoteGeo === "us_only"),
+      agency: baseCards.some((c) => c.agency),
+      services: baseCards.some((c) => c.services),
+    }),
+    [baseCards],
+  );
+  const feedPresets = useMemo(
+    () => [...new Set(baseCards.flatMap((c) => c.presets ?? []))].sort(),
+    [baseCards],
+  );
 
   // ── sync: start in the background, poll progress, swap the jobs in when done ──
   const reloadFeed = useCallback(async () => {
     const [f, p] = await Promise.all([
-      fetch("/api/postings?view=feed", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
-      fetch("/api/progress", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/postings?view=feed", { cache: "no-store" }).then((r) =>
+        r.ok ? r.json() : null,
+      ),
+      fetch("/api/progress", { cache: "no-store" }).then((r) =>
+        r.ok ? r.json() : null,
+      ),
     ]);
     if (f) setData(f);
     if (p) setProgress(p);
@@ -178,14 +298,22 @@ export function FeedView({
     if (!syncing) return;
     let stop = false;
     const tick = async () => {
-      const p = (await fetch("/api/progress", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null)) as SetupProgress | null;
+      const p = (await fetch("/api/progress", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null)) as SetupProgress | null;
       if (stop || !p) return;
       setProgress(p);
       if (!p.corpus.syncing) {
         setSyncing(false);
         const { feed } = await reloadFeed();
-        if (feed && feed.stats.postings === 0) setSyncError("No jobs came back. The job boards may be unreachable from here (no network, or a proxy blocking them).");
-        else flash(`Sync finished — ${feed?.stats.postings ?? p.corpus.postings} jobs in your list.`);
+        if (feed && feed.stats.postings === 0)
+          setSyncError(
+            "No jobs came back. The job boards may be unreachable from here (no network, or a proxy blocking them).",
+          );
+        else
+          flash(
+            `Sync finished — ${feed?.stats.postings ?? p.corpus.postings} jobs in your list.`,
+          );
       }
     };
     const t = setInterval(tick, 3000);
@@ -204,36 +332,81 @@ export function FeedView({
   }
 
   // ── card actions ──
-  const send = (url: string, body: unknown, method = "POST") => fetch(url, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const send = (url: string, body: unknown, method = "POST") =>
+    fetch(url, {
+      method,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
   const patchCard = (id: string, fn: (c: FeedCard) => FeedCard) => {
-    setData((d) => ({ ...d, cards: d.cards.map((c) => (c.id === id ? fn(c) : c)) }));
-    setTabCards((s) => Object.fromEntries(Object.entries(s).map(([k, list]) => [k, list.map((c) => (c.id === id ? fn(c) : c))])));
+    setData((d) => ({
+      ...d,
+      cards: d.cards.map((c) => (c.id === id ? fn(c) : c)),
+    }));
+    setTabCards((s) =>
+      Object.fromEntries(
+        Object.entries(s).map(([k, list]) => [
+          k,
+          list.map((c) => (c.id === id ? fn(c) : c)),
+        ]),
+      ),
+    );
   };
   const dropCard = (id: string, from: "list" | "hidden" | "saved") => {
     if (from === "list") {
       setData((d) => ({ ...d, cards: d.cards.filter((c) => c.id !== id) }));
-      setTabCards((s) => Object.fromEntries(Object.entries(s).map(([k, list]) => [k, k.startsWith("view:") ? list.filter((c) => c.id !== id) : list])));
-    } else setTabCards((s) => ({ ...s, [from]: (s[from] ?? []).filter((c) => c.id !== id) }));
+      setTabCards((s) =>
+        Object.fromEntries(
+          Object.entries(s).map(([k, list]) => [
+            k,
+            k.startsWith("view:") ? list.filter((c) => c.id !== id) : list,
+          ]),
+        ),
+      );
+    } else
+      setTabCards((s) => ({
+        ...s,
+        [from]: (s[from] ?? []).filter((c) => c.id !== id),
+      }));
   };
 
   async function save(card: FeedCard) {
     const next = !card.bookmarked;
-    patchCard(card.id, (c) => ({ ...c, bookmarked: next, applied: next ? true : c.applied }));
+    patchCard(card.id, (c) => ({
+      ...c,
+      bookmarked: next,
+      applied: next ? true : c.applied,
+    }));
     if (tab.kind === "saved" && !next) dropCard(card.id, "saved");
-    await send("/api/postings/bookmark", { postingId: card.id }, next ? "POST" : "DELETE");
+    await send(
+      "/api/postings/bookmark",
+      { postingId: card.id },
+      next ? "POST" : "DELETE",
+    );
     if (next && !card.applied) {
       await send("/api/applications", { postingId: card.id, status: "saved" });
       flash(`Saved “${card.title}” — it's in Applications as Saved.`);
-      setProgress((p) => ({ ...p, steps: p.steps.map((s) => (s.id === "track" ? { ...s, done: true } : s)) }));
+      setProgress((p) => ({
+        ...p,
+        steps: p.steps.map((s) =>
+          s.id === "track" ? { ...s, done: true } : s,
+        ),
+      }));
     }
   }
 
   async function hide(card: FeedCard) {
     const next = !card.archived;
-    await send("/api/postings/archive", { postingId: card.id }, next ? "POST" : "DELETE");
+    await send(
+      "/api/postings/archive",
+      { postingId: card.id },
+      next ? "POST" : "DELETE",
+    );
     if (next) {
       dropCard(card.id, "list");
-      flash(`Hidden “${card.title}”. It's under the Hidden tab if you change your mind.`);
+      flash(
+        `Hidden “${card.title}”. It's under the Hidden tab if you change your mind.`,
+      );
     } else {
       dropCard(card.id, "hidden");
       flash(`“${card.title}” is back in your jobs.`);
@@ -244,10 +417,22 @@ export function FeedView({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
-      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable)) return;
+      if (
+        el &&
+        (el.tagName === "INPUT" ||
+          el.tagName === "TEXTAREA" ||
+          el.tagName === "SELECT" ||
+          el.isContentEditable)
+      )
+        return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       // Enter on a focused button/link belongs to that control; nothing fires under the open filter sheet
-      if (e.key === "Enter" && el && (el.tagName === "BUTTON" || el.tagName === "A")) return;
+      if (
+        e.key === "Enter" &&
+        el &&
+        (el.tagName === "BUTTON" || el.tagName === "A")
+      )
+        return;
       if (document.documentElement.classList.contains("scroll-locked")) return;
       const card = cards[selected];
       const go = (href: string) => (window.location.href = href);
@@ -296,7 +481,9 @@ export function FeedView({
   });
   useEffect(() => {
     if (!kbdActive) return;
-    document.querySelector(`[data-card-id="${cards[selected]?.id}"]`)?.scrollIntoView({ block: "nearest" });
+    document
+      .querySelector(`[data-card-id="${cards[selected]?.id}"]`)
+      ?.scrollIntoView({ block: "nearest" });
   }, [selected, cards, kbdActive]);
 
   const toggleSet = (key: "presets" | "roles" | "modes" | "geos", v: string) =>
@@ -308,7 +495,10 @@ export function FeedView({
 
   const tabs: Array<{ tab: Tab; label: string }> = [
     { tab: { kind: "all" }, label: scored ? "All jobs" : "Latest jobs" },
-    ...views.map((v) => ({ tab: { kind: "view", id: v.id } as Tab, label: v.name })),
+    ...views.map((v) => ({
+      tab: { kind: "view", id: v.id } as Tab,
+      label: v.name,
+    })),
     { tab: { kind: "saved" }, label: "Saved" },
     { tab: { kind: "hidden" }, label: "Hidden" },
   ];
@@ -316,8 +506,17 @@ export function FeedView({
   const lastSync = progress.corpus.lastSyncAt;
   // how many filters are narrowing the list — shown on the mobile "Filters" button
   const activeFilters =
-    filters.presets.size + filters.roles.size + filters.modes.size + filters.geos.size + (filters.minScore > 0 ? 1 : 0) + (filters.maxYears > 0 ? 1 : 0) +
-    (filters.hideUsOnly ? 1 : 0) + (filters.hideServices ? 1 : 0) + (filters.minTrust > 0 ? 1 : 0);
+    filters.presets.size +
+    filters.roles.size +
+    filters.modes.size +
+    filters.geos.size +
+    (filters.minScore > 0 ? 1 : 0) +
+    (filters.maxYears > 0 ? 1 : 0) +
+    (filters.hideUsOnly ? 1 : 0) +
+    (filters.hideServices ? 1 : 0) +
+    (filters.hideAgency ? 1 : 0) +
+    (filters.hideUnworkable ? 1 : 0) +
+    (filters.minTrust > 0 ? 1 : 0);
   const tabOptions = tabs.map((t) => ({ id: tabKey(t.tab), label: t.label }));
   const pickTab = (key: string) => {
     const t = tabs.find((x) => tabKey(x.tab) === key);
@@ -328,9 +527,16 @@ export function FeedView({
     <div className="feed-layout">
       <FilterDrawer activeCount={activeFilters}>
         <div className="rail-group">
-          <p className="hint">Filters only hide — scores never change, and the count of what's hidden is shown above the list.</p>
+          <p className="hint">
+            Filters only hide — scores never change, and the count of what's
+            hidden is shown above the list.
+          </p>
           {filtersOn && (
-            <Button size="sm" variant="ghost" onClick={() => setFilters(NO_FILTERS)}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setFilters(NO_FILTERS)}
+            >
               clear filters
             </Button>
           )}
@@ -339,7 +545,8 @@ export function FeedView({
         {scored && (
           <div className="rail-group">
             <label className="rail-group__label" htmlFor="f-min-score">
-              min match <span className="slider-val">{filters.minScore || "any"}</span>
+              min match{" "}
+              <span className="slider-val">{filters.minScore || "any"}</span>
             </label>
             <input
               id="f-min-score"
@@ -348,15 +555,22 @@ export function FeedView({
               max={90}
               step={5}
               value={filters.minScore}
-              aria-valuetext={filters.minScore ? `at least ${filters.minScore}` : "any"}
-              onChange={(e) => setFilters((f) => ({ ...f, minScore: +e.target.value }))}
+              aria-valuetext={
+                filters.minScore ? `at least ${filters.minScore}` : "any"
+              }
+              onChange={(e) =>
+                setFilters((f) => ({ ...f, minScore: +e.target.value }))
+              }
             />
           </div>
         )}
 
         <div className="rail-group">
           <label className="rail-group__label" htmlFor="f-max-years">
-            max years asked <span className="slider-val">{filters.maxYears === 0 ? "any" : `≤${filters.maxYears}`}</span>
+            max years asked{" "}
+            <span className="slider-val">
+              {filters.maxYears === 0 ? "any" : `≤${filters.maxYears}`}
+            </span>
           </label>
           <input
             id="f-max-years"
@@ -365,8 +579,14 @@ export function FeedView({
             max={15}
             step={1}
             value={filters.maxYears}
-            aria-valuetext={filters.maxYears === 0 ? "any" : `at most ${filters.maxYears} years`}
-            onChange={(e) => setFilters((f) => ({ ...f, maxYears: +e.target.value }))}
+            aria-valuetext={
+              filters.maxYears === 0
+                ? "any"
+                : `at most ${filters.maxYears} years`
+            }
+            onChange={(e) =>
+              setFilters((f) => ({ ...f, maxYears: +e.target.value }))
+            }
             title="Hide jobs asking for more than N years. Jobs that don't say are kept."
           />
         </div>
@@ -376,7 +596,11 @@ export function FeedView({
             <legend>preset</legend>
             <div className="chip-row">
               {feedPresets.map((p) => (
-                <Chip key={p} on={filters.presets.has(p)} onClick={() => toggleSet("presets", p)}>
+                <Chip
+                  key={p}
+                  on={filters.presets.has(p)}
+                  onClick={() => toggleSet("presets", p)}
+                >
                   #{p}
                 </Chip>
               ))}
@@ -388,7 +612,11 @@ export function FeedView({
           <legend>role type</legend>
           <div className="chip-row">
             {ARCHETYPES.map((a) => (
-              <Chip key={a} on={filters.roles.has(a)} onClick={() => toggleSet("roles", a)}>
+              <Chip
+                key={a}
+                on={filters.roles.has(a)}
+                onClick={() => toggleSet("roles", a)}
+              >
                 {roleText(a)}
               </Chip>
             ))}
@@ -399,39 +627,104 @@ export function FeedView({
           <legend>work mode</legend>
           <div className="chip-row">
             {MODES.map((m) => (
-              <Chip key={m} on={filters.modes.has(m)} onClick={() => toggleSet("modes", m)}>
+              <Chip
+                key={m}
+                on={filters.modes.has(m)}
+                onClick={() => toggleSet("modes", m)}
+              >
                 {m}
               </Chip>
             ))}
           </div>
         </fieldset>
 
-        <fieldset className="rail-group">
-          <legend>remote from</legend>
-          <div className="chip-row">
-            {GEOS.map((g) => (
-              <Chip key={g.id} on={filters.geos.has(g.id)} onClick={() => toggleSet("geos", g.id)}>
-                {g.label}
-              </Chip>
-            ))}
-          </div>
-        </fieldset>
+        {GEOS.some((g) => presentGeos.has(g.id) || filters.geos.has(g.id)) ? (
+          <fieldset className="rail-group">
+            <legend>remote from</legend>
+            <div className="chip-row">
+              {GEOS.filter(
+                (g) => presentGeos.has(g.id) || filters.geos.has(g.id),
+              ).map((g) => (
+                <Chip
+                  key={g.id}
+                  on={filters.geos.has(g.id)}
+                  onClick={() => toggleSet("geos", g.id)}
+                >
+                  {g.label}
+                </Chip>
+              ))}
+            </div>
+          </fieldset>
+        ) : null}
 
-        <fieldset className="rail-group">
-          <legend>hide</legend>
-          <div className="chip-row">
-            <Chip on={filters.hideUsOnly} onClick={() => setFilters((f) => ({ ...f, hideUsOnly: !f.hideUsOnly }))} title="“Remote” roles that are really US-only">
-              US-only “remote”
-            </Chip>
-            <Chip on={filters.hideServices} onClick={() => setFilters((f) => ({ ...f, hideServices: !f.hideServices }))} title="IT-services / outsourcing employers">
-              IT services firms
-            </Chip>
-          </div>
-        </fieldset>
+        {present.unworkable ||
+        present.usOnly ||
+        present.agency ||
+        present.services ||
+        filters.hideUnworkable ||
+        filters.hideUsOnly ||
+        filters.hideAgency ||
+        filters.hideServices ? (
+          <fieldset className="rail-group">
+            <legend>hide</legend>
+            <div className="chip-row">
+              {present.unworkable || filters.hideUnworkable ? (
+                <Chip
+                  on={filters.hideUnworkable}
+                  onClick={() =>
+                    setFilters((f) => ({
+                      ...f,
+                      hideUnworkable: !f.hideUnworkable,
+                    }))
+                  }
+                  title="Roles outside your home country and markets, or remote only from regions you didn't choose"
+                >
+                  not workable for me
+                </Chip>
+              ) : null}
+              {present.usOnly || filters.hideUsOnly ? (
+                <Chip
+                  on={filters.hideUsOnly}
+                  onClick={() =>
+                    setFilters((f) => ({ ...f, hideUsOnly: !f.hideUsOnly }))
+                  }
+                  title="“Remote” roles that are really US-only"
+                >
+                  US-only “remote”
+                </Chip>
+              ) : null}
+              {present.agency || filters.hideAgency ? (
+                <Chip
+                  on={filters.hideAgency}
+                  onClick={() =>
+                    setFilters((f) => ({ ...f, hideAgency: !f.hideAgency }))
+                  }
+                  title="Posted by a staffing agency or third-party recruiter, not the employer"
+                >
+                  staffing agencies
+                </Chip>
+              ) : null}
+              {present.services || filters.hideServices ? (
+                <Chip
+                  on={filters.hideServices}
+                  onClick={() =>
+                    setFilters((f) => ({ ...f, hideServices: !f.hideServices }))
+                  }
+                  title="IT-services / outsourcing employers"
+                >
+                  IT services firms
+                </Chip>
+              ) : null}
+            </div>
+          </fieldset>
+        ) : null}
 
         <div className="rail-group">
           <label className="rail-group__label" htmlFor="f-min-trust">
-            min source trust <span className="slider-val">{filters.minTrust === 0 ? "any" : `≥${filters.minTrust}%`}</span>
+            min source trust{" "}
+            <span className="slider-val">
+              {filters.minTrust === 0 ? "any" : `≥${filters.minTrust}%`}
+            </span>
           </label>
           <input
             id="f-min-trust"
@@ -440,8 +733,14 @@ export function FeedView({
             max={90}
             step={5}
             value={filters.minTrust}
-            aria-valuetext={filters.minTrust === 0 ? "any" : `at least ${filters.minTrust} percent`}
-            onChange={(e) => setFilters((f) => ({ ...f, minTrust: +e.target.value }))}
+            aria-valuetext={
+              filters.minTrust === 0
+                ? "any"
+                : `at least ${filters.minTrust} percent`
+            }
+            onChange={(e) =>
+              setFilters((f) => ({ ...f, minTrust: +e.target.value }))
+            }
             title="How likely a listing is real, still open and answered: employer boards ~85%, re-dating aggregators ~35%, agencies lower"
           />
         </div>
@@ -471,39 +770,67 @@ export function FeedView({
             <div className="stats" aria-label="Your jobs">
               <Stat value={cards.length} label="shown" tone="good" />
               <Stat value={data.stats.postings} label="jobs in your list" />
-              {data.stats.excluded > 0 && <Stat value={data.stats.excluded} label="left out (pay / location)" tone="muted" />}
+              {data.stats.excluded > 0 && (
+                <Stat
+                  value={data.stats.excluded}
+                  label="left out (pay / location)"
+                  tone="muted"
+                />
+              )}
             </div>
           </div>
           <div className="feed-toolbar__end">
             {data.stats.demo ? (
-              <Badge tone="info" title="Fictional demo data (JOBFLOW_DEMO_DATA=1) — not real postings">
+              <Badge
+                tone="info"
+                title="Fictional demo data (JOBFLOW_DEMO_DATA=1) — not real postings"
+              >
                 demo data
               </Badge>
             ) : (
               !data.stats.durable && (
-                <Badge tone="warn" title="JOBFLOW_STORE=memory — nothing is saved when the app stops">
+                <Badge
+                  tone="warn"
+                  title="JOBFLOW_STORE=memory — nothing is saved when the app stops"
+                >
                   in-memory: nothing is saved
                 </Badge>
               )
             )}
-            <span className="hint">{lastSync ? `last sync ${relTime(lastSync)}` : "never synced"}</span>
-            <Button icon="refresh" onClick={syncNow} disabled={syncing} title="Fetch new jobs from your sources, then re-rank">
+            <span className="hint">
+              {lastSync ? `last sync ${relTime(lastSync)}` : "never synced"}
+            </span>
+            <Button
+              icon="refresh"
+              onClick={syncNow}
+              disabled={syncing}
+              title="Fetch new jobs from your sources, then re-rank"
+            >
               {syncing ? "syncing…" : "Sync now"}
             </Button>
           </div>
         </div>
 
-        {!progress.complete && !checklistHidden && <SetupChecklist progress={progress} syncing={syncing} onSync={syncNow} onHide={() => setChecklistHidden(true)} />}
+        {!progress.complete && !checklistHidden && (
+          <SetupChecklist
+            progress={progress}
+            syncing={syncing}
+            onSync={syncNow}
+            onHide={() => setChecklistHidden(true)}
+          />
+        )}
 
         {!scored && !corpusEmpty && (
           <Banner tone="info">
-            These are the latest jobs, <b>not scored for you yet</b>. <a href="/onboarding">Add your résumé</a> and JobFlow ranks every one
-            against your background, with an honest note on fit and gaps.
+            These are the latest jobs, <b>not scored for you yet</b>.{" "}
+            <a href="/onboarding">Add your résumé</a> and JobFlow ranks every
+            one against your background, with an honest note on fit and gaps.
           </Banner>
         )}
         {syncing && (
           <Banner tone="info" live title="Fetching jobs…">
-            Polling the boards in your presets. The first sync takes a minute or two — this page updates by itself.
+            Polling the boards in your presets. The first sync takes a minute or
+            two — this page updates by itself.
           </Banner>
         )}
         {syncError && !syncing && (
@@ -516,10 +843,15 @@ export function FeedView({
               </Button>
             }
           >
-            {syncError} Check <a href="/sources">Sources</a> for which boards answered, or <a href="/search">search</a> a specific board now.
+            {syncError} Check <a href="/sources">Sources</a> for which boards
+            answered, or <a href="/search">search</a> a specific board now.
           </Banner>
         )}
-        <StaleBanner lastPolledAt={data.stats.lastPolledAt} onSync={syncNow} syncing={syncing} />
+        <StaleBanner
+          lastPolledAt={data.stats.lastPolledAt}
+          onSync={syncNow}
+          syncing={syncing}
+        />
 
         <div aria-live="polite">
           {notice && (
@@ -531,8 +863,19 @@ export function FeedView({
 
         <div className="feed-summary">
           <div className="feed-tabs">
-            <Segmented label="Job lists" value={tabKey(tab)} options={tabOptions} onChange={pickTab} />
-            <ButtonLink variant="ghost" size="sm" icon="plus" href="/search" title="Save a search to add it here as a tab">
+            <Segmented
+              label="Job lists"
+              value={tabKey(tab)}
+              options={tabOptions}
+              onChange={pickTab}
+            />
+            <ButtonLink
+              variant="ghost"
+              size="sm"
+              icon="plus"
+              href="/search"
+              title="Save a search to add it here as a tab"
+            >
               view
             </ButtonLink>
           </div>
@@ -543,9 +886,12 @@ export function FeedView({
 
         {tab.kind === "view" && viewHidden && (
           <p className="ux-hidden-report ux-hidden-report--sentence">
-            Through your saved search <b>{views.find((v) => v.id === tab.id)?.name}</b>
+            Through your saved search{" "}
+            <b>{views.find((v) => v.id === tab.id)?.name}</b>
             {viewHidden.total > 0
-              ? ` — it hides ${viewHidden.total} (${Object.entries(viewHidden.by)
+              ? ` — it hides ${viewHidden.total} (${Object.entries(
+                  viewHidden.by,
+                )
                   .filter(([, n]) => n > 0)
                   .map(([k, n]) => `${k} ${n}`)
                   .join(", ")})`
@@ -562,7 +908,11 @@ export function FeedView({
                 .join(", ")}
               )
             </span>
-            <Button size="sm" variant="ghost" onClick={() => setFilters(NO_FILTERS)}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setFilters(NO_FILTERS)}
+            >
               clear filters
             </Button>
           </p>
@@ -571,8 +921,9 @@ export function FeedView({
           <p className="ux-kbd">
             {showKeys ? (
               <>
-                <kbd>j</kbd>/<kbd>k</kbd> move · <kbd>o</kbd> open · <kbd>t</kbd> tailor · <kbd>a</kbd> apply · <kbd>s</kbd> save · <kbd>x</kbd> hide ·{" "}
-                <kbd>/</kbd> search · <kbd>?</kbd> close
+                <kbd>j</kbd>/<kbd>k</kbd> move · <kbd>o</kbd> open ·{" "}
+                <kbd>t</kbd> tailor · <kbd>a</kbd> apply · <kbd>s</kbd> save ·{" "}
+                <kbd>x</kbd> hide · <kbd>/</kbd> search · <kbd>?</kbd> close
               </>
             ) : (
               <>
@@ -588,11 +939,28 @@ export function FeedView({
             <Skeleton lines={4} />
           </div>
         ) : cards.length === 0 ? (
-          <FeedEmpty tab={tab} hiddenTotal={hiddenTotal} corpusEmpty={corpusEmpty} syncing={syncing} scored={scored} onClear={() => setFilters(NO_FILTERS)} onSync={syncNow} />
+          <FeedEmpty
+            tab={tab}
+            hiddenTotal={hiddenTotal}
+            corpusEmpty={corpusEmpty}
+            syncing={syncing}
+            scored={scored}
+            onClear={() => setFilters(NO_FILTERS)}
+            onSync={syncNow}
+          />
         ) : (
           <div className="feed">
             {cards.map((c, i) => (
-              <MatchCard key={c.id} card={c} index={i} scored={scored} selected={kbdActive && i === selected} onSave={save} onHide={hide} moreAtCompany={more.get(i) ?? 0} />
+              <MatchCard
+                key={c.id}
+                card={c}
+                index={i}
+                scored={scored}
+                selected={kbdActive && i === selected}
+                onSave={save}
+                onHide={hide}
+                moreAtCompany={more.get(i) ?? 0}
+              />
             ))}
           </div>
         )}
@@ -604,7 +972,17 @@ export function FeedView({
 /** Today's date over the masthead. Client-only (after mount) so it's the reader's own day. */
 function Dateline() {
   const [today, setToday] = useState("");
-  useEffect(() => setToday(new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })), []);
+  useEffect(
+    () =>
+      setToday(
+        new Date().toLocaleDateString(undefined, {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+        }),
+      ),
+    [],
+  );
   return (
     <p className="feed-dateline" aria-hidden={!today || undefined}>
       {today || " "}
@@ -621,8 +999,16 @@ function TodayLede({ cards, scored }: { cards: FeedCard[]; scored: boolean }) {
   const live = cards.filter((c) => !c.archived && !c.invalidated);
   if (live.length === 0) return null;
   const fresh = live.filter((c) => c.ageDays <= 1).length;
-  const noun = scored ? (fresh === 1 ? "match" : "matches") : fresh === 1 ? "job" : "jobs";
-  const top = scored ? live.reduce((a, b) => (b.score > a.score ? b : a)) : null;
+  const noun = scored
+    ? fresh === 1
+      ? "match"
+      : "matches"
+    : fresh === 1
+      ? "job"
+      : "jobs";
+  const top = scored
+    ? live.reduce((a, b) => (b.score > a.score ? b : a))
+    : null;
   return (
     <p className="feed-lede">
       {fresh > 0 ? (
@@ -638,24 +1024,37 @@ function TodayLede({ cards, scored }: { cards: FeedCard[]; scored: boolean }) {
       {top && (
         <>
           The strongest of {live.length}:{" "}
-          <a href={`/jobs/${top.id}`}>
-            {top.title}
-          </a>{" "}
-          at {top.company}, <span className="feed-lede__score">{top.score}</span>.
+          <a href={`/jobs/${top.id}`}>{top.title}</a> at {top.company},{" "}
+          <span className="feed-lede__score">{top.score}</span>.
         </>
       )}
     </p>
   );
 }
 
-function SetupChecklist({ progress, syncing, onSync, onHide }: { progress: SetupProgress; syncing: boolean; onSync: () => void; onHide: () => void }) {
+function SetupChecklist({
+  progress,
+  syncing,
+  onSync,
+  onHide,
+}: {
+  progress: SetupProgress;
+  syncing: boolean;
+  onSync: () => void;
+  onHide: () => void;
+}) {
   return (
     <Panel
       id="get-started"
       className="ux-setup"
       title={`Get started · ${progress.done}/${progress.total}`}
       actions={
-        <Button size="sm" variant="ghost" onClick={onHide} title="Hide until next visit">
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={onHide}
+          title="Hide until next visit"
+        >
           later
         </Button>
       }
@@ -675,14 +1074,24 @@ function SetupChecklist({ progress, syncing, onSync, onHide }: { progress: Setup
                 {!s.done && <code className="ux-setup__cli">{s.cli}</code>}
               </span>
               {!s.done && isNext && s.id === "sync" ? (
-                <Button size="sm" variant="primary" onClick={onSync} disabled={syncing}>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={onSync}
+                  disabled={syncing}
+                >
                   {syncing ? "syncing…" : "sync now"}
                 </Button>
               ) : (
                 !s.done &&
                 isNext && (
                   <ButtonLink size="sm" variant="primary" href={s.href}>
-                    {s.id === "profile" ? "start" : s.id === "track" ? "pick a job below" : "go"} →
+                    {s.id === "profile"
+                      ? "start"
+                      : s.id === "track"
+                        ? "pick a job below"
+                        : "go"}{" "}
+                    →
                   </ButtonLink>
                 )
               )}
@@ -692,7 +1101,8 @@ function SetupChecklist({ progress, syncing, onSync, onHide }: { progress: Setup
       </ol>
       {!progress.model.configured && (
         <p className="hint">
-          Optional: <a href="/settings#model">connect a model</a> for cover letters and written answers. Everything else works offline.
+          Optional: <a href="/settings#model">connect a model</a> for cover
+          letters and written answers. Everything else works offline.
         </p>
       )}
     </Panel>
@@ -732,25 +1142,29 @@ function FeedEmpty({
           </Button>
         }
       >
-        {hiddenTotal} job{hiddenTotal === 1 ? " is" : "s are"} hidden by your filters. Scores are unchanged.
+        {hiddenTotal} job{hiddenTotal === 1 ? " is" : "s are"} hidden by your
+        filters. Scores are unchanged.
       </EmptyState>
     );
   if (tab.kind === "saved")
     return (
       <EmptyState icon="bookmark" title="Nothing saved yet">
-        Press <b>save</b> on a job (or <kbd>s</kbd>) to keep it here. Saved jobs also appear in <a href="/applications">Applications</a>.
+        Press <b>save</b> on a job (or <kbd>s</kbd>) to keep it here. Saved jobs
+        also appear in <a href="/applications">Applications</a>.
       </EmptyState>
     );
   if (tab.kind === "hidden")
     return (
       <EmptyState icon="archive" title="Nothing hidden">
-        Jobs you hide (<b>hide</b>, or <kbd>x</kbd>) move here, out of your way. You can bring them back any time.
+        Jobs you hide (<b>hide</b>, or <kbd>x</kbd>) move here, out of your way.
+        You can bring them back any time.
       </EmptyState>
     );
   if (tab.kind === "view")
     return (
       <EmptyState title="No jobs match this saved search yet" action={syncBtn}>
-        It runs on every sync, so new matches land here. Try <a href="/search">searching live</a> or sync now.
+        It runs on every sync, so new matches land here. Try{" "}
+        <a href="/search">searching live</a> or sync now.
       </EmptyState>
     );
   if (corpusEmpty)
@@ -775,14 +1189,27 @@ function FeedEmpty({
       </EmptyState>
     );
   return (
-    <EmptyState title={scored ? "No ranked jobs yet" : "No jobs to show"} action={syncBtn}>
-      {scored ? "JobFlow ranks after each sync." : "Sync to fetch the latest jobs."}
+    <EmptyState
+      title={scored ? "No ranked jobs yet" : "No jobs to show"}
+      action={syncBtn}
+    >
+      {scored
+        ? "JobFlow ranks after each sync."
+        : "Sync to fetch the latest jobs."}
     </EmptyState>
   );
 }
 
 /** Jobs are only as current as the last sync — say so when it's been a while. */
-function StaleBanner({ lastPolledAt, onSync, syncing }: { lastPolledAt: string | null; onSync: () => void; syncing: boolean }) {
+function StaleBanner({
+  lastPolledAt,
+  onSync,
+  syncing,
+}: {
+  lastPolledAt: string | null;
+  onSync: () => void;
+  syncing: boolean;
+}) {
   if (!lastPolledAt || syncing) return null;
   const hours = (Date.now() - new Date(lastPolledAt).getTime()) / 3_600_000;
   if (hours < 24) return null;
