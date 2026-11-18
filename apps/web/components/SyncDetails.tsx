@@ -128,9 +128,7 @@ export function RunBody({ run }: { run: SyncProgress }) {
       <div className="sync-row">
         <div className="sync-row__head">
           <span>Job boards</span>
-          <span className="num">
-            {b.done + b.failed}/{b.total}
-          </span>
+          <span className="num">{b.total ? `${b.done + b.failed}/${b.total}` : "–"}</span>
         </div>
         <ProgressBar value={b.total ? settled / b.total : run.status === "running" ? 0 : 1} label="Job boards checked" tone={b.failed > b.done && b.failed > 0 ? "warn" : undefined} />
         <p className="sync-row__note">
@@ -148,9 +146,8 @@ export function RunBody({ run }: { run: SyncProgress }) {
         <div className="sync-row">
           <div className="sync-row__head">
             <span>Feeds, your sources and saved searches</span>
-            <span className="num">
-              {f.done + f.failed}/{f.total || "–"}
-            </span>
+            {/* before the feeds are counted there is no total to show a fraction of */}
+            <span className="num">{f.total ? `${f.done + f.failed}/${f.total}` : run.status === "running" ? "starting…" : "–"}</span>
           </div>
           <ProgressBar value={f.total ? (f.done + f.failed) / f.total : 0} label="Feeds read" />
         </div>

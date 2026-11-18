@@ -85,7 +85,7 @@ pnpm from `package.json`:
 
 ```bash
 corepack enable
-git clone https://github.com/jagritvats/autohire.git jobflow && cd jobflow
+git clone https://github.com/jagritvats/jobflow.git && cd jobflow
 pnpm install
 pnpm -r build          # tsc -b across packages, plus the Next.js build
 pnpm -r test           # vitest, offline

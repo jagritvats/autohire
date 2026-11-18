@@ -6,7 +6,7 @@ no server, no API keys needed to start.
 **Requirements:** Node 20+ (22 recommended) and pnpm 9 (`corepack enable`).
 
 ```bash
-git clone https://github.com/jagritvats/autohire.git jobflow
+git clone https://github.com/jagritvats/jobflow.git
 cd jobflow
 pnpm install
 pnpm -r build

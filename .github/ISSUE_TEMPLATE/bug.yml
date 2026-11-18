@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         Thanks for reporting! **Never paste API keys, tokens, session cookies, résumés or other personal data.**
-        Security problems (an application getting submitted, a server running a logged-in site, one user seeing another's data) go to a private [security advisory](https://github.com/jagritvats/autohire/security/advisories/new), not here.
+        Security problems (an application getting submitted, a server running a logged-in site, one user seeing another's data) go to a private [security advisory](https://github.com/jagritvats/jobflow/security/advisories/new), not here.
   - type: textarea
     id: what
     attributes:
