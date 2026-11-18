@@ -1,0 +1,70 @@
+/*
+ * Journey/structure styles added by the UX overhaul. Deliberately minimal and built on the
+ * existing tokens (--ink*, --signal*, --amber*, --line, --radius, --mono, --serif) so the
+ * design system can fold these into its primitives. Every class is prefixed `ux-`.
+ */
+
+/* page frame */
+.ux-frame-head { align-items: center; gap: 18px; flex-wrap: wrap; margin-bottom: 14px; }
+.ux-frame-head .wordmark { text-decoration: none; color: inherit; }
+.ux-nav { margin: 0; }
+.ux-page-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin: 6px 0 18px; }
+.ux-page-title { font-family: var(--serif); font-weight: 400; font-size: 28px; margin: 0; line-height: 1.15; }
+.ux-page-intro { margin: 6px 0 0; max-width: 70ch; }
+.ux-page-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.ux-crumbs { margin: 0 0 10px; font-size: 12px; }
+
+/* lists, key/values, checklists */
+.ux-kv { display: grid; grid-template-columns: minmax(110px, max-content) 1fr; gap: 8px 16px; margin: 0; font-size: 13px; }
+.ux-kv dt { color: var(--ink-faint); }
+.ux-kv dd { margin: 0; }
+.ux-list { margin: 6px 0; padding-left: 18px; font-size: 13px; line-height: 1.6; }
+.ux-checklist { list-style: none; padding: 0; margin: 0 0 12px; font-size: 13px; line-height: 1.9; }
+.ux-checklist li::before { content: "○ "; color: var(--amber, #d9a441); }
+.ux-checklist li[data-done="true"]::before { content: "✓ "; color: var(--signal); }
+.ux-checklist li[data-optional="true"]:not([data-done="true"])::before { content: "· "; color: var(--ink-faint); }
+
+/* job page */
+.ux-job-facts { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--ink-dim); margin-bottom: 12px; }
+.ux-score b { font-size: 20px; color: var(--signal); margin-right: 4px; }
+.ux-score[data-scored="false"] a { color: var(--amber, #d9a441); }
+.ux-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ux-status { margin-left: auto; font-size: 12px; }
+.ux-apply-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 12px; }
+.ux-option { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.ux-option p { margin: 0; }
+.ux-copy { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ux-copy code { font-size: 11.5px; padding: 4px 6px; border: 1px solid var(--line); border-radius: var(--radius); word-break: break-all; }
+.ux-jd { white-space: pre-wrap; font-size: 13px; line-height: 1.6; max-height: 60vh; overflow: auto; margin-top: 10px; }
+
+/* jobs page: get-started checklist, view tabs, hidden-by-filters report, keyboard */
+.ux-setup { margin: 12px 22px 0; padding: 12px 14px; border: 1px solid var(--signal-dim); border-radius: var(--radius); font-size: 12.5px; }
+.ux-setup h2 { font-family: var(--serif); font-weight: 400; font-size: 18px; margin: 0 0 8px; }
+.ux-setup ol { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.ux-setup li { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.ux-setup li[data-done="true"] { color: var(--ink-faint); text-decoration: line-through; }
+.ux-setup li[data-next="true"] b { color: var(--signal); }
+.ux-setup code { font-size: 11px; }
+.ux-hidden-report { margin: 10px 22px 0; font-size: 12px; color: var(--ink-dim); }
+.ux-hidden-report button { margin-left: 6px; }
+.card[data-selected="true"] { outline: 1px solid var(--signal); outline-offset: 2px; }
+.ux-card-title { color: inherit; text-decoration: none; }
+.ux-card-title:hover { text-decoration: underline; }
+.ux-kbd { font-size: 11px; color: var(--ink-faint); margin: 10px 22px 0; }
+.ux-kbd kbd { font-family: var(--mono); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; }
+.ux-empty { margin: 24px 22px; padding: 18px; border: 1px dashed var(--line); border-radius: var(--radius); font-size: 13px; line-height: 1.6; }
+.ux-empty h2 { font-family: var(--serif); font-weight: 400; font-size: 20px; margin: 0 0 6px; }
+
+/* long forms: in-page section nav + sticky save bar */
+.ux-section-nav { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0 0 16px; font-size: 12px; }
+.ux-section-nav a { color: var(--ink-faint); }
+.ux-section-nav a:hover { color: var(--signal); }
+.ux-savebar { position: sticky; bottom: 0; z-index: 5; display: flex; gap: 12px; align-items: center; padding: 10px 14px; margin-top: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg, #0b0d0c); font-size: 12px; }
+.ux-savebar[data-dirty="true"] { border-color: var(--signal-dim); }
+section[id] { scroll-margin-top: 16px; }
+
+/* search */
+.ux-examples { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; }
+.ux-syntax { margin-top: 10px; font-size: 12px; }
+.ux-syntax table { border-collapse: collapse; margin-top: 6px; }
+.ux-syntax td { padding: 2px 12px 2px 0; vertical-align: top; }

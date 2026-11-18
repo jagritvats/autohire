@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { AppFrame } from "@/components/AppFrame";
 import { notFound } from "next/navigation";
 import { LEVELS_ATTRIBUTION } from "@jobflow/adapters";
 import { formatSalary, type Posting } from "@jobflow/core";
@@ -15,15 +15,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
   const postings = await repo.listPostingsByCompany(params.id);
 
   return (
-    <div className="settings-shell">
-      <header className="settings-head">
-        <h1 className="wordmark">
-          Job<span className="flow">Flow</span> <span className="settings-sub">/ {company.name}</span>
-        </h1>
-        <Link className="back" href="/">
-          ← feed
-        </Link>
-      </header>
+    <AppFrame title={company.name} intro={<a href="/">← Jobs</a>}>
 
       <div className="company-grid">
         <section className="card-block">
@@ -124,7 +116,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
           ))}
         </div>
       </section>
-    </div>
+    </AppFrame>
   );
 }
 
