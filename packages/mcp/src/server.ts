@@ -11,7 +11,7 @@ import {
   JobNotFoundError,
   KIND_QUESTION,
   buildApplyPlan,
-  corpusEmbedder,
+  syncPollOptions,
   findSearch,
   generateTailored,
   getFeed,
@@ -956,12 +956,7 @@ export function createJobflowMcpServer(ctx: JobflowMcpContext, opts: JobflowMcpO
           const sync =
             opts.sync ??
             ((r: Repository, o: { full: boolean; log: (l: string) => void }) =>
-              pollAll(
-                r,
-                o.full
-                  ? { embedder: corpusEmbedder(), log: o.log }
-                  : { embedder: corpusEmbedder(), limitPerCompany: 50, maxBoards: 25, skipSlowFeeds: true, telegramChannels: [], log: o.log },
-              ));
+              pollAll(r, syncPollOptions({ full: o.full, log: o.log })));
           const stats = await sync(repo, { full: args.full, log });
           log("ranking against the profile");
           const ranked = await rankTenant(repo, tenantId);

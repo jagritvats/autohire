@@ -1,7 +1,9 @@
 import "server-only";
 import { createRepository, defaultDataDir, storeKind, type Repository } from "@jobflow/db";
 import {
+  corpusSyncing,
   ensureTenant as ensureTenantFor,
+  needsCatchUpSync,
   operatorJobCtx,
   rankTenant,
   seedDemoCorpus,
@@ -55,6 +57,9 @@ export function getRepo(): Promise<Repository> {
  * Keep the feed fresh while the app is open. On the local store the database is
  * single-writer, so a separate worker process can't share it — the web server runs the
  * same discover → poll → rank schedule itself (JOBFLOW_POLL_EVERY_HOURS, default 6; 0 = off).
+ * Each run polls every due board inside a time budget (service `syncPollOptions`). The very
+ * first sync is capped so the first feed comes fast; while boards have never been polled the
+ * schedule catches up every quarter-hour instead of waiting for the next 6-hour run.
  * Multi-user / Postgres deployments use the worker instead.
  */
 let scheduled = false;
@@ -64,11 +69,13 @@ function scheduleLocalSync(repo: Repository): void {
   if (!(hours > 0)) return;
   scheduled = true;
   const tick = async () => {
+    if (corpusSyncing()) return; // one at a time; the next tick looks again
     try {
       const companies = await repo.listCompanies();
       const last = Math.max(0, ...companies.map((c) => (c.lastPolled ? new Date(c.lastPolled as string | Date).getTime() : 0)));
-      // never synced → the first visit's background sync handles it; otherwise only when due
-      if (last > 0 && Date.now() - last >= hours * 3_600_000) {
+      // never synced → the first visit's background sync handles it; otherwise when due, or
+      // sooner while the capped first sync left boards that were never polled
+      if (last > 0 && (Date.now() - last >= hours * 3_600_000 || (await needsCatchUpSync(repo)))) {
         void startCorpusSync(repo, async () => void (await rankTenant(repo, DEFAULT_TENANT_ID)));
       }
     } catch {

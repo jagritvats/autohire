@@ -136,7 +136,16 @@ async function main(): Promise<void> {
   if (cmd === "salary-backtest") await salaryBacktest();
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+main()
+  .then(async () => {
+    // a one-shot command is done: close the store (PGlite flushes and releases its data-dir
+    // lock; a pg pool's idle sockets would otherwise keep the process alive until killed)
+    if (process.argv[2] === "runner") return;
+    const repo = (await makeRepository()) as Awaited<ReturnType<typeof makeRepository>> & { close?: () => Promise<void> };
+    await repo.close?.().catch(() => {});
+    process.exit(0);
+  })
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
