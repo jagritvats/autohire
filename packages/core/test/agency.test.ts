@@ -33,4 +33,19 @@ describe("looksLikeAgency", () => {
     // an employer talking about ITS clients is not posting on behalf of one
     expect(agency("Example Corp", `${jd}\nWe build platforms our clients rely on. Join a client-facing team.`)).toBe(false);
   });
+
+  it("an employer describing its own clients or its workforce is not an agency (2026-11 corpus)", () => {
+    for (const text of [
+      "Help us embed AI into the way we deliver value for our clients.",
+      "We are committed to delivering high-quality work for our clients while supporting our team.",
+      "Engage in projects that make a meaningful difference for our clients and communities.",
+      "Produce analytical reports for our clients to unlock the power of data.",
+      "Coordinate site conditions, erection tools, manpower, working hours.",
+    ]) {
+      expect(agency("Example Energy", `${jd}\n${text}`), text).toBe(false);
+    }
+    // the recruiter phrasings still count
+    expect(agency("Example Talent", `${jd}\nWe are recruiting a Software Engineer for our client, a fast-growing startup.`)).toBe(true);
+    expect(agency("Example Corp", `${jd}\nWe are a manpower supply partner for IT firms.`)).toBe(true);
+  });
 });

@@ -86,8 +86,13 @@ export const EVERGREEN_TITLE_RE = /\b(talent (community|pool|network)|future opp
 /** Employer hidden behind a placeholder — typical of recruiter reposts. */
 const HIDDEN_EMPLOYER_RE = /^(confidential|leading (mnc|company|product company)|top (mnc|product company|startup)|(a )?(reputed|well[- ]known|stealth) (company|startup|mnc)|stealth|undisclosed|unknown)$/i;
 
-/** third-party recruiters posting "for a client" — slower, lower-signal pipelines. */
-const CONSULTANCY_RE = /\b(on behalf of (our|a|one of our) (esteemed |reputed )?clients?|our (esteemed |reputed )?client,? (is|a|an)\b|(hiring|recruiting) for (our|a|one of our) (esteemed |reputed )?clients?|for (one of )?our (esteemed |reputed )?clients?|client of ours|staffing (agency|firm|solutions)|manpower|placement (agency|consultants?)|recruitment (agency|consultants?|partner)|hr consultancy|c2h|c2c|corp[- ]to[- ]corp|w2 or c2c|contract[- ]to[- ]hire|third[- ]party payroll|on (our|the) payroll of)\b/i;
+/**
+ * third-party recruiters posting "for a client" — slower, lower-signal pipelines. Not an
+ * employer's own "value for our clients" / "work for our clients" (a services company
+ * describing its customers), and not "manpower" as a plain noun (2026-11 corpus: GE
+ * Vernova's "erection tools, manpower, working hours" read as an agency).
+ */
+const CONSULTANCY_RE = /\b(on behalf of (our|a|one of our) (esteemed |reputed )?clients?|our (esteemed |reputed )?client,? (is|a|an)\b|(hiring|recruiting) for (our|a|one of our) (esteemed |reputed )?clients?|for one of our (esteemed |reputed )?clients|for our (esteemed |reputed )?client(?=,| is\b| who\b| based\b| in\b)|client of ours|staffing (agency|firm|solutions)|manpower (agency|consultan\w*|supply|services|provider)|placement (agency|consultants?)|recruitment (agency|consultants?|partner)|hr consultancy|c2h|c2c|corp[- ]to[- ]corp|w2 or c2c|contract[- ]to[- ]hire|third[- ]party payroll|on (our|the) payroll of)\b/i;
 
 /**
  * A poster whose NAME says it's an intermediary (common on Naukri / Hirist / Cutshort /
