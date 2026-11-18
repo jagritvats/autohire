@@ -1219,7 +1219,7 @@
 /* (Spark's ring + band word + drawing, the "today" eyebrow and chips) */
 :where([data-style="editorial"]) .score-ring__dial svg,
 :where([data-style="editorial"]) .score-ring__word,
-:where([data-style="editorial"]) .empty__art svg,
+:where([data-style="editorial"]) .empty__art > svg,
 :where([data-style="editorial"]) .feed-hero__eyebrow,
 :where([data-style="editorial"]) .feed-hero__extra {
   display: none;
