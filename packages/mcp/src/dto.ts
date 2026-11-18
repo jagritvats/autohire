@@ -62,7 +62,7 @@ export function payOf(c: FeedCard): JobSummary["pay"] {
 
 export function payText(p: JobSummary["pay"]): string | null {
   if (!p) return null;
-  if (p.kind === "estimate") return `~${p.label} (JobFlow estimate${p.confidenceScore != null ? `, ${Math.round(p.confidenceScore * 100)}% confidence` : ""} — not stated)`;
+  if (p.kind === "estimate") return `${p.label} (JobFlow estimate${p.confidenceScore != null ? `, ${Math.round(p.confidenceScore * 100)}% confidence` : ""} — not stated)`;
   return `${p.label} (stated)`;
 }
 

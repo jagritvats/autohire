@@ -2,6 +2,7 @@ import { InMemoryRepository, type PurgeOptions, type Repository } from "@jobflow
 import {
   blankProfile,
   isOnboarded,
+  loadFxRates,
   presetsForPosting,
   pollAll,
   pollBacklog,
@@ -13,7 +14,7 @@ import {
   type RecheckStats,
 } from "@jobflow/pipeline";
 import type { Match, Posting, SearchQueryInput, ViewHiddenReason } from "@jobflow/core";
-import { applyView, companyDisplayName, describeLocation, diversifyByCompany, diversifyKey, formatSalary, postingAgeDays, scoreSourceTrust, workableFor, type ProfilePrefs } from "@jobflow/core";
+import { applyView, companyDisplayName, describeLocation, describePay, diversifyByCompany, diversifyKey, payDisplayOptions, postingAgeDays, scoreSourceTrust, workableFor, type FormatPayOptions, type ProfilePrefs } from "@jobflow/core";
 import { ensureTenant } from "./tenant.js";
 import { corpusEmbedder } from "./embedder.js";
 import { corpusSyncing, startCorpusSync } from "./sync.js";
@@ -66,8 +67,9 @@ export interface FeedCard {
   stackNote: string | null;
   skills: string[];
   /**
-   * Pay: what the posting states, else our estimate (§11.4). `estimate` is never blurred —
-   * the UI marks it "~ … est N%" with its basis; stated pay shows its parse confidence.
+   * Pay: what the posting states, else our estimate (§11.4), formatted ONCE by core's
+   * `describePay` in the reader's "show pay in" currency and period: "₹30L–45L / yr (≈ $32k–48k)".
+   * `estimate` is never blurred; a low-confidence one is a single "rough est. ~…" figure.
    */
   comp: {
     label: string;
@@ -78,6 +80,14 @@ export interface FeedCard {
     confidenceScore: number | null;
     /** estimates only: "14 similar posted ranges in India (5 same level) · levels.fyi …" */
     basis: string | null;
+    /** a low-confidence estimate shown as one rough figure */
+    rough?: boolean;
+    /** "annualised from hourly" */
+    note?: string | null;
+    /** the stated currency disagrees with the role's location (also in redFlags) */
+    warning?: string | null;
+    /** FX rate date when the label converts a figure */
+    rateDate?: string | null;
   } | null;
   rating: { overall: number; reviews: number } | null;
   redFlags: string[];
@@ -315,6 +325,8 @@ interface CardCtx {
   servicesCompanyIds: Set<string>;
   /** the onboarded profile's region prefs — for `workable` (null before onboarding) */
   prefs: ProfilePrefs | null;
+  /** how this reader wants pay shown ("show pay in" currency + per year/month) */
+  pay: Pick<FormatPayOptions, "currency" | "period">;
 }
 
 /** Everything `buildCard` needs beyond the posting, loaded once per request. */
@@ -324,6 +336,8 @@ async function cardCtx(repo: Repository, tenantId: string, companies?: Awaited<R
     repo.getPostingUserState(tenantId),
     repo.getProfile(tenantId),
     companies ?? repo.listCompanies(),
+    // the store's cached FX table (refreshed by syncs), so "≈" figures use the newest rate
+    loadFxRates(repo).catch(() => null),
   ]);
   return {
     yoe: isOnboarded(profile) ? (profile ?? blankProfile(tenantId)).yoe : null,
@@ -332,6 +346,7 @@ async function cardCtx(repo: Repository, tenantId: string, companies?: Awaited<R
     archived: userState.archived,
     servicesCompanyIds: new Set(cos.filter((c) => c.tags.includes("services")).map((c) => c.id)),
     prefs: isOnboarded(profile) && profile ? profile.prefs : null,
+    pay: payDisplayOptions(profile?.prefs),
   };
 }
 
@@ -344,6 +359,7 @@ function buildCard(
   const ageDays = Math.floor(postingAgeDays(p)); // source publish date, else first seen
   const where = describeLocation(p.location);
   const trust = scoreSourceTrust(p);
+  const comp = compLabel(p, ctx);
   return {
     id: p.id,
     companyId: p.companyId,
@@ -375,9 +391,9 @@ function buildCard(
     levelNote: m?.levelNote ?? null,
     stackNote: m?.stackNote ?? null,
     skills: p.jdSkills.slice(0, 10),
-    comp: compLabel(p),
+    comp,
     rating: ratingOf(p),
-    redFlags: m?.redFlags ?? [],
+    redFlags: comp?.warning ? [...(m?.redFlags ?? []), comp.warning] : (m?.redFlags ?? []),
     applyUrl: p.applyUrl,
     applied: ctx.appliedKeys.has(p.dedupKey),
     bookmarked: ctx.bookmarked.has(p.id),
@@ -450,24 +466,9 @@ export async function purgeOldFeed(repo: Repository, tenantId: string, opts: Pur
   return { ...(await shape(repo, tenantId, matches)), purged };
 }
 
-function compLabel(p: Posting): FeedCard["comp"] {
-  const s = p.salary;
-  if (s.source !== "none" && (s.min != null || s.max != null)) {
-    const f = (n: number) => formatSalary(n, s.currency);
-    const label =
-      s.min != null && s.max != null ? `${f(s.min)}–${f(s.max)}` : s.max != null ? `up to ${f(s.max)}` : `${f(s.min!)}+`;
-    return { label, confidence: s.confidence, source: s.source, estimate: false, confidenceScore: null, basis: null };
-  }
-  const e = p.salaryEstimate;
-  if (!e) return null;
-  return {
-    label: `${formatSalary(e.min, e.currency)}–${formatSalary(e.max, e.currency)}`,
-    confidence: e.confidence,
-    source: e.sources.map((x) => x.source).join(" + "),
-    estimate: true,
-    confidenceScore: e.confidenceScore,
-    basis: e.basis,
-  };
+/** The card's pay — core's one formatter, in this reader's display currency + period. */
+function compLabel(p: Posting, ctx: Pick<CardCtx, "pay">): FeedCard["comp"] {
+  return describePay(p, ctx.pay);
 }
 
 function ratingOf(p: Posting): { overall: number; reviews: number } | null {

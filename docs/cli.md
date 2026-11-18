@@ -180,6 +180,8 @@ pnpm jobflow config set llm.baseUrl <url>            # optional gateway / local 
 pnpm jobflow config set automation.fill on           # allow apply --fill (it never submits)
 pnpm jobflow config set automation.rate human        # human (default) | fast
 pnpm jobflow config set discovery.presets us,eu-uk
+pnpm jobflow config set display.currency USD         # show pay in: auto (home currency) | none | USD, EUR, INR, …
+pnpm jobflow config set display.payPeriod month      # the converted figure per year (default) | month
 pnpm jobflow config get llm.key                      # ••••abcd
 pnpm jobflow config unset llm.key
 ```
@@ -196,15 +198,23 @@ and it never changes a score.
 ```bash
 pnpm jobflow search "backend engineer" --remote
 pnpm jobflow search "staff platform" --loc "Berlin,DE" --seniority staff --min-salary "120000 EUR"
+pnpm jobflow search backend --min-salary "40L INR" --sort pay   # highest pay first, in one currency
+pnpm jobflow search sre --min-salary "5000 EUR/mo"              # periods are annualised (×12)
 pnpm jobflow search golang --must kafka --posted 7d --save-as go-kafka
 pnpm jobflow search backend --preset us,eu-uk       # only roles tagged #us / #eu-uk
 pnpm jobflow search "data engineer" --ingest         # also add the results to your feed
 ```
 
+`--min-salary` reads amounts the way postings are read: `"150k USD"`, `"$120k"`, `"40L INR"`,
+`"30 LPA"`, `"5000 EUR/mo"`, `"€50/hr"`. It hides only roles whose stated, high-confidence
+ceiling is below it — in another currency only when still below after the exchange rate's
+margin of error. `--sort pay` orders by annual pay converted to your display currency (stated
+pay first, else the estimate's median).
+
 Flags: `--remote`, `--onsite`, `--loc <place>` (repeatable), `--country <CC>`,
 `--seniority`, `--min-salary`, `--currency`, `--posted 7d|2w|1m`, `--sources a,b`,
 `--must`, `--nice`, `--title`, `--exclude-company`, `--exclude`, `--preset`/`--tag`,
-`-n/--limit` (15), `--sort score|relevance`, `--format cards|table`, `--save-as <name>`,
+`-n/--limit` (15), `--sort score|relevance|pay`, `--format cards|table`, `--save-as <name>`,
 `--ingest`.
 
 Before `init` the results are **unscored**: no score, no notes about "your stack" or level,

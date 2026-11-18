@@ -174,7 +174,7 @@ export function estimateEtaMs(s: SyncProgress, now: number = Date.now()): number
     }
   }
   // the steps after: as long as they took last run (ranking grows with the corpus), else a guess
-  const tail = (["resolve", "expire", "process", "rank"] as const).filter((id) => open(id));
+  const tail = (["resolve", "expire", "fx", "reparse", "process", "rank"] as const).filter((id) => open(id));
   const known = tail.filter((id) => prior[id] != null);
   if (known.length) {
     for (const id of known) {
@@ -188,7 +188,7 @@ export function estimateEtaMs(s: SyncProgress, now: number = Date.now()): number
 /** 0..1 across the whole run, weighted to where the time goes (the boards). */
 export function syncFraction(s: SyncProgress): number {
   if (s.status !== "running") return 1;
-  const weight: Record<SyncPhaseId, number> = { renormalize: 0.03, discover: 0.04, boards: 0.65, feeds: 0.15, resolve: 0.04, expire: 0.03, process: 0.03, rank: 0.05 };
+  const weight: Record<SyncPhaseId, number> = { renormalize: 0.03, discover: 0.04, boards: 0.63, feeds: 0.15, resolve: 0.04, expire: 0.03, fx: 0.01, reparse: 0.01, process: 0.03, rank: 0.05 };
   let f = 0;
   for (const p of s.phases) {
     const w = weight[p.id];

@@ -185,8 +185,8 @@ export class PgRepository implements Repository {
          salary_min, salary_max, currency, salary_source, salary_confidence,
          experience_min, experience_max,
          apply_url, jd_embedding, dedup_key, posted_at, posted_by_agency, embed_key, salary_raw,
-         loc_countries, location_raw)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36)
+         loc_countries, location_raw, salary_period, salary_basis, salary_equity)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39)
        on conflict (ats_type, ats_job_id) do update set
          -- identity (id, company_id, source, tier, first_seen) stays with the first write;
          -- everything derived from the fetched posting is refreshed, the dedup key included:
@@ -201,7 +201,8 @@ export class PgRepository implements Repository {
          loc_countries = excluded.loc_countries, location_raw = excluded.location_raw,
          salary_min = excluded.salary_min, salary_max = excluded.salary_max, currency = excluded.currency,
          salary_source = excluded.salary_source, salary_confidence = excluded.salary_confidence,
-         salary_raw = excluded.salary_raw,
+         salary_raw = excluded.salary_raw, salary_period = excluded.salary_period,
+         salary_basis = excluded.salary_basis, salary_equity = excluded.salary_equity,
          -- salary_estimate is NOT touched: it belongs to the estimator's own pass (§11.4)
          experience_min = excluded.experience_min, experience_max = excluded.experience_max,
          apply_url = excluded.apply_url, jd_embedding = excluded.jd_embedding, embed_key = excluded.embed_key,
@@ -229,6 +230,7 @@ export class PgRepository implements Repository {
         p.applyUrl, p.jdEmbedding ? JSON.stringify(p.jdEmbedding) : null, p.dedupKey,
         p.postedAt ?? null, p.postedByAgency ?? false, p.embedKey ?? null, p.salaryRaw ?? null,
         p.location.countries ?? null, p.locationRaw ?? null,
+        p.salary.period ?? null, p.salary.basis ?? null, p.salary.equity ?? null,
       ],
     );
     return rowToPosting(rows[0]!);
@@ -255,9 +257,11 @@ export class PgRepository implements Repository {
   async updatePostingSalary(id: string, band: SalaryBand, salaryRaw?: string | null): Promise<void> {
     await this.q(
       `update posting set salary_min = $2, salary_max = $3, currency = $4, salary_source = $5, salary_confidence = $6,
-         salary_raw = case when $7::boolean then $8 else salary_raw end
+         salary_raw = case when $7::boolean then $8 else salary_raw end,
+         salary_period = $9, salary_basis = $10, salary_equity = $11
        where id = $1`,
-      [id, band.min, band.max, band.currency, band.source, band.confidence, salaryRaw !== undefined, salaryRaw ?? null],
+      [id, band.min, band.max, band.currency, band.source, band.confidence, salaryRaw !== undefined, salaryRaw ?? null,
+        band.period ?? null, band.basis ?? null, band.equity ?? null],
     );
   }
   async updatePostingNormalized(id: string, patch: { location: ParsedLocation; postedByAgency: boolean }): Promise<void> {
@@ -1103,6 +1107,10 @@ function rowToPosting(r: SqlRow): Posting {
   const salary: SalaryBand = {
     min: num(r.salary_min), max: num(r.salary_max), currency: r.currency,
     source: r.salary_source, confidence: r.salary_confidence,
+    // how it was stated; absent on rows from before migration 0021 (= year, not said)
+    ...(r.salary_period ? { period: r.salary_period } : {}),
+    ...(r.salary_basis ? { basis: r.salary_basis } : {}),
+    ...(r.salary_equity != null ? { equity: !!r.salary_equity } : {}),
   };
   const experience: ExperienceRange = { min: num(r.experience_min), max: num(r.experience_max) };
   return {

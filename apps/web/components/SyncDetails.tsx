@@ -13,7 +13,7 @@ import { duration, etaText } from "@/lib/syncClient";
 /** 0..1 across the whole run (mirrors service `syncFraction`) */
 export function runFraction(s: SyncProgress): number {
   if (s.status !== "running") return 1;
-  const w: Record<string, number> = { renormalize: 0.03, discover: 0.04, boards: 0.65, feeds: 0.15, resolve: 0.04, expire: 0.03, process: 0.03, rank: 0.05 };
+  const w: Record<string, number> = { renormalize: 0.03, discover: 0.04, boards: 0.63, feeds: 0.15, resolve: 0.04, expire: 0.03, fx: 0.01, reparse: 0.01, process: 0.03, rank: 0.05 };
   let f = 0;
   for (const p of s.phases) {
     const weight = w[p.id] ?? 0;

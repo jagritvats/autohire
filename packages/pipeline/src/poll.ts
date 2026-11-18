@@ -5,7 +5,8 @@ import { ingestCompany, ingestFromAdapter } from "./ingest.js";
 import { DEFAULT_CONCURRENCY, discoverCompanies, mapPoolKeyed, resolveDiscoveredCompanies, type SeedCompany } from "./discover.js";
 import { harvestLinks } from "./harvest.js";
 import { localEmbedder, type Embedder } from "./embedder.js";
-import { estimatePostingSalaries } from "./salary.js";
+import { estimatePostingSalaries, reparseSalariesIfStale } from "./salary.js";
+import { fxRefreshEnabled, loadFxRates, refreshFxRates } from "./fx.js";
 import { renormalizeIfStale, renormalizeSummary, type RenormalizeRun } from "./renormalize.js";
 import { resolveDiscoveryPlan, type CustomSourceTarget, type DiscoveryPlan, type SearchTarget } from "./discovery.js";
 import type { DiscoveryFeed } from "./presets/types.js";
@@ -91,6 +92,11 @@ export interface PollOptions {
   discoverNewSeeds?: boolean;
   /** boards polled at once (default 8; ≤2 per host — politeness). */
   concurrency?: number;
+  /**
+   * refresh FX rates from the public ECB feed (cached a day in the store; never required).
+   * Default on, unless `JOBFLOW_FX_REFRESH=0` (tests never touch the network).
+   */
+  refreshFx?: boolean;
   log?: (m: string) => void;
   /** structured progress (service `sync-progress.ts` folds these into the one SyncProgress model) */
   onProgress?: PollListener;
@@ -122,6 +128,10 @@ export interface PollStats {
   cancelled?: boolean;
   /** stored postings re-derived because the store's NORMALIZE_VERSION was older (once per version) */
   renormalized?: RenormalizeRun;
+  /** stated salaries re-parsed because the store's SALARY_PARSE_VERSION was older (once per version) */
+  salaryReparsed?: number;
+  /** date of the FX rates comparisons now use, and whether this run fetched them */
+  fx?: { asOf: string; status: "fetched" | "cached" | "static" };
   errors: string[];
 }
 
@@ -156,9 +166,41 @@ export async function pollAll(repo: Repository, opts: PollOptions = {}): Promise
   // a cancelled run stops here: what it fetched is stored (idempotent upserts), nothing was
   // retired from a partial view (invariant #5), and the derived data catches up next run
   if (stats.cancelled) {
+    emit({ type: "phase", phase: "fx", state: "skipped" });
+    emit({ type: "phase", phase: "reparse", state: "skipped" });
     emit({ type: "phase", phase: "process", state: "skipped" });
     return stats;
   }
+  // FX for every comparison the ranking runs next: the store's cached ECB table, refreshed
+  // when a day old and reachable — else the newest we have (core's dated table). Never fails.
+  // Progress shows it as a step only when this run actually fetched rates.
+  try {
+    const refresh = opts.refreshFx ?? fxRefreshEnabled();
+    if (refresh) emit({ type: "phase", phase: "fx", state: "start" });
+    const fx = refresh ? await refreshFxRates(repo) : { table: await loadFxRates(repo), status: "cached" as const };
+    stats.fx = { asOf: fx.table.asOf, status: fx.status };
+    emit({ type: "phase", phase: "fx", state: fx.status === "fetched" ? "done" : "skipped" });
+  } catch (e) {
+    stats.errors.push(`fx: ${(e as Error).message}`);
+    emit({ type: "error", source: "exchange rates", message: (e as Error).message });
+    emit({ type: "phase", phase: "fx", state: "skipped" });
+  }
+  // stated salaries parsed by an older extractor are re-parsed once (after renormalize: the
+  // location prices a bare "$"), so a local install picks up a salary-parser fix on its next sync
+  emit({ type: "phase", phase: "reparse", state: "start" });
+  let reparsed = false;
+  try {
+    const re = await reparseSalariesIfStale(repo);
+    if (re) {
+      reparsed = true;
+      stats.salaryReparsed = re.changed;
+      if (re.changed) opts.log?.(`  re-parsed stated salaries (v${re.fromVersion ?? 0} → v${re.toVersion}): ${re.changed} of ${re.scanned} changed`);
+    }
+  } catch (e) {
+    stats.errors.push(`salary reparse: ${(e as Error).message}`);
+    emit({ type: "error", source: "re-reading pay", message: (e as Error).message });
+  }
+  emit({ type: "phase", phase: "reparse", state: reparsed ? "done" : "skipped" });
   // offline + cheap: re-price every posting that states no pay against the refreshed
   // corpus, so estimates track new comparables without waiting for an enrich run (§11.4).
   // Never fails the poll.

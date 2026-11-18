@@ -43,7 +43,8 @@ Click it to open the **sync panel**:
   saved searches; the boards being fetched right now; the jobs fetched, new, updated and closed
   so far; the time elapsed and roughly how long is left; each step (re-check stored jobs, find
   new companies, check job boards, read feeds and searches, match companies to boards, retire
-  closed jobs, tidy and estimate pay, rank for you) as pending, running, done or skipped; and
+  closed jobs, refresh exchange rates, re-read pay, tidy and estimate pay, rank for you) as
+  pending, running, done or skipped (a step with nothing to do this time is skipped); and
   any source that failed, in plain words ("didn't answer in time", "asked us to slow down").
   **Cancel sync** stops starting new boards. The boards already being fetched finish, every job
   fetched so far is kept and ranked, and nothing is marked closed from a cut-short sync.

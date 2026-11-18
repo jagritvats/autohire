@@ -419,7 +419,7 @@ export function createJobflowMcpServer(ctx: JobflowMcpContext, opts: JobflowMcpO
         presets: strs("discovery-preset tags: india, us, eu-uk, global-remote (searches their feeds)"),
         sources: strs("only these sources, e.g. remotive, himalayas"),
         limit: z.number().int().min(1).max(50).default(15),
-        sort: z.enum(["score", "relevance"]).default("score"),
+        sort: z.enum(["score", "relevance", "pay"]).default("score"),
         ingest: z.boolean().default(false).describe("also add every result to the user's corpus/feed (default false: searching writes nothing)"),
       },
       outputSchema: {

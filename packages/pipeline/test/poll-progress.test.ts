@@ -70,7 +70,15 @@ describe("pollAll progress + cancel", () => {
     const events: PollEvent[] = [];
     await pollAll(repo, { ...quiet, allCompanies: true, onProgress: (e) => events.push(e) });
 
-    const phases = events.filter((e) => e.type === "phase").map((e) => `${(e as { phase: string }).phase}:${(e as { state: string }).state}`);
+    const all = events.filter((e) => e.type === "phase").map((e) => `${(e as { phase: string }).phase}:${(e as { state: string }).state}`);
+    // exchange rates and the pay re-read run between expire and process; whether they have
+    // anything to do depends on the store and the network, so only their place is pinned
+    const optional = (x: string) => x.startsWith("fx:") || x.startsWith("reparse:");
+    const phases = all.filter((x) => !optional(x));
+    const between = all.slice(all.indexOf("expire:done") + 1, all.indexOf("process:start"));
+    expect(between.length).toBeGreaterThan(0);
+    expect(between.every(optional)).toBe(true);
+    expect(between.at(-1)).toMatch(/^reparse:(done|skipped)$/);
     expect(phases).toEqual([
       "renormalize:start",
       "renormalize:skipped",
@@ -114,7 +122,10 @@ describe("pollAll progress + cancel", () => {
     const all = (await repo.listActivePostings()).map((p) => p.atsJobId);
     expect(all.filter((id) => id.endsWith("-old"))).toHaveLength(6); // nothing retired anywhere
     expect(all.filter((id) => id.endsWith("-fresh"))).toHaveLength(1); // what it fetched is stored
-    const phases = events.filter((e) => e.type === "phase").map((e) => `${(e as { phase: string }).phase}:${(e as { state: string }).state}`);
+    const allPhases = events.filter((e) => e.type === "phase").map((e) => `${(e as { phase: string }).phase}:${(e as { state: string }).state}`);
+    // a cancelled run skips the exchange-rate refresh and the pay re-read too
+    expect(allPhases.filter((x) => x.startsWith("fx:") || x.startsWith("reparse:"))).toEqual(["fx:skipped", "reparse:skipped"]);
+    const phases = allPhases.filter((x) => !x.startsWith("fx:") && !x.startsWith("reparse:"));
     expect(phases).toEqual(["renormalize:start", "renormalize:skipped", "discover:skipped", "boards:start", "boards:done", "feeds:skipped", "resolve:skipped", "expire:skipped", "process:skipped"]);
     expect(events.filter((e) => e.type === "board" && e.state === "deferred")).toHaveLength(5);
   });

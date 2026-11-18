@@ -3,15 +3,17 @@ import { AppFrame } from "@/components/AppFrame";
 import { Icon } from "@/components/ui";
 import { notFound } from "next/navigation";
 import { LEVELS_ATTRIBUTION } from "@jobflow/adapters";
-import { formatSalary, type Posting } from "@jobflow/core";
+import { describePay, formatSalary, payDisplayOptions, type FormatPayOptions, type Posting } from "@jobflow/core";
 import { getRepo } from "@/lib/repo";
 import { pageAuth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function CompanyPage({ params }: { params: { id: string } }) {
-  await pageAuth(`/company/${params.id}`);
+  const { tenantId } = await pageAuth(`/company/${params.id}`);
   const repo = await getRepo();
+  // pay in the reader's "show pay in" currency / period
+  const show = payDisplayOptions((await repo.getProfile(tenantId))?.prefs);
   const company = await repo.getCompany(params.id);
   if (!company) notFound();
   const postings = await repo.listPostingsByCompany(params.id);
@@ -119,7 +121,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
             <div className="cp-row" key={p.id}>
               <span className="cp-title">{p.title}</span>
               <span className="cp-meta">{p.levelBand ?? "—"} · {p.location.mode}{p.location.city ? ` · ${p.location.city}` : ""}</span>
-              <span className="cp-comp">{compStr(p)}</span>
+              <span className="cp-comp">{compStr(p, show)}</span>
               {p.applyUrl ? (
                 <a className="cp-apply" href={p.applyUrl} target="_blank" rel="noreferrer">apply →</a>
               ) : (
@@ -136,14 +138,8 @@ export default async function CompanyPage({ params }: { params: { id: string } }
 function fmt(n: number, cur: string): string {
   return formatSalary(n, cur);
 }
-function compStr(p: Posting): string {
-  const s = p.salary;
-  if (s.source !== "none" && (s.min != null || s.max != null)) {
-    const range =
-      s.min != null && s.max != null ? `${fmt(s.min, s.currency)}–${fmt(s.max, s.currency)}` : s.max != null ? `up to ${fmt(s.max, s.currency)}` : `${fmt(s.min!, s.currency)}+`;
-    return `${range} · ${s.confidence}`;
-  }
-  const e = p.salaryEstimate;
-  if (!e) return "";
-  return `~${fmt(e.min, e.currency)}–${fmt(e.max, e.currency)} · est ${Math.round(e.confidenceScore * 100)}%`;
+function compStr(p: Posting, show: Pick<FormatPayOptions, "currency" | "period">): string {
+  const pay = describePay(p, show);
+  if (!pay) return "";
+  return pay.estimate ? `${pay.label} · ${Math.round((pay.confidenceScore ?? 0) * 100)}%` : `${pay.label} · ${pay.confidence}`;
 }

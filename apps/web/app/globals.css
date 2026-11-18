@@ -955,7 +955,7 @@ a.chip {
   border-color: var(--bad-soft);
   color: var(--bad);
 }
-/* a MODELED number (salary estimate) never reads as a stated one: dashed edge, "~", "est N%" */
+/* a MODELED number (salary estimate) never reads as a stated one: dashed edge, "est." / "rough est. ~", "N%" */
 .badge--estimate,
 .tag.comp[data-estimate] {
   border-style: dashed;

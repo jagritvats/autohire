@@ -32,7 +32,7 @@ export async function searchJobs(
     ingest?: boolean;
     limit?: number;
     sources?: SourceKind[];
-    sort?: "score" | "relevance";
+    sort?: "score" | "relevance" | "pay";
     withPostings?: boolean;
     /** ask these adapters instead of the registry's (tests, offline clients) — the pipeline still keeps only Tier 1–2 */
     adapters?: SourceAdapter[];

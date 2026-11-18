@@ -5,6 +5,7 @@ export * from "./discover.js";
 export * from "./enrich.js";
 export * from "./salary.js";
 export * from "./renormalize.js";
+export * from "./fx.js";
 export * from "./import.js";
 export * from "./seed.js";
 export * from "./poll.js";

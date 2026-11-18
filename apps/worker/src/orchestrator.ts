@@ -6,7 +6,10 @@ import {
   refreshSalaryBenchmarks,
   renormalizeIfStale,
   renormalizeSummary,
-  reparseStatedSalaries,
+  reparseSalariesIfStale,
+  refreshFxRates,
+  fxRefreshEnabled,
+  loadFxRates,
   backtestSalaryEstimates,
   calibrateSalaryConfidence,
   type BacktestReport,
@@ -81,7 +84,10 @@ async function enrich(): Promise<void> {
  */
 async function salary(): Promise<void> {
   const repo = await makeRepository();
-  const re = await reparseStatedSalaries(repo);
+  const fx = fxRefreshEnabled() ? await refreshFxRates(repo) : { table: await loadFxRates(repo), status: "cached" };
+  log(`salary: FX rates as of ${fx.table.asOf} (${fx.status}, ${fx.table.source})`);
+  // forced, and records SALARY_PARSE_VERSION so the next sync doesn't re-parse for nothing
+  const re = (await reparseSalariesIfStale(repo, { force: true }))!;
   log(`salary: re-parsed ${re.scanned} → ${re.changed} changed (${re.removed} bogus bands removed, ${re.capped} unverifiable field bands capped at medium)`);
   const b = await refreshSalaryBenchmarks(repo);
   log(`salary: ${b.levelsFetched} levels.fyi market pages fetched · adzuna=${b.adzunaEnabled}`);
