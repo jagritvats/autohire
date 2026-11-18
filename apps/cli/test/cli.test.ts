@@ -206,6 +206,50 @@ describe("saved searches", () => {
     expect((await cli(["--json", "searches"])).json()).toHaveLength(0);
     expect((await cli(["searches", "rm", "go-remote"])).code).toBe(3);
   });
+
+  it("a query passed as ONE string (flags inside) saves exactly like separate arguments", async () => {
+    const pick = (q: Record<string, unknown>) => ({
+      keywords: q.keywords,
+      remote: q.remote,
+      postedWithinDays: q.postedWithinDays,
+      locations: q.locations,
+      mustSkills: q.mustSkills,
+    });
+    const split = await cli(["searches", "add", "split", "backend engineer", "--remote", "--posted", "7d", "--loc", "Berlin,DE", "--must", "go"]);
+    expect(split.code, split.err).toBe(0);
+    const one = await cli(["searches", "add", "one", '"backend engineer" --remote --posted 7d --loc "Berlin,DE" --must go']);
+    expect(one.code, one.err).toBe(0);
+    // the plain-text confirmation renders the keyword once, with no stray quotes
+    expect(one.out).toContain("“backend engineer”");
+    expect(one.out).not.toMatch(/“"|"”/);
+    const mixed = await cli(["searches", "add", "mixed", '"backend engineer" --posted 7d', "--remote", "--loc", "Berlin,DE", "--must", "go"]);
+    expect(mixed.code, mixed.err).toBe(0);
+    const unquoted = await cli(["searches", "add", "bare", "backend engineer --remote --posted 7d --loc Berlin,DE --must go"]);
+    expect(unquoted.code, unquoted.err).toBe(0);
+
+    const list = (await cli(["--json", "searches", "list"])).json() as Array<{ name: string; query: Record<string, unknown> }>;
+    const by = Object.fromEntries(list.map((s) => [s.name, pick(s.query)]));
+    expect(by.split).toEqual({
+      keywords: ["backend engineer"],
+      remote: "only",
+      postedWithinDays: 7,
+      locations: [{ city: "Berlin", country: "DE" }],
+      mustSkills: ["go"],
+    });
+    expect(by.one).toEqual(by.split);
+    expect(by.mixed).toEqual(by.split);
+    expect(by.bare).toEqual(by.split);
+    expect((await cli(["searches", "list"])).out).not.toMatch(/“"|"”/);
+  });
+
+  it("flags inside a one-string query are validated like real flags", async () => {
+    const bad = await cli(["searches", "add", "x", '"backend" --posted soon']);
+    expect(bad.code).toBe(2);
+    expect(bad.err).toMatch(/--posted/);
+    const unknown = await cli(["searches", "add", "x", '"backend" --frobnicate']);
+    expect(unknown.code).toBe(2);
+    expect(unknown.err).toMatch(/frobnicate/);
+  });
 });
 
 describe("feed, posting refs, search, apply, tailor", () => {

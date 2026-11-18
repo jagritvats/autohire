@@ -1,7 +1,7 @@
-import type { Command } from "commander";
+import { Command } from "commander";
 import type { Posting, SearchQuery, SourceKind } from "@jobflow/core";
 import { searchCapableAdapters } from "@jobflow/adapters";
-import { isOnboarded, loadProfile, makeSearchQuery, presetFeedSources, type SearchFlags } from "@jobflow/pipeline";
+import { isOnboarded, loadProfile, makeSearchQuery, presetFeedSources, tokenizeSearch, type SearchFlags } from "@jobflow/pipeline";
 import { saveSearch, searchJobs } from "@jobflow/service";
 import type { Ctx } from "../context.js";
 import { usage } from "../errors.js";
@@ -57,10 +57,49 @@ export function addQueryOptions(cmd: Command): Command {
 
 /** shell args → the query text makeSearchQuery parses (multi-word args stay one phrase) */
 export function queryText(words: string[]): string {
-  return words.map((w) => (/\s/.test(w) && !/^".*"$/.test(w) ? `"${w}"` : w)).join(" ");
+  return words
+    .map((w) => w.trim())
+    .filter(Boolean)
+    .map((w) => (/\s/.test(w) ? `"${w.replace(/"/g, "")}"` : w))
+    .join(" ");
 }
 
-export function buildQuery(words: string[], o: QueryOpts): SearchQuery {
+/** an argument that is itself query syntax: embedded `--flags` or quoted phrases */
+const EMBEDDED = (w: string) => /(^|\s)--[A-Za-z]/.test(w) || /"/.test(w) || /^\s*'|'\s*$/.test(w);
+
+/**
+ * `searches add name '"backend engineer" --remote --posted 7d'` — the whole query as ONE
+ * argument — must mean exactly what the separate-argument form means. Commander never sees
+ * flags inside a string, so split such an argument with the search tokenizer and run the
+ * pieces through the same query options; flags given outside the string still apply
+ * (repeatable ones accumulate, a single-valued one given outside wins).
+ */
+export function expandEmbeddedQuery(words: string[], o: QueryOpts): { words: string[]; opts: QueryOpts } {
+  if (!words.some(EMBEDDED)) return { words, opts: o };
+  const tokens = words.flatMap((w) => (EMBEDDED(w) ? tokenizeSearch(w) : [w]));
+  const inner = addQueryOptions(new Command("query").argument("[query...]").allowExcessArguments(true))
+    .exitOverride()
+    .configureOutput({ writeOut: () => {}, writeErr: () => {} });
+  try {
+    inner.parse(tokens, { from: "user" });
+  } catch (e) {
+    throw usage(
+      `couldn't read the query: ${(e as Error).message.replace(/^error:\s*/i, "")}`,
+      "Inside a quoted query only the search flags work (--remote, --loc, --posted, --must, …); put other options outside the quotes.",
+    );
+  }
+  const io = inner.opts<QueryOpts>();
+  const opts: QueryOpts = { ...io };
+  for (const [k, v] of Object.entries(o) as Array<[keyof QueryOpts, unknown]>) {
+    if (v === undefined) continue;
+    const prev = io[k];
+    (opts as Record<string, unknown>)[k] = Array.isArray(v) && Array.isArray(prev) ? [...prev, ...v] : v;
+  }
+  return { words: (inner.processedArgs[0] as string[] | undefined) ?? [], opts: { ...o, ...opts } };
+}
+
+export function buildQuery(rawWords: string[], rawOpts: QueryOpts): SearchQuery {
+  const { words, opts: o } = expandEmbeddedQuery(rawWords, rawOpts);
   const flags: SearchFlags = {};
   if (o.remote) flags.remote = true;
   if (o.onsite) flags.remote = "exclude";
@@ -89,7 +128,9 @@ export function buildQuery(words: string[], o: QueryOpts): SearchQuery {
 /** one-line description of a query ("backend engineer · remote · senior · ≥150k USD") */
 export function describeQuery(q: SearchQuery): string {
   const parts: string[] = [];
-  if (q.keywords.length) parts.push(q.keywords.map((k) => `“${k}”`).join(" "));
+  // stray quotes (a search saved by an older release from a one-string query) never double up
+  const bare = (k: string) => k.replace(/^["'“”‘’\s]+|["'“”‘’\s]+$/g, "");
+  if (q.keywords.length) parts.push(q.keywords.map((k) => `“${bare(k)}”`).join(" "));
   if (q.titles.length) parts.push(`title: ${q.titles.join("/")}`);
   if (q.remote === "only") parts.push("remote");
   if (q.remote === "exclude") parts.push("on-site");
