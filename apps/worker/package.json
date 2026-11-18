@@ -12,6 +12,7 @@
     "enrich": "tsx src/orchestrator.ts enrich",
     "salary": "tsx src/orchestrator.ts salary",
     "salary-backtest": "tsx src/orchestrator.ts salary-backtest",
+    "renormalize": "tsx src/orchestrator.ts renormalize",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

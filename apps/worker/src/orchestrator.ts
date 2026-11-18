@@ -4,6 +4,7 @@ import {
   enrichTopMatches,
   estimatePostingSalaries,
   refreshSalaryBenchmarks,
+  renormalizePostings,
   reparseStatedSalaries,
   backtestSalaryEstimates,
   calibrateSalaryConfidence,
@@ -25,7 +26,7 @@ loadRootEnv();
  * ever runs Tier 1-2 adapters. Tier 3 (Naukri/Glassdoor/AmbitionBox/LinkedIn) is
  * never touched here — it runs exclusively on the local agent (§7.1).
  *
- * Subcommands: discover | poll | rank | enrich | salary | salary-backtest | (default: all).
+ * Subcommands: discover | poll | rank | enrich | salary | salary-backtest | renormalize | (default: all).
  */
 
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a);
@@ -84,6 +85,21 @@ async function salary(): Promise<void> {
 }
 
 /**
+ * Re-normalize stored postings after a location / agency parser change (§11.3): re-parse
+ * each location from its stored `locationRaw`, re-read the agency flag. Idempotent; then
+ * re-rank so scores see the new locations.
+ */
+async function renormalize(): Promise<void> {
+  const repo = await makeRepository();
+  const r = await renormalizePostings(repo);
+  log(
+    `renormalize: ${r.scanned} scanned → ${r.changed} changed (${r.locations} locations: ${r.multiCountry} now multi-country, ` +
+      `${r.placed} newly placed; agency +${r.agencyFlagged} −${r.agencyCleared}; ${r.noRaw} stored without location text)`,
+  );
+  if (r.changed) await rank();
+}
+
+/**
  * Leave-one-out backtest of the estimator on postings that DO state pay (§11.4): is the
  * error small, and does a higher confidence score actually mean a smaller error?
  */
@@ -134,6 +150,7 @@ async function main(): Promise<void> {
   if (cmd === "enrich" || cmd === "all") await enrich();
   if (cmd === "salary") await salary();
   if (cmd === "salary-backtest") await salaryBacktest();
+  if (cmd === "renormalize") await renormalize();
 }
 
 main()

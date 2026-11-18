@@ -12,6 +12,7 @@ import type {
   Company,
   ConnectedContext,
   Evidence,
+  ParsedLocation,
   Generation,
   GenerationKind,
   Job,
@@ -261,6 +262,12 @@ export class InMemoryRepository implements Repository {
       n++;
     }
     return n;
+  }
+  async updatePostingNormalized(id: string, patch: { location: ParsedLocation; postedByAgency: boolean }): Promise<void> {
+    const p = this.postings.get(id);
+    if (!p) return;
+    p.location = patch.location;
+    p.postedByAgency = patch.postedByAgency;
   }
   async updatePostingSalary(id: string, band: SalaryBand, salaryRaw?: string | null): Promise<void> {
     const p = this.postings.get(id);

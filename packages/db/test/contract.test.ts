@@ -568,6 +568,33 @@ describe.each(stores)("Repository contract — %s", (name, open) => {
     expect((await repo.getPosting(a.id))?.canonicalId).toBeNull();
   });
 
+  it("postings round-trip every country + the location text; updatePostingNormalized rewrites only those", async () => {
+    const co = await repo.upsertCompany({ name: "Acme", nameNorm: `acme-${randomUUID()}`, atsType: "greenhouse", atsSlug: "acme" });
+    const base = postingFor(co.id);
+    const np: NewPosting = {
+      ...base,
+      atsJobId: `loc-${randomUUID()}`,
+      locationRaw: "Hybrid - Austin, TX; London, United Kingdom",
+      location: { ...base.location, mode: "hybrid", city: "Austin", country: "United States", countries: ["US", "GB"] },
+    };
+    const p = await repo.upsertPosting(np);
+    expect(p.location.countries).toEqual(["US", "GB"]);
+    expect(p.locationRaw).toBe("Hybrid - Austin, TX; London, United Kingdom");
+    const lastSeen = (await repo.getPosting(p.id))!.lastSeen;
+    await repo.updatePostingNormalized(p.id, {
+      location: { ...p.location, city: "London", country: "Europe", countries: ["GB"] },
+      postedByAgency: true,
+    });
+    const got = await repo.getPosting(p.id);
+    expect(got?.location).toMatchObject({ city: "London", country: "Europe", countries: ["GB"] });
+    expect(got?.postedByAgency).toBe(true);
+    expect(got?.locationRaw).toBe("Hybrid - Austin, TX; London, United Kingdom");
+    expect(got?.lastSeen).toEqual(lastSeen); // no lifecycle side effects
+    // a location with no countries reads back without the field (older rows alike)
+    await repo.updatePostingNormalized(p.id, { location: { ...p.location, countries: undefined }, postedByAgency: false });
+    expect((await repo.getPosting(p.id))?.location.countries).toBeUndefined();
+  });
+
   if (name === "pglite") {
     it("encrypts the LLM key at rest when JOBFLOW_SECRET_KEY is set (callers see plaintext)", async () => {
       const pg = repo as PgRepository;

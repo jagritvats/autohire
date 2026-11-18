@@ -12,6 +12,7 @@ import type {
   CompanyCompBenchmark,
   ConnectedContext,
   Evidence,
+  ParsedLocation,
   Generation,
   GenerationKind,
   Job,
@@ -65,6 +66,11 @@ export interface Repository {
    * never go here — they're `saveSalaryEstimates`.
    */
   updatePostingSalary(id: string, band: SalaryBand, salaryRaw?: string | null): Promise<void>;
+  /**
+   * Rewrite a posting's derived location + agency flag (a re-normalize after a parser fix,
+   * `renormalizePostings`). Never touches lifecycle columns (lastSeen, status…).
+   */
+  updatePostingNormalized(id: string, patch: { location: ParsedLocation; postedByAgency: boolean }): Promise<void>;
   /** set (or clear, with null) the modeled salary on many postings in one write. */
   saveSalaryEstimates(updates: Array<{ id: string; estimate: SalaryEstimate | null }>): Promise<number>;
   /** soft-delete postings not seen in this poll of a company (role filled/pulled). */
