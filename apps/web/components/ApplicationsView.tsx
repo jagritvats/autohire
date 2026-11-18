@@ -102,13 +102,14 @@ function Group({ title, apps, patch }: { title: string; apps: App[]; patch: (b: 
               {a.companyId ? <a href={`/company/${a.companyId}`}>{a.company}</a> : a.company}
               <span className="crm-title">{a.title}</span>
             </span>
-            <select value={a.status} onChange={(e) => patch({ id: a.id, status: e.target.value })}>
+            <select aria-label={`Status — ${a.title} at ${a.company}`} value={a.status} onChange={(e) => patch({ id: a.id, status: e.target.value })}>
               {STATUSES.map((s) => (
                 <option key={s}>{s}</option>
               ))}
             </select>
             <input
               className="crm-input"
+              aria-label={`Next action — ${a.title} at ${a.company}`}
               defaultValue={a.nextAction ?? ""}
               placeholder="e.g. send follow-up"
               onBlur={(e) => e.target.value !== (a.nextAction ?? "") && patch({ id: a.id, nextAction: e.target.value })}
@@ -116,6 +117,7 @@ function Group({ title, apps, patch }: { title: string; apps: App[]; patch: (b: 
             <input
               className="crm-date"
               type="date"
+              aria-label={`Due date — ${a.title} at ${a.company}`}
               defaultValue={a.nextActionAt ? a.nextActionAt.slice(0, 10) : ""}
               onChange={(e) => patch({ id: a.id, nextActionAt: e.target.value ? new Date(e.target.value).toISOString() : null })}
             />
