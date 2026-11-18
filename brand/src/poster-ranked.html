@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>JobFlow poster: Every job, ranked by how well it fits you</title>
+<link rel="stylesheet" href="brand.css">
+<!-- Poster (a). Two formats from one source, chosen by body[data-format]:
+     a3     A3 portrait with 3 mm bleed: 303 x 426 mm (trim 297 x 420, safe area 15 mm in)
+     social 4:5, 1080 x 1350 px
+     Product imagery: brand/.out/captures (scripts/capture.mjs, fictional demo data). -->
+<style>
+  body { position: relative; overflow: hidden; }
+  body[data-format="a3"] { width: 303mm; height: 426mm; --pad: 18mm; }
+  body[data-format="social"] { width: 1080px; height: 1350px; --pad: 64px; }
+
+  .page { position: absolute; inset: var(--pad); display: flex; flex-direction: column; }
+  .mast { display: flex; align-items: flex-end; justify-content: space-between; padding-bottom: 14px; border-bottom: 2px solid var(--ink); }
+  .mast .logo { height: 46px; }
+  .mast .kicker { font-size: 13px; color: var(--ink-3); }
+  .kick { margin-top: 44px; font-size: 15px; }
+  h1.display { margin-top: 18px; font-size: 128px; }
+  .lede { margin-top: 30px; font-size: 27px; max-width: 30em; }
+
+  .cards { position: relative; margin-top: 56px; }
+  .cards .plate + .plate { margin-top: -1px; }
+
+  .anatomy { margin-top: 44px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; border-top: 1px solid var(--hair-strong); padding-top: 22px; }
+  .anatomy b { display: block; font-family: var(--serif); font-weight: 400; font-variation-settings: "SOFT" 50, "opsz" 72; font-size: 30px; line-height: 1.1; color: var(--ink); margin-bottom: 8px; }
+  .anatomy p { margin: 0; font-size: 16.5px; line-height: 1.45; color: var(--ink-2); }
+
+  .foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 24px; border-top: 2px solid var(--ink); padding-top: 16px; font-size: 15px; color: var(--ink-2); }
+  .foot .url { font-weight: 700; color: var(--ink); letter-spacing: 0.01em; }
+  .foot .mark { height: 40px; width: 40px; }
+
+  /* 4:5 social crop */
+  body[data-format="social"] .mast .logo { height: 38px; }
+  body[data-format="social"] .kick { margin-top: 34px; font-size: 14px; }
+  body[data-format="social"] h1.display { font-size: 104px; margin-top: 14px; }
+  body[data-format="social"] .lede { font-size: 24px; margin-top: 24px; max-width: 34em; }
+  /* the card, larger than the page so its type reads on a phone; it runs off the right edge */
+  body[data-format="social"] .cards { margin-top: 44px; width: 1420px; }
+  body[data-format="social"] .cards .plate:nth-child(1) { display: none; }
+  body[data-format="social"] .anatomy { margin-top: 40px; gap: 26px; padding-top: 18px; }
+  body[data-format="social"] .anatomy b { font-size: 23px; }
+  body[data-format="social"] .anatomy p { font-size: 14.5px; }
+  body[data-format="social"] .foot { font-size: 14px; }
+  body[data-format="social"] .foot .meta { display: none; }
+</style>
+</head>
+<body data-format="a3">
+  <div class="page">
+    <header class="mast">
+      <img class="logo" src="../logo/jobflow-horizontal.svg" alt="JobFlow">
+      <span class="kicker">Free software · runs on your machine</span>
+    </header>
+
+    <div class="kicker kick">The match card</div>
+    <h1 class="display">Every job, ranked by how well it fits <em>you</em>.</h1>
+    <p class="lede">JobFlow reads job boards straight from the companies and scores each role against your résumé. Every card says why it fits, where the gap is, what the pay is, and what to check before you apply.</p>
+
+    <div class="cards">
+      <div class="plate"><img src="../.out/captures/card-top-light.png" alt=""></div>
+      <div class="plate"><img src="../.out/captures/card-flag-light.png" alt=""></div>
+    </div>
+
+    <div class="anatomy">
+      <div><b>A score, 0–100</b><p>How well the role fits your stack, the kind of work, your level and where you can work, plus how fresh and trustworthy the posting is.</p></div>
+      <div><b>The reason, and the gap</b><p>“Main language Java — you have it.” When something is new to you, the card says so.</p></div>
+      <div><b>Flags, in plain words</b><p>Staffing agency, a “remote” that’s one-country-only, pay that’s a rough estimate — shown, not buried.</p></div>
+    </div>
+
+    <footer class="foot">
+      <span class="url">github.com/jagritvats/jobflow</span>
+      <span class="meta">AGPL-3.0 · CLI + web app · works with AI agents over MCP</span>
+      <img class="mark" src="../logo/jobflow-mark.svg" alt="">
+    </footer>
+  </div>
+</body>
+</html>

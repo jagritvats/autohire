@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>JobFlow poster: It fills the form. You press submit.</title>
+<link rel="stylesheet" href="brand.css">
+<!-- Poster (b), the review gate. Formats: body[data-format] = a3 (303 x 426 mm with 3 mm
+     bleed) | social (1080 x 1350). The form is a real `jobflow apply --fill` run against a
+     local Greenhouse-style test form with an invented applicant (scripts/capture.mjs); the
+     terminal is the real CLI output. Nothing was submitted (the capture checks zero POSTs). -->
+<style>
+  body { position: relative; overflow: hidden; }
+  body[data-format="a3"] { width: 303mm; height: 426mm; --pad: 18mm; }
+  body[data-format="social"] { width: 1080px; height: 1350px; --pad: 64px; }
+  .page { position: absolute; inset: var(--pad); display: flex; flex-direction: column; }
+  .mast { display: flex; align-items: flex-end; justify-content: space-between; padding-bottom: 14px; border-bottom: 2px solid var(--ink); }
+  .mast .logo { height: 46px; }
+  .mast .kicker { font-size: 13px; color: var(--ink-3); }
+  .kick { margin-top: 38px; font-size: 15px; }
+  h1.display { margin-top: 16px; font-size: 118px; }
+
+  .grid { margin-top: 34px; display: grid; grid-template-columns: 1fr 520px; gap: 56px; align-items: start; }
+  .lede { font-size: 26px; }
+  ol.steps { list-style: none; margin: 34px 0 0; padding: 0; border-top: 1px solid var(--hair-strong); }
+  ol.steps li { display: grid; grid-template-columns: 54px 1fr; padding: 13px 0 15px; border-bottom: 1px solid var(--hair-strong); }
+  ol.steps .n { font-family: var(--serif); font-variation-settings: "SOFT" 30, "opsz" 144; font-weight: 300; font-size: 44px; line-height: 0.9; color: var(--ink-3); }
+  ol.steps b { display: block; font-family: var(--serif); font-weight: 450; font-variation-settings: "SOFT" 50, "opsz" 48; font-size: 25px; margin-bottom: 6px; }
+  ol.steps p { margin: 0; font-size: 16px; line-height: 1.5; color: var(--ink-2); }
+  ol.steps li:last-child .n, ol.steps li:last-child b { color: var(--vermilion); }
+  ol.steps code { font-size: 0.9em; background: var(--paper-2); padding: 1px 5px; border-radius: 3px; }
+  .never { margin-top: 22px; font-size: 16px; line-height: 1.5; color: var(--ink-2); }
+  .never strong { color: var(--ink); }
+
+  .form { position: relative; }
+  .form .plate { background: #fff; }
+  /* the callout: a vermilion frame on the untouched submit button, and the line out to the margin */
+  .gate { position: absolute; left: calc(var(--gate-x) - 1.4%); top: calc(var(--gate-y) - 1.2%); width: calc(var(--gate-w) + 2.8%); height: calc(var(--gate-h) + 2.4%); border: 2.5px solid var(--vermilion); border-radius: 9px; }
+  .gate::after { content: ""; position: absolute; left: 100%; top: 50%; width: 52px; border-top: 2.5px solid var(--vermilion); }
+  .gate-line { display: none; }
+  .gate-note { position: absolute; left: calc(var(--gate-x) + var(--gate-w) + 13%); top: calc(var(--gate-y) - 1.9%); width: 40%; }
+  .gate-note .kicker { font-size: 12px; }
+  .gate-note p { margin: 6px 0 0; font-family: var(--serif); font-variation-settings: "SOFT" 50, "opsz" 36; font-size: 22px; line-height: 1.2; color: var(--ink); }
+
+  .term { flex: none; margin-top: 30px; margin-bottom: 26px; font-size: 13.5px; }
+  .term .t-body { line-height: 1.45; }
+  .foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 24px; border-top: 2px solid var(--ink); padding-top: 16px; font-size: 15px; color: var(--ink-2); }
+  .foot .url { font-weight: 700; color: var(--ink); }
+  .foot .mark { height: 40px; width: 40px; }
+
+  body[data-format="social"] .mast .logo { height: 38px; }
+  body[data-format="social"] .kick { margin-top: 34px; font-size: 14px; }
+  body[data-format="social"] h1.display { font-size: 112px; margin-top: 14px; }
+  body[data-format="social"] .grid { margin-top: 56px; grid-template-columns: 1fr 540px; gap: 40px; }
+  body[data-format="social"] .lede { font-size: 22px; }
+  body[data-format="social"] ol.steps { margin-top: 22px; }
+  body[data-format="social"] ol.steps li { padding: 12px 0 13px; grid-template-columns: 44px 1fr; }
+  body[data-format="social"] ol.steps .n { font-size: 34px; }
+  body[data-format="social"] ol.steps b { font-size: 21px; margin-bottom: 0; }
+  body[data-format="social"] ol.steps p, body[data-format="social"] .term, body[data-format="social"] .foot .meta { display: none; }
+  body[data-format="social"] .never { font-size: 15px; margin-top: 18px; }
+  /* the note sits in the left column, level with the button; the rule runs left to it */
+  body[data-format="social"] .gate::after { display: none; }
+  body[data-format="social"] .gate-line { display: block; position: absolute; right: calc(100% - var(--gate-x) + 1.4%); width: calc(var(--gate-x) - 1.4% + 30px); top: calc(var(--gate-y) + var(--gate-h) / 2); border-top: 2.5px solid var(--vermilion); }
+  body[data-format="social"] .gate-note { left: auto; right: calc(100% + 44px); top: calc(var(--gate-y) - 3.2%); width: 330px; text-align: right; }
+  body[data-format="social"] .gate-note p { font-size: 24px; }
+</style>
+</head>
+<body data-format="a3">
+  <div class="page">
+    <header class="mast">
+      <img class="logo" src="../logo/jobflow-horizontal.svg" alt="JobFlow">
+      <span class="kicker">Free software · runs on your machine</span>
+    </header>
+
+    <div class="kicker kick">The review gate</div>
+    <h1 class="display">It fills the form. <em>You</em> press submit.</h1>
+
+    <div class="grid">
+      <div>
+        <p class="lede">The tedious part, done from what you already stored. The decision stays with you.</p>
+        <ol class="steps">
+          <li><span class="n">1</span><div><b>It plans</b><p><code>jobflow apply</code> is a dry run: each field, and the value it would type. Nothing is filled or sent.</p></div></li>
+          <li><span class="n">2</span><div><b>It fills</b><p>With <code>--fill</code>, a browser on your machine opens the form, types your details and attaches your résumé.</p></div></li>
+          <li><span class="n">3</span><div><b>It stops</b><p>At the review screen. You read every field, then press submit yourself, or close the tab.</p></div></li>
+        </ol>
+        <p class="never"><strong>There is no auto-submit.</strong> Not a setting, not a flag, not a hidden mode: the form filler has no code path that presses the button.</p>
+      </div>
+      <div class="form">
+        <div class="plate"><img src="../.out/captures/review-gate.png" alt="A job application form filled with an invented applicant's details, not submitted"></div>
+        <div class="gate"></div><div class="gate-line"></div>
+        <div class="gate-note"><div class="kicker">JobFlow stops here</div><p>This button is yours.</p></div>
+      </div>
+    </div>
+
+    <div class="term"><div class="t-bar"><i></i><i></i><i></i><span>~/jobflow</span></div><div class="t-body" data-ansi="cli-apply.ansi" data-lines="1,8-18,20"></div></div>
+
+    <footer class="foot">
+      <span class="url">github.com/jagritvats/jobflow</span>
+      <span class="meta">AGPL-3.0 · CLI + web app · works with AI agents over MCP</span>
+      <img class="mark" src="../logo/jobflow-mark.svg" alt="">
+    </footer>
+  </div>
+</body>
+</html>
