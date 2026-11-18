@@ -22,6 +22,7 @@ import * as doctor from "./commands/doctor.js";
 import * as serve from "./commands/serve.js";
 import * as legacy from "./commands/legacy.js";
 import * as status from "./commands/status.js";
+import * as mcp from "./commands/mcp.js";
 
 export const VERSION = "0.1.0";
 
@@ -85,6 +86,7 @@ Row numbers (1, 2, …) refer to the last feed/search/track listing. Docs: docs/
   track.register(program, ctx);
   doctor.register(program, ctx);
   serve.register(program, ctx);
+  mcp.register(program, ctx);
   legacy.register(program, ctx);
 
   program.arguments("[command...]").action((args: string[]) => {

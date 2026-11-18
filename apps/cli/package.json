@@ -21,6 +21,7 @@
     "@jobflow/core": "workspace:*",
     "@jobflow/db": "workspace:*",
     "@jobflow/llm": "workspace:*",
+    "@jobflow/mcp": "workspace:*",
     "@jobflow/pipeline": "workspace:*",
     "@jobflow/resume-io": "workspace:*",
     "@jobflow/service": "workspace:*",

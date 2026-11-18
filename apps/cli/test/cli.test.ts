@@ -392,6 +392,14 @@ describe("exit codes", () => {
     expect((await cli(["apply", "--help"])).code).toBe(0);
   });
 
+  it("`jobflow mcp --help` documents the MCP server; a bad --idle is a usage error", async () => {
+    const r = await cli(["mcp", "--help"]);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("Model Context Protocol");
+    expect(r.out).toContain("claude mcp add jobflow");
+    expect((await cli(["mcp", "--idle", "soon"])).code).toBe(2);
+  });
+
   it("an empty corpus says how to fill it", async () => {
     const r = await cli(["feed"]);
     expect(r.code).toBe(0);
