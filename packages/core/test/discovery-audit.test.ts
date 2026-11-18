@@ -226,7 +226,7 @@ describe("location: places the parser didn't know, and boilerplate 'worldwide'",
     expect(parseLocation("JP-Tokyo")).toMatchObject({ city: "Tokyo", country: "Japan" });
     expect(parseLocation("Sao Paulo, Brazil").country).toBe("Brazil");
     expect(parseLocation("Bellevue, Washington").country).toBe("United States");
-    expect(parseLocation("Belgrade, Serbia").country).toBe("Europe");
+    expect(parseLocation("Belgrade, Serbia").country).toBe("Serbia");
     expect(parsedCountryMatches("Japan", "JP")).toBe(true);
     expect(parsedCountryMatches("Japan", "IN")).toBe(false);
     expect(parsedCountryMatches("Japan", "DE")).toBe(false);
@@ -281,7 +281,7 @@ describe("ranking: abroad and country-bound remote are soft signals with honest 
   it("onsite Tokyo for a user in India is discounted and flagged (was neutral: no country)", () => {
     const r = scorePosting(posting({ locationRaw: "Tokyo, Japan" }), profile("IN", ["IN"]));
     expect(r.rulePass).toBe(true);
-    expect(r.flags.redFlags.join(" ")).toMatch(/Onsite Japan/);
+    expect(r.flags.redFlags.join(" ")).toMatch(/Onsite in Japan/);
   });
 
   it("'Remote - Brazil' is closed to a US user but open to one searching Brazil — never excluded", () => {

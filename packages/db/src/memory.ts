@@ -57,6 +57,7 @@ export class InMemoryRepository implements Repository {
   private heartbeats = new Map<string, AgentHeartbeat>();
   private syncRuns: SyncRunRecord[] = [];
   private salaryCache = new Map<string, SalaryCacheEntry & { fetchedAt: number }>();
+  private storeMeta = new Map<string, string>();
   private generations: Generation[] = [];
   private contexts = new Map<string, ConnectedContext>(); // key: `${tenantId}:${source}`
   // per-user posting overlay (archive + bookmark), key: `${tenantId}:${postingId}`
@@ -458,6 +459,13 @@ export class InMemoryRepository implements Repository {
   async listMatchesForPostings(tenantId: string, postingIds: string[]): Promise<Match[]> {
     const ids = new Set(postingIds);
     return (this.matches.get(tenantId) ?? []).filter((m) => ids.has(m.postingId));
+  }
+
+  async getStoreMeta(key: string): Promise<string | null> {
+    return this.storeMeta.get(key) ?? null;
+  }
+  async setStoreMeta(key: string, value: string): Promise<void> {
+    this.storeMeta.set(key, value);
   }
 
   async getSalaryCache(key: string): Promise<SalaryCacheEntry | null> {

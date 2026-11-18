@@ -29,7 +29,7 @@ const fold = (s: SyncProgress, events: Array<[number, PollEvent]>) => {
 describe("sync progress model", () => {
   it("walks the phases in order: one active at a time, done or skipped after", () => {
     const s = fresh();
-    expect(s.phases.map((p) => p.status)).toEqual(Array(7).fill("pending"));
+    expect(s.phases.map((p) => p.status)).toEqual(Array(8).fill("pending"));
     fold(s, [
       [0, { type: "phase", phase: "discover", state: "skipped" }],
       [10, { type: "phase", phase: "boards", state: "start" }],

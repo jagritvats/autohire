@@ -23,6 +23,7 @@ import * as serve from "./commands/serve.js";
 import * as legacy from "./commands/legacy.js";
 import * as status from "./commands/status.js";
 import * as mcp from "./commands/mcp.js";
+import * as renormalize from "./commands/renormalize.js";
 
 export const VERSION = "0.1.0";
 
@@ -82,6 +83,7 @@ Row numbers (1, 2, …) refer to the last feed/search/track listing. Docs: docs/
   searches.register(program, ctx);
   discovery.register(program, ctx);
   sync.register(program, ctx);
+  renormalize.register(program, ctx);
   feed.register(program, ctx);
   tailor.register(program, ctx);
   apply.register(program, ctx);

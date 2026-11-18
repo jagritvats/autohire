@@ -72,6 +72,8 @@ describe("pollAll progress + cancel", () => {
 
     const phases = events.filter((e) => e.type === "phase").map((e) => `${(e as { phase: string }).phase}:${(e as { state: string }).state}`);
     expect(phases).toEqual([
+      "renormalize:start",
+      "renormalize:skipped",
       "discover:skipped",
       "boards:start",
       "boards:done",
@@ -113,7 +115,7 @@ describe("pollAll progress + cancel", () => {
     expect(all.filter((id) => id.endsWith("-old"))).toHaveLength(6); // nothing retired anywhere
     expect(all.filter((id) => id.endsWith("-fresh"))).toHaveLength(1); // what it fetched is stored
     const phases = events.filter((e) => e.type === "phase").map((e) => `${(e as { phase: string }).phase}:${(e as { state: string }).state}`);
-    expect(phases).toEqual(["discover:skipped", "boards:start", "boards:done", "feeds:skipped", "resolve:skipped", "expire:skipped", "process:skipped"]);
+    expect(phases).toEqual(["renormalize:start", "renormalize:skipped", "discover:skipped", "boards:start", "boards:done", "feeds:skipped", "resolve:skipped", "expire:skipped", "process:skipped"]);
     expect(events.filter((e) => e.type === "board" && e.state === "deferred")).toHaveLength(5);
   });
 });

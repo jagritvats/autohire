@@ -546,6 +546,19 @@ export class PgRepository implements Repository {
   }
 
   // ── applications ──
+  // ── store metadata ──
+  async getStoreMeta(key: string): Promise<string | null> {
+    const { rows } = await this.q("select value from store_meta where key = $1", [key]);
+    return (rows[0]?.value as string | undefined) ?? null;
+  }
+  async setStoreMeta(key: string, value: string): Promise<void> {
+    await this.q(
+      `insert into store_meta (key, value, updated_at) values ($1, $2, now())
+       on conflict (key) do update set value = excluded.value, updated_at = now()`,
+      [key, value],
+    );
+  }
+
   // ── salary cache ──
   async getSalaryCache(key: string): Promise<SalaryCacheEntry | null> {
     const { rows } = await this.q(

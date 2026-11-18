@@ -6,6 +6,7 @@ import { DEFAULT_CONCURRENCY, discoverCompanies, mapPoolKeyed, resolveDiscovered
 import { harvestLinks } from "./harvest.js";
 import { localEmbedder, type Embedder } from "./embedder.js";
 import { estimatePostingSalaries } from "./salary.js";
+import { renormalizeIfStale, renormalizeSummary, type RenormalizeRun } from "./renormalize.js";
 import { resolveDiscoveryPlan, type CustomSourceTarget, type DiscoveryPlan, type SearchTarget } from "./discovery.js";
 import type { DiscoveryFeed } from "./presets/types.js";
 import { emitter, type PollListener } from "./progress.js";
@@ -119,6 +120,8 @@ export interface PollStats {
   boardsDeferred?: number;
   /** the run was cancelled (`signal`) before it finished */
   cancelled?: boolean;
+  /** stored postings re-derived because the store's NORMALIZE_VERSION was older (once per version) */
+  renormalized?: RenormalizeRun;
   errors: string[];
 }
 
@@ -132,7 +135,24 @@ export interface PollStats {
  */
 export async function pollAll(repo: Repository, opts: PollOptions = {}): Promise<PollStats> {
   const emit = emitter(opts.onProgress);
+  // stored postings derived by an older parser are re-derived once, before this poll's
+  // upserts, so the ranking every caller runs next sees one consistent corpus (§11.3).
+  // A no-op (one meta read) when the store is current; never fails the poll. Progress shows
+  // it as its own step only when it actually ran ("Re-check stored jobs").
+  let renormalized: RenormalizeRun | null = null;
+  let renormalizeError: string | null = null;
+  emit({ type: "phase", phase: "renormalize", state: "start" });
+  try {
+    renormalized = await renormalizeIfStale(repo);
+    if (renormalized?.changed) opts.log?.(`  re-normalized stored postings (v${renormalized.fromVersion ?? 0} → v${renormalized.toVersion}): ${renormalizeSummary(renormalized)}`);
+  } catch (e) {
+    renormalizeError = `renormalize: ${(e as Error).message}`;
+    emit({ type: "error", source: "re-checking stored jobs", message: (e as Error).message });
+  }
+  emit({ type: "phase", phase: "renormalize", state: renormalized ? "done" : "skipped" });
   const stats = await pollSources(repo, opts, emit);
+  if (renormalized) stats.renormalized = renormalized;
+  if (renormalizeError) stats.errors.push(renormalizeError);
   // a cancelled run stops here: what it fetched is stored (idempotent upserts), nothing was
   // retired from a partial view (invariant #5), and the derived data catches up next run
   if (stats.cancelled) {

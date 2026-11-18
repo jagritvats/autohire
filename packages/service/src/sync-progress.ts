@@ -145,7 +145,7 @@ export function estimateEtaMs(s: SyncProgress, now: number = Date.now()): number
   if (s.cancelRequested) return null;
   const status = (id: SyncPhaseId) => s.phases.find((p) => p.id === id)?.status ?? "pending";
   const open = (id: SyncPhaseId) => status(id) === "pending" || status(id) === "active";
-  if (status("discover") === "active") return null;
+  if (status("discover") === "active" || status("renormalize") === "active") return null;
 
   let eta = 0;
   if (open("boards")) {
@@ -176,7 +176,7 @@ export function estimateEtaMs(s: SyncProgress, now: number = Date.now()): number
 /** 0..1 across the whole run, weighted to where the time goes (the boards). */
 export function syncFraction(s: SyncProgress): number {
   if (s.status !== "running") return 1;
-  const weight: Record<SyncPhaseId, number> = { discover: 0.05, boards: 0.65, feeds: 0.15, resolve: 0.04, expire: 0.03, process: 0.03, rank: 0.05 };
+  const weight: Record<SyncPhaseId, number> = { renormalize: 0.03, discover: 0.04, boards: 0.65, feeds: 0.15, resolve: 0.04, expire: 0.03, process: 0.03, rank: 0.05 };
   let f = 0;
   for (const p of s.phases) {
     const w = weight[p.id];

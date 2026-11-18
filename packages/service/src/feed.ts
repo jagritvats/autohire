@@ -13,7 +13,7 @@ import {
   type RecheckStats,
 } from "@jobflow/pipeline";
 import type { Match, Posting, SearchQueryInput, ViewHiddenReason } from "@jobflow/core";
-import { applyView, diversifyByCompany, diversifyKey, formatSalary, isIndiaWorkable, postingAgeDays, scoreSourceTrust } from "@jobflow/core";
+import { applyView, companyDisplayName, describeLocation, diversifyByCompany, diversifyKey, formatSalary, postingAgeDays, scoreSourceTrust, workableFor, type ProfilePrefs } from "@jobflow/core";
 import { ensureTenant } from "./tenant.js";
 import { corpusEmbedder } from "./embedder.js";
 import { corpusSyncing, startCorpusSync } from "./sync.js";
@@ -31,11 +31,32 @@ export interface FeedCard {
   ats: string;
   ageDays: number;
   atsDirect: boolean;
-  location: { mode: string; label: string; remoteGeo: string; country: string | null; confidence: number };
+  /**
+   * `label` is the whole plain-language line every surface shows as is ("Remote · worldwide",
+   * "Hybrid · München, Germany", "Onsite · Bengaluru, India + Singapore"); `places` lists
+   * every place for the Job page. `country` is the primary country's name (never the
+   * legacy region "Europe" when the country is known); `countries` are ISO-2 codes.
+   */
+  location: {
+    mode: string;
+    label: string;
+    place: string;
+    places: string[];
+    remoteGeo: string;
+    country: string | null;
+    countries: string[];
+    confidence: number;
+  };
   /** parsed years-of-experience the JD asks for (§11.2); nulls when unstated. */
   experience: { min: number | null; max: number | null; fit: "ok" | "stretch" | "far" | null };
-  /** true when the role is workable from India (onsite/hybrid IN, or IN-ok/worldwide remote). */
-  indiaWorkable: boolean;
+  /**
+   * workable for THIS user: an office in their home country or a market, or a remote role
+   * open to where they live / a region they can work from. null = can't tell (no home or
+   * markets set, or the posting's place is unknown). Region-neutral; a view signal only.
+   */
+  workable: boolean | null;
+  /** posted by a staffing agency / third-party recruiter, not the employer */
+  agency: boolean;
   /** the employer is an IT-services / outsourcing firm (company tagged "services"). */
   services: boolean;
   /** source trust 0..1 (§11): source prior × listing signals — real, open, answered. */
@@ -102,8 +123,8 @@ export type PostingView = "bookmarks" | "archived" | "invalidated";
 
 /** Options for reading a tenant's feed. */
 export interface FeedOptions {
-  /** soft VIEW filter (never a hard exclusion, invariant #4): only India-workable roles. */
-  indiaOnly?: boolean;
+  /** soft VIEW filter (never a hard exclusion, invariant #4): only roles workable for you (`FeedCard.workable`). */
+  workableOnly?: boolean;
   /**
    * a saved search (by id) or an ad-hoc query applied as a VIEW: it hides only on
    * confidently-known values, never rescores, and the hidden counts are returned.
@@ -224,9 +245,9 @@ export async function getFeed(repo: Repository, tenantId: string, opts: FeedOpti
       matches = await repo.listMatches(tenantId, limit);
     }
   }
-  if (opts.indiaOnly) matches = matches.filter((m) => isIndiaWorkable(m.posting.location));
+  if (opts.workableOnly && profile) matches = matches.filter((m) => workableFor(m.posting.location, profile.prefs) !== false);
   // the spread runs on what is SHOWN (after the view), so its windows are the page's
-  const order = (ms: typeof matches) => (spread ? diversifyByCompany(ms, (m) => diversifyKey(m.posting.companyName)) : ms);
+  const order = (ms: typeof matches) => (spread ? diversifyByCompany(ms, (m) => diversifyKey(m.posting.companyName), { scoreOf: (m) => m.score }) : ms);
   if (opts.view) {
     const query = typeof opts.view === "string" ? (await repo.getSavedSearch(tenantId, opts.view))?.query : opts.view;
     if (query) {
@@ -292,6 +313,8 @@ interface CardCtx {
   archived: Set<string>;
   /** companies tagged "services" (IT-services / outsourcing employers). */
   servicesCompanyIds: Set<string>;
+  /** the onboarded profile's region prefs — for `workable` (null before onboarding) */
+  prefs: ProfilePrefs | null;
 }
 
 /** Everything `buildCard` needs beyond the posting, loaded once per request. */
@@ -308,6 +331,7 @@ async function cardCtx(repo: Repository, tenantId: string, companies?: Awaited<R
     bookmarked: userState.bookmarked,
     archived: userState.archived,
     servicesCompanyIds: new Set(cos.filter((c) => c.tags.includes("services")).map((c) => c.id)),
+    prefs: isOnboarded(profile) && profile ? profile.prefs : null,
   };
 }
 
@@ -318,11 +342,13 @@ function buildCard(
   ctx: CardCtx,
 ): FeedCard {
   const ageDays = Math.floor(postingAgeDays(p)); // source publish date, else first seen
+  const where = describeLocation(p.location);
+  const trust = scoreSourceTrust(p);
   return {
     id: p.id,
     companyId: p.companyId,
     title: p.title,
-    company: p.companyName,
+    company: companyDisplayName(p.companyName),
     score: m?.score ?? 0,
     archetype: p.roleArchetype,
     source: p.source,
@@ -332,15 +358,19 @@ function buildCard(
     atsDirect: p.atsType !== "unknown",
     location: {
       mode: p.location.mode,
-      label: [p.location.city, p.location.country].filter(Boolean).join(", "),
+      label: where.label,
+      place: where.place,
+      places: where.places,
       remoteGeo: p.location.remoteGeo,
-      country: p.location.country,
+      country: where.country,
+      countries: where.countries,
       confidence: p.location.confidence,
     },
     experience: { min: p.experience.min, max: p.experience.max, fit: experienceFit(p.experience.min, ctx.yoe) },
-    indiaWorkable: isIndiaWorkable(p.location),
+    workable: ctx.prefs ? workableFor(p.location, ctx.prefs) : null,
+    agency: trust.agency,
     services: ctx.servicesCompanyIds.has(p.companyId),
-    trust: Math.round(scoreSourceTrust(p).score * 100) / 100,
+    trust: Math.round(trust.score * 100) / 100,
     level: p.levelBand,
     levelNote: m?.levelNote ?? null,
     stackNote: m?.stackNote ?? null,

@@ -1856,6 +1856,13 @@ input[type="range"] {
   flex-direction: column;
   gap: 6px;
 }
+.match__more {
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+.match__more a {
+  color: var(--text-2);
+}
 .match__flag {
   display: flex;
   gap: var(--s-2);

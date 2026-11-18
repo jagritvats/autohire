@@ -442,3 +442,131 @@ uses the primary country as before (in-memory stores keep the field).
 
 Left: comma-separated city lists in one segment ("London, Berlin") still give one country;
 `dedup`'s location compatibility and the salary market still read the primary country only.
+*Both done in the fourth pass (next section); the db patch landed as migration 0019.*
+
+## Follow-ups (2026-11-18, fourth pass): place lists, named countries, automatic re-normalization
+
+Measured on one live scratch corpus (sample persona, presets `india`, `us`, `eu-uk`, one
+default `jobflow sync`: 366 boards + 12 feeds, 22,354 active postings, 14,085 of them with
+stored location text — the rest predate `location_raw` and keep their stored location until
+their board's next poll). Old parser = the third pass's `location.ts`, new = this one, on the
+same rows. Fixtures: `packages/core/test/location-lists.test.ts`,
+`packages/pipeline/test/renormalize-version.test.ts`, `packages/adapters/test/cutshort.test.ts`.
+
+| rows with location text (14,085) | old | new |
+|---|---|---|
+| no country | 584 (4.1%) | 347 (2.5%) |
+| confidence < 0.5 | 473 (3.4%) | 210 (1.5%) |
+| primary country "Europe" | 2,867 (20.4%) | 61 (0.4%) |
+| naming 2+ countries | 683 | 686 |
+
+The 347 left are almost all not places: bare "Remote" / "Global" / "Worldwide" / "North
+America" / "APAC" (≈230), "N Locations" and "Multiple Locations" (≈55), "Headquarter", plus
+one-off towns (Buc, Zipf, Waukesha) and ambiguous names (Santiago, a bare Birmingham).
+
+- **Comma-only place lists.** Each comma part is classified (country name, state / province /
+  region code or name, known city, unknown); a qualifier that follows a place decides its
+  country ("Dublin, OH", "London, Ontario", "Perth, Scotland", "Chennai, TN" — Tamil Nadu,
+  "Bengaluru, KA"), and a list counts only when 2+ parts resolve to distinct countries
+  ("London, Berlin" → GB, DE; "Lagos, Cairo, Lahore" → NG, EG, PK). On this corpus that adds
+  few rows (comma lists here are mostly "City, Region, Country"); the first version read
+  Indian state codes as countries ("Bengaluru, KA, India" → IN + "KA", 400+ rows) and was
+  fixed before it landed, which the table above includes.
+- **A real primary country.** A European place reports its country ("München" → Germany);
+  the region "Europe" stays only when no European country is named. `parsedCountryMatches`
+  keeps the region rule (Germany vs FR is null, as "Europe" was), so nothing built on
+  `false` widens; the scorer's location-label match adds "europe" for a European place so
+  the eu-uk preset's `europe` preference still matches. The per-place reading also overrides a
+  stray whole-string hint ("Durham, United Kingdom" was the US). Older rows keep "Europe"
+  until re-normalized; every reader still accepts it.
+- **Country words are not cities.** "Remote - Canada", "Remote - India", "United States",
+  "UK", a bare state code: `city` null (city-states keep theirs). "India - Hyderabad" now
+  takes Hyderabad.
+- **Code forms.** Workday's ISO-3 prefixes ("IND BNGL FL2-3", "DEU - Bayern - …"),
+  "IND-BLR-…" site codes, "Remote - MA" / "TX - Frisco" (not CA or ME alone: ambiguous),
+  every US state code after a comma (minus AR / DE / ID / IN / MT, which are countries too),
+  "U.S." with a trailing dot (53 "Remote, U.S." rows went `unknown` → `us_only`), and
+  "Home based - …" as remote (31 rows were onsite).
+- **More places:** larger German, French, Italian, British, Dutch, Polish, Spanish towns;
+  Indian tier-2 cities; Tunisia, Morocco, Mauritius, Kazakhstan, Ecuador and a few more;
+  Albania and North Macedonia as European.
+- **Dedup** reads every country: {US,GB} vs {GB} compatible (a multi-office posting's one
+  stored city is only its first office, so the shared country decides); {IN} vs {US} not; an
+  older row's "Europe" pairs with a European country.
+- **Salary market.** The estimate is per posting in a shared corpus, not per viewer, so the
+  market is the PRIMARY country's. One exception: a posting that STATES its currency is priced
+  in the first named country whose market uses that currency (GBP on "New York; London" is a
+  London comparable, not a dropped US one); single-country postings and remote roles open
+  beyond their countries never move. Backtest on a copy of the corpus, stored (old-parser)
+  locations → re-normalized, median error by confidence band (`< 0.30 / 0.30–0.50 / 0.50–0.70
+  / ≥ 0.70`): all-evidence 58% / 28% / 20% / 10% → 49% / 29% / 20% / 10%; leak-free 40% / 21% /
+  17% / 13% → 37% / 21% / 17% / 12% (5,591 → 5,595 backtested). Monotonic before and after.
+  (No calibration rows on this corpus, so calibrated = uncalibrated.)
+- **Cutshort** sets `postedByAgency` from its own `hiringForClient` (34 of 100 on a live
+  listing page); a "no" falls through to the name/JD rule.
+- **Titles:** "SW Engineer", "Software Engineering Intern / Senior Associate" are engineering
+  (+40 postings out of "other"). The other engineering-looking "other" titles are solutions,
+  sales, support, design, hardware, security and QA roles — correctly outside the archetypes.
+
+**Automatic re-normalization.** `NORMALIZE_VERSION` (core) is recorded per store in
+`store_meta` (migration 0020); `pollAll` re-derives stored postings once when the code's
+version is newer, before polling, so the CLI's `sync`, the web app's background sync, the
+worker and MCP all pick up a parser fix and re-rank as they already do after a sync. A store
+recorded by newer code is left alone. `jobflow renormalize` forces a run and prints a summary.
+On this corpus (PGlite): 22,354 scanned → 5,334 changed (237 newly placed, 24 now
+multi-country, agency +5), 21 s including the re-rank.
+
+Left: stored rows that predate `location_raw` (8,269 here) re-parse only when their board is
+polled again; `renormalize` does not re-derive titles (a re-poll does); the stored `dedup_key`
+is not refreshed by a re-normalize (dedup recomputes keys, the don't-double-apply guard reads
+the stored one); "Toronto, ON, Canada, New York, NY" keeps the US as primary (US hints outrank
+Canada's), with both countries listed.
+
+
+## Feed review (2026-11-18, fourth pass): would a job seeker trust the top 50?
+
+Four fictional personas, each a throwaway PGlite store synced twice with its presets: the
+sample persona (India, Java backend, 3 yrs; `india`, 9,381 postings), a senior frontend
+developer in Germany wanting EU remote (`eu-uk,global-remote`, 5,497), a new-grad data analyst
+in the US (`us`, 5,965) and a Canadian backend developer open to US remote
+(`canada,global-remote`, 3,110). The top 50 of `jobflow feed --json` and ~10 `jobflow show`
+per persona were read by hand and counted with a script (not committed); "after" is a
+`jobflow rank` of the same stores with the fixed code. Regression tests:
+`packages/core/test/card-copy.test.ts`, `packages/service/test/feed-cards.test.ts`,
+`packages/adapters/test/text-cleanup.test.ts`.
+
+| In the top 50 (IN / DE-FE / US-DA / CA-BE) | before | after |
+|---|---|---|
+| broken location line (empty for remote, "Canada, Canada", "Poland, Europe", "GURGAON") | 10 / 13 / 7 / 22 | 0 / 0 / 0 / 0 |
+| fit note names the wrong main language | 5 / 6 / 1 / 4 | 0 / 1 / 0 / 0 |
+| card notes with jargon ("direct match", "~1-2wk ramp", `distributed_systems`) | 50 / 49 / 45 / 44 | 0 / 0 / 0 / 0 |
+| "JD requires x (you don't list it — stretch)" flags | 10 / 6 / 10 / 9 | 0 / 0 / 0 / 0 |
+| open > 90 days | 1 / 14 / 10 / 8 | 0 / 2 / 4 / 0 |
+| far-off role type (data/ML/SRE/mobile for a frontend dev; SWE for an analyst) | 1 / 7 / 34 / 0 | 0 / 2 / 20 / 0 |
+| data/analytics-titled roles for the analyst | 0 | 7 |
+| intermediaries flagged (agency, freelance marketplace) | 1 / 0 / 0 / 0 | 1 / 2 / 0 / 0 |
+| company legal-form noise ("Pvt. Ltd.", ", Inc.") | 2 / 1 / 0 / 0 | 0 / 0 / 0 / 0 |
+
+Root causes and fixes (match, service card, adapters, CLI/web/MCP card text):
+
+- **Location line**: three surfaces each built their own from `city` + the legacy `country`
+  ("Europe" for most of Europe; remote roles had an empty label). `describeLocation`
+  (`core/match/display.ts`) builds one line from `countries`, used by the card DTO, the CLI, the
+  web and MCP.
+- **Main language**: `jdSkills` come in dictionary order, so `jdLangs[0]` named Java on Go and
+  Kotlin roles. `primaryLanguage` reads the title, then the most-mentioned language in the JD.
+- **Role-type fit** was one flat 0.65 for any non-target engineering role; it is now a
+  directional table per target. "Data Analyst" / "Analytics Engineer" titles are filed under
+  `other` by the title normalizer (76 of 82 analyst titles on the US corpus); for a data target
+  the scorer reads them as data roles (normalizer fix still wanted, see below).
+- **Stale reqs**: freshness weighs 0.08, so a 300-day req sat among this week's; a soft
+  ×0.95/0.9/0.85 past 60/120/180 days.
+- **Company spread** deferred a company's 4th role below everything; it now comes back once the
+  next card would score more than 12 points less, with "+N more at … further down".
+- **Markup**: Greenhouse sends entity-escaped HTML, which `htmlToText` unescaped after stripping
+  tags; numeric entities were never decoded. On the IN corpus 4,155 of 9,381 JDs carried markup
+  or entities (166 after, all truncation artefacts of the dump; a live GitLab board: 0), 1,294
+  hid "N+ years" and 234 hid C++. Stored rows clean up on their next poll.
+
+Left for other owners: see the report of this pass (title normalizer, skills dictionary,
+salary display, presets tags, same role posted per country).

@@ -24,17 +24,19 @@ export const SyncStatus = z.enum(["running", "done", "cancelled", "failed"]);
 export type SyncStatus = z.infer<typeof SyncStatus>;
 
 /**
- * The phases, in the order a run goes through them. `discover` registers new seed
+ * The phases, in the order a run goes through them. `renormalize` re-derives stored
+ * postings once after a parser upgrade (skipped when the store is current); `discover` registers new seed
  * employers and resolves them to boards; `boards` polls ATS boards; `feeds` runs discovery
  * feeds, your own sources and saved searches; `resolve` upgrades companies found in feeds to
  * their boards (polled next run); `expire` retires postings nobody re-confirmed; `process`
  * re-derives what's computed from the corpus (normalization, pay estimates); `rank` scores it.
  */
-export const SYNC_PHASES = ["discover", "boards", "feeds", "resolve", "expire", "process", "rank"] as const;
+export const SYNC_PHASES = ["renormalize", "discover", "boards", "feeds", "resolve", "expire", "process", "rank"] as const;
 export const SyncPhaseId = z.enum(SYNC_PHASES);
 export type SyncPhaseId = z.infer<typeof SyncPhaseId>;
 
 export const SYNC_PHASE_LABEL: Record<SyncPhaseId, string> = {
+  renormalize: "Re-check stored jobs",
   discover: "Find new companies",
   boards: "Check job boards",
   feeds: "Read feeds and searches",
