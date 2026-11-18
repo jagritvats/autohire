@@ -1,5 +1,5 @@
 import type { RawPosting } from "@jobflow/core";
-import { COUNTRY_NAMES, DETAIL_CAP, decodeEntities, htmlToText, httpJson, httpText, mapPool, pickForDetail, type FetchTarget, type SourceAdapter } from "../types.js";
+import { COUNTRY_NAMES, DETAIL_CAP, markPartial, decodeEntities, htmlToText, httpJson, httpText, mapPool, pickForDetail, type FetchTarget, type SourceAdapter } from "../types.js";
 
 /**
  * Radancy TalentBrew career sites (Tier 2: the JSON endpoint the site's own search page
@@ -68,7 +68,9 @@ export class TalentBrewAdapter implements SourceAdapter {
 
     const items: TbListItem[] = [];
     let pages = Infinity;
+    let fetchedPages = 0;
     for (let page = 1; page <= pages && (page - 1) * PAGE < MAX_LIST; page++) {
+      fetchedPages = page;
       const res = await httpJson<TbResults>(`https://${host}/search-jobs/results?${talentBrewQuery(page, geo)}`, {
         headers: { "X-Requested-With": "XMLHttpRequest" },
         timeoutMs: 30_000,
@@ -92,7 +94,7 @@ export class TalentBrewAdapter implements SourceAdapter {
     });
 
     const company = host.replace(/^(www|jobs|careers)\./, "").split(".")[0] ?? host;
-    return unique.map((i) => {
+    const out = unique.map((i) => {
       const d = details.get(i.jobId);
       const places = d ? ldPlaces(d) : [];
       const where = places.length ? places.join("; ") : i.location;
@@ -115,6 +117,8 @@ export class TalentBrewAdapter implements SourceAdapter {
         raw: { path: i.path, reqId: ldId(d?.identifier) } as Record<string, unknown>,
       } satisfies RawPosting;
     });
+    // stopped at MAX_LIST with pages left: never a markStale diff (invariant #5)
+    return fetchedPages < pages && fetchedPages * PAGE >= MAX_LIST ? markPartial(out) : out;
   }
 }
 

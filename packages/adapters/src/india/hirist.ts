@@ -48,6 +48,9 @@ export class HiristAdapter implements SourceAdapter {
   async fetch(target: FetchTarget): Promise<RawPosting[]> {
     const limit = target.limit ?? 60;
     const out: RawPosting[] = [];
+    // the relevance-sorted pages overlap (verified 2026-11: page 2 repeats the tail of page
+    // 1) — dedupe, and keep paging until `limit` distinct jobs
+    const seen = new Set<number>();
     for (let page = 0; out.length < limit && page < 10; page++) {
       const qs = new URLSearchParams({ query: target.query ?? "backend developer", page: String(page), size: "20" });
       if (target.params?.minexp != null) qs.set("minexp", String(target.params.minexp));
@@ -56,7 +59,11 @@ export class HiristAdapter implements SourceAdapter {
         headers: { version: "2", Origin: "https://www.hirist.tech", Referer: "https://www.hirist.tech/" },
       });
       const jobs = res?.data ?? [];
-      for (const j of jobs) out.push(toRaw(j));
+      for (const j of jobs) {
+        if (seen.has(j.id)) continue;
+        seen.add(j.id);
+        out.push(toRaw(j));
+      }
       if (!res?.hasMore || jobs.length === 0) break;
     }
     return out.slice(0, limit);

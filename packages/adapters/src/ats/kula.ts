@@ -1,5 +1,5 @@
 import type { RawPosting } from "@jobflow/core";
-import { htmlToText, httpJson, type FetchTarget, type SourceAdapter } from "../types.js";
+import { htmlToText, httpJson, markPartial, type FetchTarget, type SourceAdapter } from "../types.js";
 
 /**
  * Kula (Tier 2: the JSON behind careers.kula.ai pages, no auth) — used by Indian
@@ -38,14 +38,16 @@ export class KulaAdapter implements SourceAdapter {
     const slug = target.slug;
     if (!slug) return [];
     const posts: KulaPost[] = [];
-    for (let page = 1; page <= 10; page++) {
+    let pages = 1;
+    for (let page = 1; page <= MAX_PAGES; page++) {
       const qs = new URLSearchParams({ accountName: slug, type: "ats_job_post.index", items: "99", page: String(page) });
       const res = await httpJson<KulaResponse>(`https://careers.kula.ai/api/internal/ats_job_posts?${qs}`);
       if (!res) return []; // all-or-nothing: a partial list would read as closed roles
       posts.push(...(res.data ?? []));
-      if (page >= (res.meta?.pages ?? 1)) break;
+      pages = res.meta?.pages ?? 1;
+      if (page >= pages) break;
     }
-    return posts
+    const out = posts
       .filter((p) => p.listed !== false && (!p.end_at || new Date(p.end_at).getTime() > Date.now()))
       .map((p) => {
         const offices = p.ats_job?.offices ?? [];
@@ -70,5 +72,9 @@ export class KulaAdapter implements SourceAdapter {
           raw: { id: p.id } as Record<string, unknown>,
         } satisfies RawPosting;
       });
+    // stopped at MAX_PAGES with pages left: never a markStale diff (invariant #5)
+    return pages > MAX_PAGES ? markPartial(out) : out;
   }
 }
+
+const MAX_PAGES = 10;
