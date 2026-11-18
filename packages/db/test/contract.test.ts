@@ -595,6 +595,23 @@ describe.each(stores)("Repository contract — %s", (name, open) => {
     expect((await repo.getPosting(p.id))?.location.countries).toBeUndefined();
   });
 
+  it("a stated salary keeps how it was stated (period / basis / equity); annual figures unchanged", async () => {
+    const co = await repo.upsertCompany({ name: "Units Co", nameNorm: `units-${randomUUID()}` });
+    const p = await repo.upsertPosting(
+      postingFor(co.id, {
+        salary: { min: 66_000, max: 78_000, currency: "EUR", source: "jd_direct", confidence: "high", period: "month", basis: "ote", equity: true },
+      }),
+    );
+    expect((await repo.getPosting(p.id))?.salary).toMatchObject({ min: 66_000, max: 78_000, currency: "EUR", period: "month", basis: "ote", equity: true });
+    await repo.updatePostingSalary(p.id, { min: 104_000, max: 145_600, currency: "USD", source: "jd_direct", confidence: "medium_high", period: "hour", basis: null, equity: false });
+    expect((await repo.getPosting(p.id))?.salary).toMatchObject({ min: 104_000, max: 145_600, period: "hour", equity: false });
+    // a band written without the new fields (an older writer) reads back as before: no period
+    const legacy = await repo.upsertPosting(postingFor(co.id, { salary: { min: 1, max: 2, currency: "USD", source: "jd_direct", confidence: "low" } }));
+    const got = (await repo.getPosting(legacy.id))?.salary;
+    expect(got?.period).toBeUndefined();
+    expect(got?.basis ?? null).toBeNull();
+  });
+
   it("store meta: absent → null, set, overwrite (no TTL)", async () => {
     const key = `test_${randomUUID()}`;
     expect(await repo.getStoreMeta(key)).toBeNull();

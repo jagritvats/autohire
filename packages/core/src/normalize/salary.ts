@@ -26,6 +26,16 @@ import { PERIOD_FACTOR } from "../salary/period.js";
  * (`PERIOD_FACTOR`) so every comparison reads one unit.
  */
 
+/**
+ * Version of the stated-salary parse. A store records the version its bands were parsed with
+ * (`store_meta.salary_parse_version`); `pollAll` re-parses stored postings once when this is
+ * newer, so a local install picks up an extractor fix on its next sync. BUMP IT whenever
+ * `parseStatedSalary` returns something different for the same input.
+ * History: 1 = stated period / basis / equity, country-resolved "$" / "kr" / "¥", inferred months.
+ */
+export const SALARY_PARSE_VERSION = 1;
+export const SALARY_PARSE_VERSION_KEY = "salary_parse_version";
+
 export interface SalaryParseOptions {
   /** the text is the source's own salary field (ATS/aggregator pay string), not JD prose */
   structured?: boolean;

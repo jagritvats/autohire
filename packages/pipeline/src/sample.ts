@@ -45,6 +45,7 @@ export function sampleProfile(tenantId: string = DEFAULT_TENANT): Profile {
     prefs: {
       salaryFloor: 2_000_000,
       currency: "INR",
+      display: { currency: "auto", period: "year" },
       homeCountry: "IN",
       markets: ["IN"],
       contact: {

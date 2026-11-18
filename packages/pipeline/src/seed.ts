@@ -177,6 +177,7 @@ export function blankProfile(tenantId: string = DEFAULT_TENANT): Profile {
     prefs: {
       salaryFloor: 0,
       currency: "USD",
+      display: { currency: "auto", period: "year" },
       homeCountry: "",
       markets: [],
       contact: {

@@ -29,7 +29,7 @@ export interface FxTable {
  * Shipped table. Source: ECB euro foreign-exchange reference rates, rebased to USD, as
  * served by api.frankfurter.dev/v1/latest?base=USD on 2026-11-18. AED and SAR are not ECB
  * currencies; both are pegged to the USD (AED 3.6725, SAR 3.75 — UAE / Saudi central banks).
- * Refresh: `pnpm --filter @jobflow/worker fx` stores a newer table; edit this one when rates
+ * Any sync (and `pnpm --filter @jobflow/worker salary`) caches a newer table; edit this one when rates
  * move materially between releases.
  */
 export const FX_AS_OF = "2026-11-18";
