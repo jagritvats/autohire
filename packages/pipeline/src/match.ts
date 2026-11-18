@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { dedup, rankPostings, type Match, type Posting, type Profile } from "@jobflow/core";
 import type { Repository } from "@jobflow/db";
 import { localEmbedder, type Embedder } from "./embedder.js";
+import { loadFxRates } from "./fx.js";
 
 export interface RebuildResult {
   scored: number;
@@ -53,6 +54,8 @@ export async function rebuildMatches(
   } = {},
 ): Promise<RebuildResult> {
   const embedder = opts.embedder ?? localEmbedder;
+  // score salary against the store's newest cached FX rates (a no-op when none are cached)
+  await loadFxRates(repo).catch(() => null);
 
   const active = await repo.listActivePostings();
 

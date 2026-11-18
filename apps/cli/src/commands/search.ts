@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import type { Posting, SearchQuery, SourceKind } from "@jobflow/core";
+import { formatAmount, type Posting, type SearchQuery, type SourceKind } from "@jobflow/core";
 import { searchCapableAdapters } from "@jobflow/adapters";
 import { isOnboarded, loadProfile, makeSearchQuery, presetFeedSources, tokenizeSearch, type SearchFlags } from "@jobflow/pipeline";
 import { saveSearch, searchJobs } from "@jobflow/service";
@@ -136,7 +136,7 @@ export function describeQuery(q: SearchQuery): string {
   if (q.remote === "exclude") parts.push("on-site");
   if (q.locations.length) parts.push(q.locations.map((l) => [l.city, l.country].filter(Boolean).join(", ")).join(" | "));
   if (q.seniority.length) parts.push(q.seniority.join("/"));
-  if (q.minSalary) parts.push(`≥ ${q.minSalary.amount.toLocaleString("en")} ${q.minSalary.currency}`);
+  if (q.minSalary) parts.push(`≥ ${formatAmount(q.minSalary.amount, q.minSalary.currency, q.minSalary.period)}`);
   if (q.postedWithinDays) parts.push(`≤ ${q.postedWithinDays}d old`);
   if (q.mustSkills.length) parts.push(`must: ${q.mustSkills.join(", ")}`);
   if (q.sources.length) parts.push(`sources: ${q.sources.join(", ")}`);
@@ -150,7 +150,7 @@ export function register(program: Command, ctx: Ctx): void {
     .description("search live job sources and rank the results against your profile")
     .argument("[query...]", 'what you\'re looking for, e.g. "backend engineer"')
     .option("-n, --limit <n>", "results to show", "15")
-    .option("--sort <by>", "score (default) | relevance")
+    .option("--sort <by>", "score (default) | relevance | pay (highest annual pay first, compared in one currency)")
     .option("--format <fmt>", "cards (default) | table")
     .option("--ingest", "also add what was found to your corpus/feed")
     .option("--save-as <name>", "save this as a saved search (it then runs on every sync and works as a feed view)");
@@ -171,7 +171,7 @@ Then: jobflow show 1 · jobflow tailor 1 · jobflow apply 1`,
       throw usage("Say what to search for, e.g. jobflow search \"backend engineer\" --remote");
     }
     const limit = Math.max(1, Math.min(100, Number(o.limit) || 15));
-    if (o.sort && o.sort !== "score" && o.sort !== "relevance") throw usage("--sort must be score or relevance");
+    if (o.sort && o.sort !== "score" && o.sort !== "relevance" && o.sort !== "pay") throw usage("--sort must be score, relevance or pay");
     const repo = await ctx.repo();
     const profile = await loadProfile(repo, ctx.tenantId);
     const scored = isOnboarded(profile);
@@ -180,7 +180,7 @@ Then: jobflow show 1 · jobflow tailor 1 · jobflow apply 1`,
     const started = Date.now();
     let r: Awaited<ReturnType<typeof searchJobs>>;
     try {
-      r = await searchJobs(repo, ctx.tenantId, query, { ingest: !!o.ingest, limit, sort: o.sort as "score" | "relevance" | undefined, withPostings: true });
+      r = await searchJobs(repo, ctx.tenantId, query, { ingest: !!o.ingest, limit, sort: o.sort as "score" | "relevance" | "pay" | undefined, withPostings: true });
     } finally {
       spin.stop();
     }

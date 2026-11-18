@@ -18,7 +18,7 @@ const Body = z.object({
   sources: z.array(SourceKind).max(20).optional(),
   ingest: z.boolean().optional(),
   limit: z.number().int().min(1).max(100).optional(),
-  sort: z.enum(["score", "relevance"]).optional(),
+  sort: z.enum(["score", "relevance", "pay"]).optional(),
 });
 
 /**

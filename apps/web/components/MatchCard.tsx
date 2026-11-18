@@ -134,10 +134,9 @@ export function MatchCard({
           )}
           {card.comp && pay && (
             <Badge estimate={pay.estimate} className="tag comp" data-estimate={pay.estimate || undefined} title={pay.title}>
-              {pay.estimate ? "~" : ""}
               {card.comp.label}{" "}
               <span className="conf">
-                · {pay.estimate ? `est ${Math.round((card.comp.confidenceScore ?? 0) * 100)}%` : card.comp.confidence}
+                · {pay.estimate ? `${Math.round((card.comp.confidenceScore ?? 0) * 100)}%` : card.comp.confidence}
               </span>
             </Badge>
           )}

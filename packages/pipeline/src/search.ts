@@ -4,6 +4,9 @@ import {
   SearchQuery,
   applyView,
   countryCodeFromText,
+  parseMoneyInput,
+  payForSort,
+  resolveDisplayCurrency,
   effectiveMarkets,
   emptyHiddenCounts,
   normalizePosting,
@@ -14,6 +17,7 @@ import {
   type Posting,
   type Profile,
   type RawPosting,
+  type SalaryPeriod,
   type SavedSearch,
   type ScoredMatch,
   type SearchQueryInput,
@@ -113,8 +117,11 @@ export interface AdhocSearchOptions {
   ingest?: boolean;
   /** max results returned (default 50) */
   limit?: number;
-  /** "score" (default) or "relevance" (the query's terms first, score breaks ties) */
-  sort?: "score" | "relevance";
+  /**
+   * "score" (default), "relevance" (the query's terms first, score breaks ties) or "pay"
+   * (annual pay in ONE currency — stated top, else the estimate's median — via FX; unknown last)
+   */
+  sort?: "score" | "relevance" | "pay";
   now?: number;
   /** adapters to use instead of the registry's (tests) — still tier-checked */
   adapters?: SourceAdapter[];
@@ -241,8 +248,14 @@ export async function adhocSearch(
   }
 
   const view = applyView(scored, q, { now, presetsOf: presetsForPosting });
+  const payCurrency = resolveDisplayCurrency(profile.prefs) ?? profile.prefs.currency;
+  const pay = new Map(opts.sort === "pay" ? view.shown.map((r) => [r, payForSort(r.posting, payCurrency) ?? -1] as const) : []);
   const ranked = [...view.shown].sort((a, b) =>
-    opts.sort === "relevance" ? b.relevance - a.relevance || b.match.score - a.match.score : b.match.score - a.match.score || b.relevance - a.relevance,
+    opts.sort === "pay"
+      ? pay.get(b)! - pay.get(a)! || b.match.score - a.match.score
+      : opts.sort === "relevance"
+        ? b.relevance - a.relevance || b.match.score - a.match.score
+        : b.match.score - a.match.score || b.relevance - a.relevance,
   );
 
   const result: AdhocSearchResult = {
@@ -328,7 +341,7 @@ const FLAG_ALIASES: Record<string, keyof SearchFlags | "onsite"> = {
   tag: "preset",
 };
 const BOOLEAN_FLAGS = new Set(["remote", "onsite"]);
-const CURRENCY_CODE = /^(USD|EUR|GBP|INR|CAD|AUD|SGD|CHF|JPY|NZD|SEK|NOK|DKK|PLN|AED|BRL|MXN|ZAR)$/i;
+const CURRENCY_CODE = /^(USD|EUR|GBP|INR|CAD|AUD|SGD|CHF|JPY|NZD|SEK|NOK|DKK|PLN|AED|BRL|MXN|ZAR|HKD|CZK|HUF|RON|TRY|ILS|KRW|CNY)(?:\/(?:yr|year|mo|month|wk|week|day|hr|hour))?$/i;
 
 function list(v: string | string[] | undefined, sep = /[,;]/): string[] {
   if (v == null) return [];
@@ -349,16 +362,9 @@ function parseLoc(s: string): { city: string | null; country: string | null } | 
   return { city, country: countryCodeFromText(city) };
 }
 
-const MULT: Record<string, number> = { k: 1e3, l: 1e5, lpa: 1e5, lakh: 1e5, lakhs: 1e5, m: 1e6, cr: 1e7 };
-
-function parseMoney(v: string | number, currency?: string): { amount: number; currency: string } | null {
-  if (typeof v === "number") return Number.isFinite(v) && v > 0 ? { amount: v, currency: (currency ?? "USD").toUpperCase() } : null;
-  const m = v.replace(/,/g, "").trim().match(/^([A-Za-z$€£₹]{0,3})\s*(\d+(?:\.\d+)?)\s*(lpa|lakhs?|cr|k|l|m)?\s*([A-Za-z$€£₹]{0,3})$/i);
-  if (!m) return null;
-  const sym = (m[1] || m[4] || currency || "USD").toUpperCase();
-  const cur = sym === "$" ? "USD" : sym === "€" ? "EUR" : sym === "£" ? "GBP" : sym === "₹" ? "INR" : sym;
-  const amount = Number(m[2]) * (m[3] ? MULT[m[3].toLowerCase()] ?? 1 : 1);
-  return amount > 0 ? { amount, currency: /^[A-Z]{3}$/.test(cur) ? cur : "USD" } : null;
+/** "40L INR", "$120k", "5000 EUR/mo" → an ANNUAL amount — the same grammar postings are parsed with (core). */
+function parseMoney(v: string | number, currency?: string): { amount: number; currency: string; period: SalaryPeriod } | null {
+  return parseMoneyInput(v, currency);
 }
 
 function parseDays(v: string | number): number | null {
