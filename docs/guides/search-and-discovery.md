@@ -61,8 +61,10 @@ pnpm jobflow feed --search remote-backend       # your feed, through that search
 pnpm jobflow searches rm remote-backend
 ```
 
-Pass the flags as separate arguments, not inside the quoted query: in this release,
-`searches add name '"backend engineer" --remote --posted 7d'` (all one string) is misparsed.
+The query can also be one quoted string with the flags inside it:
+`searches add remote-backend '"backend engineer" --remote --posted 7d'` saves the same search
+as the separate-argument form above. Only the search flags work inside the string; put
+options such as `--no-source` outside it.
 
 A saved search runs on each `jobflow sync` (daily by default) and its results join your
 feed. With `--no-source` it fetches nothing and only works as a view over your feed. In the

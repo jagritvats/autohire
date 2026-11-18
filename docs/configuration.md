@@ -11,7 +11,7 @@ not keep in a file (your LLM key, preferences, sources) are set with `jobflow co
 | Var | Default | What it does |
 |---|---|---|
 | `JOBFLOW_DATA_DIR` | `~/.jobflow` | Where your data lives: the local PGlite database, uploaded résumés, tailored PDFs, the agent's browser profile. Never inside the source tree. |
-| `JOBFLOW_STORE` | `pglite` | `pglite` (durable, zero-setup Postgres-in-WASM under the data dir — the CLI and web app share it; one process writes at a time, so the web app runs the sync schedule itself instead of a separate worker) · `memory` (nothing persists — demos and tests) · `postgres` (use `DATABASE_URL`; needed to run the worker alongside the web app). |
+| `JOBFLOW_STORE` | `pglite` | `pglite` (durable, zero-setup Postgres-in-WASM under the data dir — the CLI and web app share it; one process writes at a time, so the web app runs the sync schedule and the queued maintenance jobs itself instead of a separate worker) · `memory` (nothing persists — demos and tests) · `postgres` (use `DATABASE_URL`; needed to run the worker alongside the web app). |
 | `DATABASE_URL` | _(blank)_ | Your own Postgres. Wins over `JOBFLOW_STORE`. For hosted Postgres append `?sslmode=require`. |
 | `JOBFLOW_SAMPLE_PROFILE` | _(off)_ | `1` starts new profiles as the fictional sample candidate instead of blank. |
 | `JOBFLOW_DEMO_DATA` | _(off)_ | `1` seeds an offline, fully fictional corpus (screenshots, UI work). |
@@ -52,7 +52,7 @@ Grouped by what they unlock. Storage and accounts are covered above.
 | `JOBFLOW_RATE` | `human` | `human` (jittered 0.5–2s) \| `fast`. Keep `human`. |
 | `JOBFLOW_TIER3_SOURCES` | _(empty)_ | Optional env allow-list (csv: `naukri,linkedin,peerlist,wellfound,darwinbox,glassdoor,ambitionbox`). If set, restricts which sources the web can enable. |
 | `JOBFLOW_BROWSER_PROFILE` | `.jobflow/browser-profile` | Path to the Chromium user-data dir the agent drives — point it at a profile **logged into** LinkedIn/Naukri/etc. |
-| `JOBFLOW_CHROMIUM` | _(blank)_ | Path to an installed Chrome/Chromium for `apply --fill` and the local agent, instead of `npx playwright install chromium`. |
+| `JOBFLOW_CHROMIUM` | _(blank)_ | Path to an installed Chrome/Chromium for `apply --fill` and the local agent, instead of `npx playwright install chromium` (the `playwright` package is still needed). `apply --fill` and `doctor` accept it; a path that doesn't exist is reported. |
 | `JOBFLOW_LOCAL_POLL_EVERY_HOURS` | `12` | Unattended schedule: when the last run of an opted-in source is older than this, the agent enqueues it itself (`tier3_poll` for naukri/linkedin/peerlist/wellfound, `local_board_poll` for darwinbox), then drains them one at a time, human-paced. Only while the browser gates are on (both `JOBFLOW_BROWSER=on` and the web master switch), so it's off by default. `0` = off (click-to-run only). |
 
 #### Tier-3 poll targeting — the "good-paying software/engineering in India" sweep
@@ -83,7 +83,7 @@ Some sources sit behind Cloudflare, which turns away anything but a real browser
 ### Polling & discovery (cloud-safe)
 | Var | Default | What it does |
 |---|---|---|
-| `JOBFLOW_POLL_EVERY_HOURS` | `6` | The worker `runner` self-enqueues discover → poll → rank when the last full poll is older than this. `0` disables (use an external cron instead). A local/Docker DB has no other scheduler — the GitHub cron can't reach it. |
+| `JOBFLOW_POLL_EVERY_HOURS` | `6` | The worker `runner` self-enqueues discover → poll → rank when the last full poll is older than this. `0` disables (use an external cron instead). A local/Docker DB has no other scheduler — the GitHub cron can't reach it. On the default local store, `jobflow serve` runs the same schedule itself. |
 | `JOBFLOW_POLL_COUNTRY` | `IN` | ISO country the big-employer boards (Workday, Eightfold, SmartRecruiters, Amazon) are polled for — they filter server-side and otherwise return thousands of global roles. Shapes what is polled; ranking still scores location. |
 | `JOBFLOW_TELEGRAM_CHANNELS` | `gocareers,techuprise_updates,dot_aware` | csv of public Telegram channels to harvest each poll (set it empty to turn harvesting off). Links to company ATS/careers pages become registered boards; the posting itself is always fetched from the board. Scam-pattern posts and posts older than 30 days are skipped; course-funnel / blog / shortener links are dropped. The defaults won a 2026-09 review of ~100 Indian job channels (54–72% direct company links, 1–4 YoE focus, no scams). Optional extras: `jobsinternshipswale` (small, unique), `itreferral_jobs` (LinkedIn-heavy), `remote_devops_jobs` (DevOps/SRE). The big "freshers" channels route 90%+ of links through ad-funded blogs and are skipped. One-off: `pnpm --filter @jobflow/cli harvest --telegram a,b` or `--whatsapp ./export.txt` (a WhatsApp "Export chat" file — never automated). |
 

@@ -134,7 +134,8 @@ are how you watch a niche without repeating yourself.
 | `pnpm jobflow feed --search remote-backend`: your feed through it, with hidden counts | The search's tab on Jobs (`/?view=<id>`) |
 | `pnpm jobflow searches run remote-backend` · `searches rm remote-backend` | **run now** in Search → Saved searches |
 
-Pass flags as separate arguments, as above, rather than inside one quoted string. See
+Flags can go after the query, as above, or inside one quoted string
+(`'"backend engineer" --remote --posted 7d'`); both save the same search. See
 [Search & discovery](search-and-discovery.md#saved-searches).
 
 ## How freshness works in practice

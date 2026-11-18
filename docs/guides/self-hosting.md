@@ -17,7 +17,9 @@ hosted service).
   app's own origin.
 - **API tokens** — Settings → API tokens mints scoped, revocable tokens (`cli`, `extension`,
   `agent`), shown once and stored as hashes. (A token is only needed for the browser
-  extension, the local agent, or a CLI talking to the server.)
+  extension, the local agent, or a script calling the HTTP API with
+  `Authorization: Bearer <token>`. The `cli` scope, labelled "scripts / API" in Settings, is
+  for that. The `jobflow` CLI itself works on its own local store and needs no token.)
 - **Admin-only** — instance-wide jobs (discover, full polls, purges) and registry edits.
 - **LLM keys** — users bring their own; the operator's env key is used for them only with
   `JOBFLOW_OPERATOR_LLM=shared`.

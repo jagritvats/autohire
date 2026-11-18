@@ -58,8 +58,10 @@ What to do:
 - **Nothing is running** (a crash or a killed terminal left the lock behind). The message then
   ends with "If no jobflow process is running, delete the stale .lock file in the data dir":
   delete `~/.jobflow/.lock` (or `$JOBFLOW_DATA_DIR/.lock`).
-- **You want several processes at once**, for example the web app and the worker. Use Postgres
-  instead of PGlite: set `DATABASE_URL` (or use Docker, below).
+- **You want several processes at once**, for example the web app and the
+  [local agent](local-agent.md). Use Postgres instead of PGlite: set `DATABASE_URL` (or use
+  Docker, below). You don't need a separate worker for the web app's maintenance buttons: on
+  the local store, `jobflow serve` runs those jobs itself.
 
 ## A sync finished but there are no jobs
 
@@ -154,14 +156,16 @@ Nothing is saved until you confirm the review. See [Your résumé & profile](res
 | "Form filling is off." | `pnpm jobflow config set automation.fill on` (once). It only ever fills; you always submit. |
 | "Form filling is switched off by JOBFLOW_BROWSER=off." | An explicit `JOBFLOW_BROWSER=off` in your environment or `.env` always wins. Remove it. |
 | "--fill needs Playwright, which isn't installed." | `pnpm add -w playwright && npx playwright install chromium` |
-| "Playwright is installed but its Chromium isn't." | `npx playwright install chromium` |
+| "Playwright is installed but its Chromium isn't." | `npx playwright install chromium`, or set `JOBFLOW_CHROMIUM` to a Chrome/Chromium you already have (below) |
+| "JOBFLOW_CHROMIUM is set to …, which doesn't exist." | Point it at your browser binary (for example `/usr/bin/google-chrome`, or `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome` on macOS), or unset it |
 | "No contact email in your profile — the form needs one." | `pnpm jobflow profile set email you@example.com` |
 | "resumeFormat → forms want a PDF/Word file, not your .md/.tex/.txt source" (under "Fix before filling" in the dry run) | Make a PDF: `pnpm jobflow tailor <ref> --kind resume-md --pdf`, or point at one with `pnpm jobflow profile set resume-path ./resume.pdf` |
 | "Couldn't start the browser: …" | `--fill` opens a visible browser window, so it needs a desktop session (not a headless SSH box). Use `jobflow apply <ref> --open` instead. |
 
 `JOBFLOW_CHROMIUM=/path/to/chrome` makes the form-filler and the local agent use a Chrome or
-Chromium you already have. In this release, though, the CLI's check (and `doctor`) still looks
-for Playwright's own Chromium, so run `npx playwright install chromium` as well.
+Chromium you already have, so you can skip `npx playwright install chromium` (the Playwright
+package itself is still needed). `pnpm jobflow doctor` then shows
+`playwright  v… + /path/to/chrome (JOBFLOW_CHROMIUM)`.
 
 Filling uses a persistent browser profile at `~/.jobflow/browser-profile`, so site logins
 survive between runs. Use `--browser-profile <dir>` or `JOBFLOW_BROWSER_PROFILE` to pick
@@ -218,7 +222,7 @@ stack. The data lives in the `jobflow-db` and `jobflow-data` volumes;
 |---|---|
 | CLI | Errors and hints go to stderr, results to stdout. `JOBFLOW_DEBUG=1 pnpm jobflow …` adds the stack trace to an error. |
 | Web app (`jobflow serve`) | The terminal you started it from |
-| Background jobs (sync, recheck, re-rank…) | Sources → Sync → **Maintenance and background jobs**: the activity list shows each job's state and result |
+| Background jobs (sync, recheck, re-rank…) | Sources → Sync → **Maintenance and background jobs**: the activity list shows each job's state and result. On the local store, `jobflow serve` runs them and logs a `[jobflow] job ✓ …` / `✗ …` line per job in its terminal |
 | A source that failed | Sources → Your own sources (last run per source); `jobflow sync` prints the first errors |
 | Docker | `pnpm docker:logs` (web and worker; `docker compose logs db` for Postgres) |
 | Local agent | The terminal running `pnpm agent` |

@@ -137,7 +137,8 @@ and invent experience. JobFlow does the opposite:
   applying twice.
 - **Optional extras**: an LLM (Anthropic, OpenAI, xAI or an OpenAI-compatible gateway) for
   richer write-ups and prose; a browser extension with an inline match panel; a local agent
-  for logged-in sites in your own browser; Docker; and a multi-user hosting mode.
+  for logged-in sites and one-click pre-fill in your own browser (it shares a Postgres
+  database with the web app, such as Docker's); Docker; and a multi-user hosting mode.
 
 ## How it works
 

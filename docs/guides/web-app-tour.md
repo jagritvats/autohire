@@ -107,7 +107,7 @@ Filters are **views**:
 - The page always says what they hid: "**1** hidden by your filters (remote region 1)", with
   **clear filters**.
 
-A saved-search tab adds its own line: "Through your saved search **Remote backend**: it hides
+A saved-search tab adds its own line: "Through your saved search **Remote backend** — it hides
 6 (remote 6). Scores are unchanged." If filters hide everything, the empty state says so
 and offers to clear them.
 
@@ -164,8 +164,10 @@ Then you have three options:
 1. **Open the application form**: apply in your browser yourself.
 2. **Pre-fill it on this computer**: the exact `pnpm jobflow apply <id> --fill` command, with
    a copy button. Stop `jobflow serve` first, because the database takes one writer at a time.
-   If the [local agent](local-agent.md) is
-   running, this becomes a **Pre-fill with the local agent** button.
+   If the [local agent](local-agent.md) is running, this becomes a **Pre-fill with the local
+   agent** button. The agent needs a database it can share with the web app (Postgres via
+   `DATABASE_URL`, such as the Docker stack's on `localhost:5433`), so it isn't available on the
+   default local store.
 3. **Done? Record it**: **I submitted it — mark applied**. Then you can add a next step and a
    follow-up date.
 
@@ -278,9 +280,11 @@ Where JobFlow looks:
   - the background job queue (Discover, Poll all, Re-rank, Enrich comp, Recheck all);
   - the local agent's status.
 
-  The maintenance buttons queue jobs for the worker, which runs in the Docker / Postgres
-  setup. With the default local store and only `jobflow serve` running, those jobs wait in the
-  queue. **Sync now** always runs in place.
+  The maintenance buttons queue background jobs, and the activity list shows each one go from
+  queued to done (or the error). On the default local store, `jobflow serve` runs them itself,
+  one at a time. With Docker / Postgres the worker runs them. Local-agent jobs (pre-fill,
+  logged-in sites) wait in the same list until the [local agent](local-agent.md) is online;
+  the web server never runs them.
 - **All companies** (top right) opens `/companies`, every company JobFlow polls. You can add one
   by name or careers URL, and each row has its ATS board, posting count, cadence, and
   **poll** / **pause** / remove.
@@ -298,11 +302,14 @@ See [Search & discovery](search-and-discovery.md).
 - **Applying & the local agent**:
   - how to pre-fill from the terminal (`jobflow config set automation.fill on`, then
     `jobflow apply <job> --fill`);
+  - how to get a **Pre-fill** button instead: run the [local agent](local-agent.md), which
+    needs a database it can share with the web app (Postgres via `DATABASE_URL`);
   - the **let the local agent open a browser for me** switch;
   - **Logged-in job sites** (advanced, off by default).
 - **Data**: where your data lives (`~/.jobflow`), and **clear cached drafts**.
-- **API tokens**: only for the browser extension, the local agent, or a CLI talking to a
-  JobFlow server.
+- **API tokens**: only needed when the server has sign-in on (a hosted instance): for the
+  browser extension (paste it into its options page), the local agent
+  (`JOBFLOW_AGENT_TOKEN`), or a script calling the server's API.
 
 ## Onboarding
 
