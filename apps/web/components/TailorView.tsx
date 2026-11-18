@@ -288,17 +288,7 @@ export function TailorView({ posting, inputs, initialDrafts }: { posting: Tailor
           signal,
         });
         const parts = [`${Object.keys(answers).length - (letter ? 1 : 0)} answer(s)`, letter ? "the cover letter" : "", `the “${variant.replace("_", "/")}” variant`].filter(Boolean);
-        setMsg("app", res.ok ? `Saved to your application — ${parts.join(", ")}.` : "Save to application failed.", res.ok ? "ok" : "err");
-      } catch (e) {
-        setMsg("app", (e as Error).message, "err");
-      }
-    });
-
-  const fillViaAgent = () =>
-    run("app-fill", "queuing…", async (signal) => {
-      try {
-        await fetch("/api/jobs", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type: "form_fill", payload: { postingId: posting.id } }), signal });
-        setMsg("app", "Queued a form-fill — your local agent pre-fills the form in your session with these answers and stops at review (never submits). Offline → it runs when the agent is back.", "ok");
+        setMsg("app", res.ok ? `Saved to this job's application — ${parts.join(", ")}. Next: apply →` : "Save to application failed.", res.ok ? "ok" : "err");
       } catch (e) {
         setMsg("app", (e as Error).message, "err");
       }
@@ -604,14 +594,15 @@ export function TailorView({ posting, inputs, initialDrafts }: { posting: Tailor
           <button className="save ghost" disabled={isBusy("app-save")} onClick={saveToApplication}>
             {isBusy("app-save") ? `${busy?.label} ${elapsed}s` : "Save to application"}
           </button>
-          <button className="cmd" disabled={isBusy("app-fill")} onClick={fillViaAgent}>
-            {isBusy("app-fill") ? `${busy?.label} ${elapsed}s` : "Fill via local agent →"}
-          </button>
+          <a className="apply" href={`/jobs/${posting.id}#apply`}>
+            Next: apply →
+          </a>
         </div>
         <p className="hint">
-          “Save” attaches your edited answers, cover letter and chosen bullet variant to this role’s application. “Fill” hands it to your
-          local agent, which pre-fills the form in your own browser and <strong>stops at review</strong> — it never submits. For the
-          résumé attachment, use <strong>use for autofill</strong> under Markdown or LaTeX (else your base résumé is attached).
+          “Save to application” attaches your edited answers, cover letter and chosen bullet variant to this job’s application, so the
+          form-filler types them. For the résumé file, use <strong>use for autofill</strong> under Markdown or LaTeX (otherwise your base
+          résumé is attached). Then <strong>Next: apply</strong> shows the checklist and how to open or pre-fill the form — it always stops
+          for you to review and submit.
         </p>
         <MsgLine msg={msgs["app"]} />
       </section>
@@ -626,19 +617,19 @@ function InputsStrip({ inputs }: { inputs: TailorInputs }) {
     warnings.push(
       <>
         No generation model is set, so nothing here is tailored: résumés are your own, reformatted, and answers and cover letters are
-        off. <a href="/settings">Set a model in Settings</a>.
+        off. <a href="/settings#model">Connect a writing model in Settings</a> — or use these as they are.
       </>,
     );
-  if (!inputs.resumeChars && !inputs.hasLatex) warnings.push(<>No base résumé yet — upload one in <a href="/settings">Settings</a>; tailoring rewrites it.</>);
+  if (!inputs.resumeChars && !inputs.hasLatex) warnings.push(<>No base résumé yet — <a href="/profile#resume">add one under Profile</a>; tailoring rewrites it.</>);
   if (inputs.sampleEvidence)
     warnings.push(
       <>
         {inputs.sampleEvidence === inputs.evidence ? "All" : inputs.sampleEvidence} of your {inputs.evidence} Evidence Bank entries{" "}
         {inputs.sampleEvidence === 1 ? "is a built-in sample" : "are the built-in samples"} — replace or remove them in{" "}
-        <a href="/settings">Settings</a>, or they can end up in your résumé.
+        <a href="/profile#evidence">Profile → Evidence Bank</a>, or they can end up in your résumé.
       </>,
     );
-  if (!inputs.hasEmail) warnings.push(<>Your contact email is empty — the résumé header falls back to your résumé text, and autofill needs it (Settings › Contact).</>);
+  if (!inputs.hasEmail) warnings.push(<>Your contact email is empty — the résumé header falls back to your résumé text, and autofill needs it (<a href="/profile#contact">Profile → Contact</a>).</>);
   const chip = (ok: boolean, label: string) => (
     <span className="in-chip" data-ok={ok}>
       {ok ? "✓" : "–"} {label}
@@ -699,7 +690,7 @@ function Pane({
         <div className="pane-btns">
           {draft && !mine && (
             <span className="gen-meta" style={{ marginRight: 8 }} suppressHydrationWarning>
-              {draft.source === "builtin" ? "built-in" : draft.model} · {timeAgo(draft.createdAt)}
+              {draft.source === "builtin" ? "from your résumé (template)" : `written by ${draft.model}`} · {timeAgo(draft.createdAt)}
             </span>
           )}
           {mine ? (
@@ -719,7 +710,7 @@ function Pane({
       {draft?.source === "builtin" && !mine && (
         <div className="tailor-warn">
           Not tailored — no generation model is set, so this is {draft.kind === "resume" ? "your own bullets, ranked by overlap with this JD" : "your own résumé, reformatted"}.
-          Set a model in Settings › Generation model, then regenerate.
+          <a href="/settings#model">Connect a writing model</a> to tailor it, then regenerate.
         </div>
       )}
       {draft?.stale && draft.source !== "builtin" && !mine && (
