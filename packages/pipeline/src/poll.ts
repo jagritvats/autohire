@@ -22,9 +22,10 @@ export { DEFAULT_DISCOVERY_FEEDS, DEFAULT_TELEGRAM_CHANNELS } from "./presets/in
 export const FEED_TTL_DAYS = 14;
 
 /**
- * Any posting unseen this long is gone or unpollable (company paused/removed, board
- * emptied — an empty fetch never mass-stales, since it can't be told from an error).
- * Active boards are polled at least every 6 days, so this never catches a live one.
+ * A board posting unseen this long, on a board fetched since, is gone (board emptied — an
+ * empty fetch never mass-stales, since it can't be told from an error — or a partial list
+ * that no longer carries it). Paused/removed companies' postings go after it too. A board
+ * the per-run cap hasn't reached yet is never swept (`expireUnseenBoardPostings`).
  */
 export const BOARD_TTL_DAYS = 21;
 
@@ -159,12 +160,13 @@ async function pollSources(repo: Repository, opts: PollOptions): Promise<PollSta
   // 1. registered ATS boards (the rich, ghost-free spine) — pooled across hosts
   const companies = opts.companyId
     ? (await repo.listCompanies()).filter((c) => c.id === opts.companyId)
-    : (await repo.listCompanies({ status: "active", dueForPoll: !opts.allCompanies }))
-        // boards with no CLOUD adapter (Darwinbox & co. are local-agent only, invariant #1)
-        // are polled by the agent; here they'd only burn the per-run board budget
-        .filter((c) => c.atsType !== "unknown" && c.atsSlug && atsAdapter(c.atsType))
-        .sort((a, b) => polledAt(a) - polledAt(b))
-        .slice(0, opts.maxBoards ?? DEFAULT_MAX_BOARDS);
+    : orderBoardsForPoll(
+        (await repo.listCompanies({ status: "active", dueForPoll: !opts.allCompanies }))
+          // boards with no CLOUD adapter (Darwinbox & co. are local-agent only, invariant #1)
+          // are polled by the agent; here they'd only burn the per-run board budget
+          .filter((c) => c.atsType !== "unknown" && c.atsSlug && atsAdapter(c.atsType)),
+        opts.maxBoards ?? DEFAULT_MAX_BOARDS,
+      );
   await mapPoolKeyed(
     companies,
     { concurrency: opts.concurrency ?? DEFAULT_CONCURRENCY, perKey: 2, key: boardHostKey },
@@ -182,6 +184,9 @@ async function pollSources(repo: Repository, opts: PollOptions): Promise<PollSta
         stats.errors.push(...r.errors);
       } catch (e) {
         stats.errors.push(`${c.name}: ${(e as Error).message}`);
+        // a board whose fetch throws still takes its turn: left unmarked it would sort first
+        // on every run and hold a slot of the per-run budget forever
+        await repo.touchPolled(c.id).catch(() => {});
       }
     },
   );
@@ -243,10 +248,81 @@ async function pollSources(repo: Repository, opts: PollOptions): Promise<PollSta
 
   // 4. expire non-board postings their source stopped returning
   stats.expired = await repo.purgeOldPostings({ olderThanDays: FEED_TTL_DAYS, field: "lastSeen", sources: NON_BOARD_SOURCES });
-  stats.expired += await repo.purgeOldPostings({ olderThanDays: BOARD_TTL_DAYS, field: "lastSeen" });
+  stats.expired += await expireUnseenBoardPostings(repo);
   if (stats.expired) log(`  expired ${stats.expired} postings unseen for ${FEED_TTL_DAYS}d (feeds) / ${BOARD_TTL_DAYS}d (boards)`);
 
   return stats;
+}
+
+/**
+ * Board postings unseen for BOARD_TTL_DAYS — but only where the board was FETCHED since
+ * the posting was last seen (it came back empty, partial, or for another market set, so
+ * markStale couldn't diff it). A board the per-run cap simply hasn't reached yet proves
+ * nothing about its postings (invariant #5): with hundreds of boards and the default
+ * 25-board sync, a full rotation can outlast the TTL, and the old blanket sweep retired
+ * live roles nobody had re-fetched. Boards that are paused, removed or not cloud-pollable
+ * (local-agent boards) keep the plain TTL — nothing here will re-check them.
+ */
+export async function expireUnseenBoardPostings(repo: Repository, now = Date.now()): Promise<number> {
+  const cutoff = now - BOARD_TTL_DAYS * DAY_MS;
+  const nonBoard = new Set<string>(NON_BOARD_SOURCES);
+  const old = (await repo.listActivePostings()).filter((p) => !nonBoard.has(p.source) && time(p.lastSeen) < cutoff);
+  if (!old.length) return 0;
+  const companies = new Map((await repo.listCompanies()).map((c) => [c.id, c]));
+  const gone = old.filter((p) => {
+    const c = companies.get(p.companyId);
+    if (!c || c.status !== "active" || c.atsType === "unknown" || !c.atsSlug || !atsAdapter(c.atsType)) return true;
+    return c.lastPolled != null && time(c.lastPolled) > time(p.lastSeen);
+  });
+  return repo.retirePostings(gone.map((p) => p.id));
+}
+
+const DAY_MS = 86_400_000;
+
+function time(d: string | Date | null | undefined): number {
+  return d ? new Date(d as string | Date).getTime() : 0;
+}
+
+/**
+ * Which due boards this run polls, in order (§3 freshness): never-polled boards first, then
+ * the least recently polled. Among the never-polled, daily-cadence boards come first and
+ * each group is taken round-robin across ATS types. Before, the never-polled went in
+ * registry order, so a fresh install's first sweeps spent the run on one ATS family (113 of
+ * 247 live boards are Workday, ~12 s a fetch) and the daily (high-value) seed boards were
+ * reached last — at sync 10 of 10 with the default 25-board cap (audit 2026-11; now sync 1–2).
+ *
+ * Deliberately NOT weighted by cadence beyond that: the repo's `dueForPoll` already makes a
+ * daily board due ~7× as often, and when the cap is below what the due boards need (243
+ * boards, 41 daily, 25 a sync), favouring daily boards further starved the weekly ones and
+ * slowed reaching new boards (simulated: 14 syncs instead of 10 to reach every board,
+ * weekly re-polls 20 days apart). Oldest-first is the fair order under overload: every due
+ * board is reached within ceil(due / max) runs.
+ */
+export function orderBoardsForPoll<C extends Pick<Company, "atsType" | "lastPolled" | "pollCadence">>(
+  boards: readonly C[],
+  max: number,
+): C[] {
+  const never = boards.filter((c) => !c.lastPolled);
+  const fresh = [
+    ...roundRobinByAts(never.filter((c) => c.pollCadence === "daily")),
+    ...roundRobinByAts(never.filter((c) => c.pollCadence !== "daily")),
+  ];
+  const seen = boards.filter((c) => c.lastPolled).sort((a, b) => time(a.lastPolled) - time(b.lastPolled));
+  return [...fresh, ...seen].slice(0, max);
+}
+
+/** interleave by ATS type, keeping each type's own order. */
+function roundRobinByAts<C extends Pick<Company, "atsType">>(boards: C[]): C[] {
+  const lanes = new Map<string, C[]>();
+  for (const b of boards) {
+    const lane = lanes.get(b.atsType);
+    if (lane) lane.push(b);
+    else lanes.set(b.atsType, [b]);
+  }
+  const out: C[] = [];
+  const queues = [...lanes.values()];
+  for (let k = 0; out.length < boards.length; k++) for (const q of queues) if (q[k]) out.push(q[k]!);
+  return out;
 }
 
 /** one custom source: ingest (SSRF-guarded fetch inside the adapter), record the run, harvest ATS links. */
@@ -323,11 +399,6 @@ export async function runSearchTargets(
 const DEFAULT_MAX_BOARDS = 80;
 /** ATS links harvested from one custom feed per run (one detector probe each). */
 const MAX_HARVEST_PER_FEED = 10;
-
-/** never-polled boards first (0), then oldest poll first */
-function polledAt(c: { lastPolled: string | Date | null }): number {
-  return c.lastPolled ? new Date(c.lastPolled as string | Date).getTime() : 0;
-}
 
 /**
  * The host a board is served from, for per-host politeness: multi-tenant hosts

@@ -1,4 +1,4 @@
-import { classifyLink, extractLinks, normalizeChatText, normCompany, type ChannelMessage, type LinkKind } from "@jobflow/core";
+import { classifyLink, extractLinks, normalizeChatText, normCompany, type AtsType, type ChannelMessage, type Company, type LinkKind } from "@jobflow/core";
 import { detectFromCareersPage, detectFromUrl } from "@jobflow/adapters";
 import type { Repository } from "@jobflow/db";
 
@@ -87,41 +87,66 @@ export async function harvestLinks(
   }
 
   const tags = ["community", opts.origin];
+  // boards already registered (any name) — a link to one is a re-sighting, not a new company
+  const known = new Map<string, Company>();
+  for (const c of await repo.listCompanies()) if (c.atsSlug && c.atsType !== "unknown") known.set(boardKey(c.atsType, c.atsSlug), c);
   for (const url of atsUrls.values()) {
     const det = await detectFromUrl(url).catch(() => null);
     if (!det?.atsSlug || det.atsType === "unknown" || det.confidence !== "confirmed") continue;
-    await register(repo, companyFromBoard(det.atsType, det.atsSlug), det.atsType, det.atsSlug, url, tags, stats);
+    await register(repo, known, companyFromBoard(det.atsType, det.atsSlug), det.atsType, det.atsSlug, url, tags, stats);
   }
   let sniffed = 0;
   for (const [host, url] of careersUrls) {
     if (sniffed++ >= (opts.maxCareersPages ?? 10)) break;
     const det = await detectFromCareersPage(url).catch(() => null);
     if (!det?.atsSlug || det.atsType === "unknown") continue;
-    await register(repo, companyFromHost(host), det.atsType, det.atsSlug, url, tags, stats);
+    await register(repo, known, companyFromHost(host), det.atsType, det.atsSlug, url, tags, stats);
   }
   return stats;
 }
 
+function boardKey(atsType: string, atsSlug: string): string {
+  return `${atsType}|${atsSlug.toLowerCase()}`;
+}
+
+/**
+ * Register a harvested board. A board we already hold keeps its company (and name): the
+ * name guessed from a slug ("Thomsonreuters", "Gevernova") would otherwise register the same
+ * board a second time under a second company — fetched twice, listed under two names (audit
+ * 2026-11: 2 such pairs from one week of channels).
+ */
 async function register(
   repo: Repository,
+  known: Map<string, Company>,
   name: string,
-  atsType: Parameters<Repository["upsertCompany"]>[0]["atsType"],
+  atsType: AtsType,
   atsSlug: string,
   careersUrl: string,
   tags: string[],
   stats: HarvestStats,
 ): Promise<void> {
+  const existing = known.get(boardKey(atsType, atsSlug));
+  if (existing) {
+    const add = tags.filter((t) => !existing.tags.includes(t));
+    if (add.length) await repo.updateCompany(existing.id, { tags: [...existing.tags, ...add] });
+    existing.tags = [...existing.tags, ...add];
+    stats.boards.push(`${existing.name} → ${atsType}/${atsSlug}`);
+    return;
+  }
   const pretty = name.replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-  await repo.upsertCompany({ name: pretty, nameNorm: normCompany(pretty), atsType, atsSlug, careersUrl, tags });
+  const company = await repo.upsertCompany({ name: pretty, nameNorm: normCompany(pretty), atsType, atsSlug, careersUrl, tags });
+  known.set(boardKey(atsType, atsSlug), company);
   stats.boards.push(`${pretty} → ${atsType}/${atsSlug}`);
 }
 
 /** Multi-part board slugs carry the company in one segment: Workday "{host}/{tenant}/{site}",
- *  Eightfold "{host}/{domain}". */
+ *  Eightfold "{host}/{domain}", Oracle "{tenant}.fa.{dc}.oraclecloud.com/{site}" (the tenant
+ *  code is the only name the URL has — better than the whole host as a company name). */
 function companyFromBoard(ats: string, slug: string): string {
   const parts = slug.split("/");
   if (ats === "workday") return parts[1] ?? slug;
   if (ats === "eightfold") return (parts[1] ?? slug).split(".")[0] ?? slug;
+  if (ats === "oracle") return (parts[0] ?? slug).split(".")[0] ?? slug;
   return slug;
 }
 
