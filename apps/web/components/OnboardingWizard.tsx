@@ -174,7 +174,7 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
     <div className="settings onboarding">
       <ol className="onb-steps">
         {(["resume", "review", "prefs", "discovery"] as Step[]).map((s, i) => (
-          <li key={s} data-on={s === step}>
+          <li key={s} data-on={s === step} aria-current={s === step ? "step" : undefined}>
             {i + 1}. {s === "resume" ? "résumé" : s === "review" ? "review" : s === "prefs" ? "preferences" : "discovery"}
           </li>
         ))}
@@ -200,7 +200,7 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
             </label>
           </div>
           <p className="hint" style={{ marginTop: 14 }}>or paste the text:</p>
-          <textarea className="onb-paste" rows={8} value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="Paste your résumé…" />
+          <textarea className="onb-paste" aria-label="Résumé text" rows={8} value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="Paste your résumé…" />
           <div className="onb-actions">
             <button type="button" className="save" disabled={busy || !paste.trim()} onClick={usePaste}>
               {busy ? "reading…" : "use pasted text"}
@@ -333,7 +333,7 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
             <p className="hint" style={{ marginTop: 12 }}>Remote roles you can take:</p>
             <div className="chip-row">
               {GEOS.map((g) => (
-                <button key={g.id} type="button" className="chip" data-on={geos.includes(g.id)} onClick={() => setGeos(toggle(geos, g.id))}>
+                <button key={g.id} type="button" className="chip" data-on={geos.includes(g.id)} aria-pressed={geos.includes(g.id)} onClick={() => setGeos(toggle(geos, g.id))}>
                   {g.label}
                 </button>
               ))}
@@ -358,7 +358,7 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
             <p className="hint" style={{ marginTop: 12 }}>Role types you want:</p>
             <div className="chip-row">
               {ARCHETYPES.map((a) => (
-                <button key={a} type="button" className="chip" data-on={archetypes.includes(a)} onClick={() => setArchetypes(toggle(archetypes, a))}>
+                <button key={a} type="button" className="chip" data-on={archetypes.includes(a)} aria-pressed={archetypes.includes(a)} onClick={() => setArchetypes(toggle(archetypes, a))}>
                   {a}
                 </button>
               ))}
@@ -385,7 +385,7 @@ export function OnboardingWizard({ llmReady }: { llmReady: boolean }) {
                   key={p.id}
                   type="button"
                   className="onb-preset"
-                  data-on={presets.includes(p.id)}
+                  data-on={presets.includes(p.id)} aria-pressed={presets.includes(p.id)}
                   onClick={() => setPresets(presets.includes(p.id) ? (presets.length > 1 ? presets.filter((x) => x !== p.id) : presets) : [...presets, p.id])}
                 >
                   <b>{p.label}</b>
