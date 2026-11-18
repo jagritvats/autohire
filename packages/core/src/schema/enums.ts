@@ -16,6 +16,9 @@ export const AtsType = z.enum([
   "workable",
   "recruitee",
   "personio",
+  "teamtailor", // Nordic/EU SMB ATS (public RSS per career site)
+  "bamboohr", // US SMB HR suite (public careers JSON)
+  "breezy", // Breezy HR (public JSON per board)
   "smartrecruiters",
   // big-employer careers backends (India engineering centres) — §§ India coverage
   "workday",
@@ -51,6 +54,9 @@ export const SourceKind = z.enum([
   "workable",
   "recruitee",
   "personio",
+  "teamtailor",
+  "bamboohr",
+  "breezy",
   "smartrecruiters",
   "workday",
   "eightfold",

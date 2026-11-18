@@ -21,6 +21,9 @@ export const SOURCE_TRUST: Partial<Record<SourceKind, number>> = {
   smartrecruiters: 0.85,
   recruitee: 0.85,
   personio: 0.85,
+  teamtailor: 0.85, // the employer's own career site (public RSS)
+  bamboohr: 0.85, // the employer's own careers page; datePosted is the opening's own
+  breezy: 0.85, // the employer's own portal; published_date is the position's
   workday: 0.85,
   eightfold: 0.85,
   amazon: 0.85,
