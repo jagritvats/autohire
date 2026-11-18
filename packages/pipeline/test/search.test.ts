@@ -105,6 +105,16 @@ describe("adhocSearch", () => {
     expect(adapter.targets).toEqual([{ query: "backend" }]);
   });
 
+  it("hardExclude: false keeps what the scorer would exclude (a profile with no preferences yet)", async () => {
+    const adapter = fakeAdapter("remotive", [raw("ok"), raw("x", { locationRaw: "Austin, TX", jdText: "Java services. We do not sponsor visas. No sponsorship." })]);
+    const p = { ...profile, prefs: { ...profile.prefs, relocate: false } };
+    const strict = await adhocSearch({ keywords: ["backend"] }, p, { embedder, adapters: [adapter], now: NOW });
+    expect(strict.excluded).toBe(1);
+    const open = await adhocSearch({ keywords: ["backend"] }, p, { embedder, adapters: [adapter], now: NOW, hardExclude: false });
+    expect(open.excluded).toBe(0);
+    expect(open.results).toHaveLength(2);
+  });
+
   it("ingest: true upserts idempotently (once per key)", async () => {
     const repo = new InMemoryRepository();
     const adapter = fakeAdapter("remotive", [raw("a"), raw("b")]);

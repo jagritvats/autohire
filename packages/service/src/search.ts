@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Repository } from "@jobflow/db";
 import { SearchQuery, effectiveMarkets, type Posting, type SavedSearch, type SearchQueryInput, type SourceKind } from "@jobflow/core";
-import { adhocSearch, loadProfile, runSavedSearch, type AdhocSearchResult } from "@jobflow/pipeline";
+import { adhocSearch, isOnboarded, loadProfile, runSavedSearch, type AdhocSearchResult } from "@jobflow/pipeline";
 import { corpusEmbedder } from "./embedder.js";
 import { rankTenant, toCards, type FeedCard } from "./feed.js";
 import { ensureTenant } from "./tenant.js";
@@ -13,6 +13,11 @@ import { ensureTenant } from "./tenant.js";
  */
 export interface SearchOutput extends Omit<AdhocSearchResult, "results"> {
   cards: Array<FeedCard & { relevance: number; inFeed: boolean }>;
+  /**
+   * false before the profile is set up: results are UNSCORED — no score, no fit notes, no
+   * hard exclusions (a blank profile has no stack, floor or location to judge against).
+   */
+  scored: boolean;
   /** with `withPostings`: the scored postings behind `cards` (same order) — transient
    *  unless `inFeed`/ingested, so a local client can keep one the user picks */
   postings?: Posting[];
@@ -26,7 +31,9 @@ export async function searchJobs(
 ): Promise<SearchOutput> {
   await ensureTenant(repo, tenantId);
   const profile = await loadProfile(repo, tenantId);
+  const scored = isOnboarded(profile);
   const r = await adhocSearch(query, profile, {
+    hardExclude: scored,
     repo,
     embedder: corpusEmbedder(),
     ingest: opts.ingest ?? false,
@@ -41,12 +48,13 @@ export async function searchJobs(
     tenantId,
     r.results.map((x) => ({
       posting: x.posting,
-      match: { score: x.match.score, levelNote: x.match.flags.levelNote, stackNote: x.match.flags.stack.note, redFlags: x.match.flags.redFlags },
+      match: scored ? { score: x.match.score, levelNote: x.match.flags.levelNote, stackNote: x.match.flags.stack.note, redFlags: x.match.flags.redFlags } : null,
     })),
   );
   const { results, ...rest } = r;
   return {
     ...rest,
+    scored,
     cards: cards.map((c, i) => ({ ...c, relevance: results[i]!.relevance, inFeed: results[i]!.inFeed })),
     ...(opts.withPostings ? { postings: results.map((x) => x.posting) } : {}),
   };

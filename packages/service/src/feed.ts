@@ -239,8 +239,9 @@ async function shapeBrowse(repo: Repository, tenantId: string, postings: Posting
 
 /** Card context — the per-user overlays needed to render correct action state. */
 interface CardCtx {
-  /** the profile's years of experience — to mark how far the JD's ask is. */
-  yoe: number;
+  /** the profile's years of experience — to mark how far the JD's ask is (null before
+   *  onboarding: there's no candidate to compare with yet). */
+  yoe: number | null;
   appliedKeys: Set<string>;
   bookmarked: Set<string>;
   archived: Set<string>;
@@ -257,7 +258,7 @@ async function cardCtx(repo: Repository, tenantId: string, companies?: Awaited<R
     companies ?? repo.listCompanies(),
   ]);
   return {
-    yoe: (profile ?? blankProfile(tenantId)).yoe,
+    yoe: isOnboarded(profile) ? (profile ?? blankProfile(tenantId)).yoe : null,
     appliedKeys,
     bookmarked: userState.bookmarked,
     archived: userState.archived,
@@ -398,8 +399,8 @@ function ratingOf(p: Posting): { overall: number; reviews: number } | null {
 }
 
 /** Same bands the scorer uses: ≤1 yr short is normal, 2 a stretch, 3+ usually screened out. */
-function experienceFit(min: number | null, yoe: number): "ok" | "stretch" | "far" | null {
-  if (min == null) return null;
+function experienceFit(min: number | null, yoe: number | null): "ok" | "stretch" | "far" | null {
+  if (min == null || yoe == null) return null;
   const gap = min - yoe;
   return gap <= 1 ? "ok" : gap <= 2 ? "stretch" : "far";
 }
