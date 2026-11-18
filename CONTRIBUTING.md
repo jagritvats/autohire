@@ -128,13 +128,22 @@ Add a numbered migration in `packages/db/migrations/` (idempotent, with RLS for 
 tables), update both `InMemoryRepository` and `PgRepository`, and extend the contract test in
 `packages/db/test/contract.test.ts` — it runs against both stores.
 
+## Licensing of contributions
+
+JobFlow is licensed under the [GNU AGPL-3.0-only](LICENSE). By submitting a contribution you
+agree that it is licensed under the same terms (inbound = outbound), and you certify the
+[Developer Certificate of Origin](https://developercertificate.org/) — that you wrote it or
+otherwise have the right to submit it. Sign off each commit with `git commit -s`, which adds a
+`Signed-off-by:` line. Don't contribute code copied from projects under incompatible licences.
+
 ## Pull requests
 
 - Keep PRs focused; describe the user-visible change and how you tested it.
 - `pnpm -r build && pnpm -r typecheck && pnpm -r test` must pass, plus
   `node scripts/check-pii.mjs` and `node scripts/check-tenant.mjs`.
 - Fill in the invariants checklist in the PR template.
-- Commit messages: imperative mood, a short summary line, and a body that explains why.
+- Commit messages: imperative mood, a short summary line, and a body that explains why;
+  signed off (`git commit -s`).
 
 ## Reporting security issues
 

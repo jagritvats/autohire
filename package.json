@@ -2,7 +2,7 @@
   "name": "jobflow",
   "version": "0.1.0",
   "private": true,
-  "description": "JobFlow — all-in-one job discovery, prep, and assisted-application platform (full TypeScript).",
+  "description": "JobFlow \u2014 all-in-one job discovery, prep, and assisted-application platform (full TypeScript).",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -35,5 +35,5 @@
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   },
-  "license": "MIT"
+  "license": "AGPL-3.0-only"
 }

@@ -17,6 +17,10 @@
 - [ ] `pnpm -r build && pnpm -r test` pass locally
 - [ ] Added/updated tests for the change
 
+## Licence
+
+- [ ] My commits are signed off (`git commit -s`) and I agree to license this contribution under AGPL-3.0-only.
+
 ## Privacy
 
 - [ ] No real personal data (names, emails, résumés, tokens) in code, fixtures, screenshots or logs — fixtures use fictional people at `example.com`.

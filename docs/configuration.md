@@ -20,6 +20,7 @@ not keep in a file (your LLM key, preferences, sources) are set with `jobflow co
 | `JOBFLOW_SIGNUP` | `closed` | Hosted mode: `open` lets anyone create an account (the first account is always allowed and becomes admin). |
 | `JOBFLOW_OPERATOR_LLM` | `shared` single-user / `off` hosted | Whether users without their own key may use the operator's `LLM_PROVIDER` key. |
 | `JOBFLOW_TRUST_NETWORK` | _(off)_ | `1` lets single-user mode answer on non-localhost hosts (only behind your own authenticating proxy). |
+| `JOBFLOW_SOURCE_URL` | the upstream repo | The "source" link in the web app's footer (AGPL-3.0 §13). Set it to your fork if you serve a modified version to others. |
 | `JOBFLOW_AGENT_TOKEN` | _(blank)_ | Hosted mode: the local agent's API token (scope `agent`). |
 
 ## Environment variables (full reference)

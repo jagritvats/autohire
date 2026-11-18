@@ -6,7 +6,7 @@ from your own material, and pre-fills applications — then stops so you can rev
 submit.**
 
 [![CI](https://github.com/jagritvats/autohire/actions/workflows/ci.yml/badge.svg)](https://github.com/jagritvats/autohire/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License: AGPL-3.0-only](https://img.shields.io/badge/license-AGPL--3.0--only-blue.svg)](LICENSE)
 ![Node 20+](https://img.shields.io/badge/node-%E2%89%A520-brightgreen)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)
 
@@ -116,4 +116,12 @@ report security issues privately ([SECURITY.md](SECURITY.md)).
 
 ## License
 
-[MIT](LICENSE). Salary benchmarks from levels.fyi are shown with attribution.
+Copyright © 2026 The JobFlow contributors.
+
+JobFlow is free software: you can redistribute it and/or modify it under the terms of the
+[GNU Affero General Public License, version 3](LICENSE) (AGPL-3.0-only). In short: use it
+privately however you like; if you distribute it, or run a **modified** version as a service
+for other people, you must offer them the corresponding source under the same licence. The
+web app links to its source in the footer for exactly that reason (`JOBFLOW_SOURCE_URL`).
+
+Salary benchmarks from levels.fyi are shown with attribution.

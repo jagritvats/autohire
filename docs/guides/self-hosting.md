@@ -39,4 +39,11 @@ hosted service).
 Docker Compose works for this too: set the variables above in `.env` and change the web bind
 with `JOBFLOW_WEB_BIND=0.0.0.0:3000` (only behind your TLS proxy).
 
+## Licence obligations
+
+JobFlow is AGPL-3.0-only. Running it unmodified for others is fine — the footer's "source"
+link points at the upstream repository. If you run a **modified** version as a service, §13
+of the licence requires you to offer its users the corresponding source of your version: set
+`JOBFLOW_SOURCE_URL` to where your modified source is published.
+
 See [SECURITY.md](../../SECURITY.md) for what counts as a vulnerability and how to report it.

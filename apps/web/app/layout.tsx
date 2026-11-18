@@ -19,6 +19,12 @@ export const metadata: Metadata = {
   description: "Job discovery, prep, and assisted-application. The card is the product.",
 };
 
+/**
+ * AGPL-3.0 §13: users interacting with JobFlow over a network must be offered its source.
+ * Upstream by default; a deployment of a MODIFIED version sets JOBFLOW_SOURCE_URL to its own.
+ */
+const SOURCE_URL = process.env.JOBFLOW_SOURCE_URL || "https://github.com/jagritvats/autohire";
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${mono.variable} ${serif.variable}`}>
@@ -30,6 +36,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         }}
       >
         {children}
+        <footer className="site-footer">
+          JobFlow · free software under the{" "}
+          <a href="https://www.gnu.org/licenses/agpl-3.0.html" rel="license noreferrer" target="_blank">
+            AGPL-3.0
+          </a>{" "}
+          ·{" "}
+          <a href={SOURCE_URL} rel="noreferrer" target="_blank">
+            source
+          </a>
+        </footer>
       </body>
     </html>
   );
