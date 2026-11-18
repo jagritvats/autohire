@@ -1,5 +1,7 @@
 # The `jobflow` CLI
 
+![jobflow search](screenshots/cli-search.png)
+
 JobFlow on your own machine: set your details once, search live job sources, get honest
 match scores, draft grounded résumés and answers, and pre-fill applications up to the
 review screen. One person, one machine — no login, no server, no tokens. Everything lives
@@ -12,6 +14,10 @@ in a data directory you own (`~/.jobflow` by default).
 - [Your data, privacy, and where the LLM key lives](#your-data-privacy-and-where-the-llm-key-lives)
 - [The never-submit guarantee](#the-never-submit-guarantee)
 - [Scripting: `--json` and exit codes](#scripting---json-and-exit-codes)
+
+Task-oriented guides: [Daily workflow](guides/daily-workflow.md) ·
+[Résumé & profile](guides/resume-and-profile.md) · [Search & discovery](guides/search-and-discovery.md) ·
+[Applying](guides/apply.md) · [Troubleshooting](guides/troubleshooting.md).
 
 ## Install
 
@@ -48,7 +54,12 @@ Optional extras, only for the features that need them:
 
 ## The 5-minute path
 
+Not sure where you are? Run `pnpm jobflow` on its own: it shows your profile, jobs, saved
+searches, applications and model, a getting-started checklist, and the **one** command to
+run next.
+
 ```bash
+pnpm jobflow                                   # where you are + what to do next
 pnpm jobflow init                              # résumé → review → preferences → presets
 pnpm jobflow sync                              # poll your presets + sources, then rank (≈1–2 min)
 pnpm jobflow feed                              # your ranked match cards
@@ -82,6 +93,13 @@ corpus yet are kept aside, and the one you pick is saved into your corpus the mo
 Global options (anywhere on the line): `--json`, `--data-dir <dir>`,
 `--store pglite|memory`, `--no-color`. Every command has `--help`.
 
+### `jobflow` / `jobflow status`
+
+```bash
+pnpm jobflow             # status + the next step (the full command list is `jobflow --help`)
+pnpm -s jobflow --json   # the same as JSON: steps, next, profile, corpus, searches, applications, model
+```
+
 ### `jobflow init`
 
 Interactive onboarding. It reads your résumé, shows what it extracted (name, email, skills,
@@ -100,6 +118,10 @@ pnpm jobflow init --yes --resume ./cv.pdf --home US --markets US,CA \
 pnpm jobflow init --yes --sample                # the fictional persona
 cat cv.txt | pnpm jobflow init --yes --resume -  # résumé text on stdin
 ```
+
+`--yes` needs something to build a profile from — `--resume`, `--skills` or `--sample`; with
+none of them it stops (exit 2) instead of saving an empty profile that every score would then
+be invented against. Interactively, skipping the résumé means typing at least one skill.
 
 Other flags: `--name`, `--email`, `--phone`, `--linkedin`, `--github`, `--portfolio`,
 `--skills`, `--yoe`, `--level`, `--relocate`/`--no-relocate`, `--locations`, `--assist`
@@ -124,6 +146,8 @@ pnpm jobflow profile set resume-path ~/cv/tailored.pdf
 pnpm jobflow profile import ./cv-2026.pdf [--merge] [--assist]
 pnpm jobflow profile edit                              # $EDITOR on a JSON of your profile
 ```
+
+![jobflow me](screenshots/cli-profile.png)
 
 Fields for `set`: `name first last email phone linkedin github portfolio resume-path
 skills must-haves roles yoe level home markets remote relocate floor currency locations
@@ -183,6 +207,9 @@ Flags: `--remote`, `--onsite`, `--loc <place>` (repeatable), `--country <CC>`,
 `-n/--limit` (15), `--sort score|relevance`, `--format cards|table`, `--save-as <name>`,
 `--ingest`.
 
+Before `init` the results are **unscored**: no score, no notes about "your stack" or level,
+and nothing hard-excluded — there's no profile to judge them against yet.
+
 Each card shows the score, title, company, location, pay (stated, or a labelled estimate
 with its confidence), age, source, stack fit, level note, red flags, preset tags and the
 apply link. A search writes nothing to your corpus unless you `--ingest` or pick a result.
@@ -195,7 +222,7 @@ Saved searches run on every `sync` and double as feed views.
 ```bash
 pnpm jobflow searches                                         # list
 pnpm jobflow searches add go-remote golang --remote --seniority senior
-pnpm jobflow searches add berlin "platform" --loc "Berlin,DE" --no-source   # a view only
+pnpm jobflow searches add berlin "platform" --loc "Berlin,DE" --no-source   # a view only (fetches nothing)
 pnpm jobflow searches run go-remote
 pnpm jobflow feed --search go-remote
 pnpm jobflow searches rm go-remote
@@ -230,13 +257,18 @@ agent in your own browser session, never by `sync`.
 ### `jobflow sync` / `jobflow rank`
 
 ```bash
-pnpm jobflow sync           # bounded sweep (≈1–2 minutes), then rank
-pnpm jobflow sync --full    # every due board and slow feed — takes a while
+pnpm jobflow sync           # every due board within ~5 minutes (the first sync: 25 boards), then rank
+pnpm jobflow sync --max-boards 40   # cap this run (or JOBFLOW_SYNC_MAX_BOARDS)
+pnpm jobflow sync --full    # every due board and slow feed, no time limit — takes a while
 pnpm jobflow rank           # re-score only (after a profile change)
+pnpm jobflow renormalize    # re-parse stored postings' locations + agency flags (no polling), then rank
 ```
 
 Re-polling is idempotent; postings that disappeared from their board are retired, and
-aggregator postings expire when nobody re-confirms them.
+aggregator postings expire when nobody re-confirms them. After an upgrade that improves the
+location parser, the next `sync` re-parses the postings you already hold once (from their
+stored location text) before polling; `renormalize` does the same on demand and prints what
+changed.
 
 ### `jobflow feed` / `jobflow show`
 
@@ -245,8 +277,17 @@ pnpm jobflow feed                          # top 20
 pnpm jobflow feed -n 50 --min-score 70 --format table
 pnpm jobflow feed --search go-remote       # through a saved search (hidden counts shown)
 pnpm jobflow feed --preset india           # only #india roles
-pnpm jobflow show 3 [--jd]                 # details, tracker status, cached drafts
+pnpm jobflow feed --no-diversify           # strictly by score (see below)
+pnpm jobflow show 3 [--jd]                 # details, fit, tracker status, drafts, "ready?" + next commands
 ```
+
+By default no single company fills the page: at most 3 of its jobs in any 20 cards, the rest
+following further down — but a held-back job never lands below jobs scoring more than 12
+points less, and the company's last card on the page says "+N more at <company> further
+down". That only changes the order; every card keeps its real score and nothing is hidden. `--no-diversify` lists strictly by score (the web app's **score order
+only** chip under Filters → order; MCP `list_jobs` takes `diversify: false`).
+
+![jobflow feed](screenshots/cli-feed.png)
 
 Before you've set up a profile the feed is a **browse** feed — freshest postings, no
 scores. JobFlow never shows a fit score it can't back.
@@ -287,8 +328,12 @@ pnpm jobflow apply 1 --open    # open the form in your default browser
 pnpm jobflow apply 1 --fill    # pre-fill it in a local browser, then STOP for your review
 ```
 
+![jobflow apply — the dry run](screenshots/cli-apply.png)
+
 The dry run also lists anything to fix first (no email, no résumé file to attach…) with the
-exact command to fix it, and marks the posting **ready** in your tracker.
+exact command to fix it. It moves the posting forward in your tracker: **ready** when nothing
+is missing, otherwise **drafting** with the fix as its next step. Nothing is filled or sent by
+a dry run.
 
 `--fill` needs Playwright + Chromium and a one-time `jobflow config set automation.fill on`
 (an explicit `JOBFLOW_BROWSER=off` in the environment always wins). It opens the form in a
@@ -319,6 +364,10 @@ size, the model (with a one-token test call — skip with `--offline`), Playwrig
 Chromium, a LaTeX engine, network reachability of two public job-board APIs, and that
 autosubmit is locked off. Exits 1 if anything fails; `--json` for machines.
 
+![jobflow doctor](screenshots/cli-doctor.png)
+
+If something is wrong, [Troubleshooting](guides/troubleshooting.md) covers each failure.
+
 ### `jobflow serve`
 
 ```bash
@@ -329,6 +378,34 @@ Starts the web UI on the **same** data (`next start` if the web app is built, el
 `next dev`). The local database is single-writer: while `serve` runs it holds the data
 dir, and other `jobflow` commands stop with a clear message pointing at the running UI
 instead of risking your data. Ctrl-C stops the server (and its whole process tree).
+
+The UI's pages mirror the commands: **Jobs** (`/`, like `jobflow feed`), **Search**
+(`/search`, `jobflow search`), **Applications** (`/applications`, `jobflow track`),
+**Profile** (`/profile`, `jobflow init` / `jobflow profile`), **Sources** (`/sources`, `jobflow
+discovery` and `jobflow sync`) and **Settings** (`/settings`, `jobflow config`). Each job has
+a Job page at `/jobs/<id>` with the apply checklist (`jobflow apply`). The old `/searches` and
+`/discovery` addresses redirect to `/search` and `/sources`. A tour of every page is in
+[the web app tour](guides/web-app-tour.md).
+
+### `jobflow mcp`
+
+```bash
+pnpm jobflow mcp [--idle 20]
+claude mcp add jobflow -- node /path/to/jobflow/apps/cli/bin/jobflow.mjs mcp
+```
+
+Serves JobFlow to AI agents (Claude Code, Claude Desktop, any MCP client) over the Model
+Context Protocol on stdin/stdout. Your MCP client starts it; you don't run it by hand. It
+offers tools for search, the ranked feed, one job in full, saved searches, the tracker, a
+dry-run apply plan and grounded drafts, plus two prompts and two resources. Nothing it exposes
+fills or sends a form: to pre-fill, you run `jobflow apply <id> --fill` yourself.
+
+It uses the same data as every other command (`--data-dir`, `--store`, `DATABASE_URL`). Since
+stdout is the protocol channel, its only log line goes to stderr. It doesn't hold the
+single-writer database while the agent sits idle: the database is opened per tool call and
+released after `--idle` seconds (default 20), so other `jobflow` commands keep working. While
+`jobflow serve` holds the data, its tools return a clear error instead. Setup, the tool
+reference and examples are in [AI agents (MCP)](guides/ai-agents-mcp.md).
 
 ### `jobflow demo` / `jobflow harvest`
 

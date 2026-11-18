@@ -26,7 +26,9 @@ const Patch = z.object({
   aboutText: z.string().optional(),
   prefs: z
     .object({
-      salaryFloor: z.number().optional(),
+      salaryFloor: z.number().min(0).optional(),
+      homeCountry: z.string().regex(/^([A-Z]{2})?$/, "home country is a 2-letter code like US or DE").optional(),
+      markets: z.array(z.string().regex(/^[A-Z]{2}$/, "markets are 2-letter country codes")).optional(),
       currency: z.string().optional(),
       stackProfile: z.array(z.string()).optional(),
       targetArchetypes: z.array(z.string()).optional(),
@@ -50,7 +52,9 @@ export async function PUT(req: Request) {
   if (auth instanceof Response) return auth;
   const repo = await getRepo();
   await ensureTenant(repo, auth.tenantId);
-  const body = Patch.parse(await req.json());
+  const parsed = Patch.safeParse(await req.json().catch(() => ({})));
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid profile." }, { status: 400 });
+  const body = parsed.data;
   const current = (await repo.getProfile(auth.tenantId)) ?? blankProfile(auth.tenantId);
 
   const resumeChanged = body.masterResume !== undefined && body.masterResume !== current.masterResume;

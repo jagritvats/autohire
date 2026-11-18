@@ -15,7 +15,8 @@ const DENY = [
 ];
 // files allowed to mention the denylist (this script and the publishing guide)
 const ALLOW = new Set(["scripts/check-pii.mjs", "docs/internal/PUBLISHING.md"]);
-const REPO_URL = /github\.com\/jagritvats\/autohire/g; // the canonical repo URL is not personal data
+// the canonical repo URL (incl. raw/CDN forms) is not personal data
+const REPO_URL = /(?:raw\.githubusercontent\.com|github\.com)\/jagritvats\/autohire/g;
 
 const files = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" }).split("\0").filter(Boolean);
 const hits = [];

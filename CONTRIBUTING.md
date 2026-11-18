@@ -1,145 +1,243 @@
 # Contributing to JobFlow
 
-Thanks for helping! JobFlow is a self-hostable job-search platform: discovery across ATS
-boards and feeds, honest match cards, grounded résumé tailoring and an autofill that always
-stops at a human review gate. This guide gets you from clone to pull request.
+Thanks for being here. JobFlow is a local-first job search engine. It finds roles across
+company job boards and feeds, ranks them against your own résumé with honest match cards,
+tailors your documents from your own material, and pre-fills applications up to a review
+screen where **you** press submit. It runs on your machine as a CLI and a web app, with an
+optional multi-user hosting mode.
 
-## Ground rules (the invariants)
+This page is the front door. It gets you from clone to pull request. The deeper guides are
+in [docs/contributing/](docs/contributing/).
 
-These are the product's promises. A change that breaks one will not be merged, however
-useful it is otherwise.
+## Our promises
 
-1. **Tier boundary.** The cloud worker, the web server and the cron run only Tier 1–2
-   sources. Tier 3 (`packages/adapters/src/tier3/` — LinkedIn, Naukri, Glassdoor,
-   AmbitionBox, Darwinbox) runs only in the local agent on the user's machine. Never register
-   a Tier-3 adapter in the cloud registry, and never add a server path that holds a user's
-   session for those sites.
-2. **The form-filler never submits.** `packages/autofill` has no code path that clicks
-   submit, presses Enter on a form or dispatches a submit event. `JOBFLOW_AUTOSUBMIT` is
-   hard-false and `assertNeverSubmits()` throws if it isn't.
-3. **Generation is grounded in the candidate's own material.** Résumé bullets, answers and
-   cover letters may rephrase, reorder and trim the user's résumé, Evidence Bank and declared
-   skills — never extend them. Every generation path passes `HONEST_VOICE`, the candidate
-   block and the evidence block; when a model is unavailable, documents fall back to
-   deterministic builders labelled `builtin` and prose refuses. Résumé import copies spans
-   from the source and filters any model output through `groundDraft`.
+JobFlow makes a few promises to the people who use it. A change that breaks one won't be
+merged, however useful it is otherwise. The full text, with the functions that enforce
+each rule, is in [CLAUDE.md](CLAUDE.md#invariants-do-not-break-these).
+
+1. **Logged-in sites stay on your machine.** The web server, worker and cron run only Tier 1–2
+   sources. LinkedIn, Naukri, Glassdoor and the other Tier-3 sources run only in the local
+   agent, in your own browser session.
+2. **The form-filler never submits.** There is no code path, option or command that submits
+   an application.
+3. **Generated text is grounded in your own material.** Tailored résumés, letters and
+   answers rephrase, reorder and trim your résumé, Evidence Bank and declared skills. They
+   never add to them.
 4. **Almost nothing is a hard filter.** Stack, seniority and location are weighted signals
-   with honest flags. The only hard exclusions live in `hardExclude()`
-   (`packages/core/src/match/score.ts`). Saved-search *views* are the user's explicit choice:
-   they hide only on confidently-known values, never change a score, and always report
-   what they hid.
-5. **Idempotent upserts + honest freshness.** Postings key on `(atsType, atsJobId)`;
-   non-ATS sources use a source-prefixed `scopedJobId`. Never mark postings stale from a
-   partial or failed fetch.
-6. **One type system.** Shared shapes come from `@jobflow/core` (Zod). Don't redefine
-   `Posting`, `Match`, `Profile` and friends locally.
-7. **Tenant isolation.** Every tenant-scoped read and write takes the caller's tenant id.
-   API routes resolve the caller with `guard()` / `withAuth()` — `scripts/check-tenant.mjs`
-   enforces it in CI.
+   with honest flags. There are exactly two hard exclusions. Views say what they hid.
+5. **Postings are upserted idempotently and kept fresh honestly.** Nothing is retired on a
+   failed or partial fetch.
+6. **One type system.** Shared shapes come from `@jobflow/core`.
+7. **Your data is yours.** Every tenant-scoped read and write takes the caller's tenant id.
+   New users start blank, and no real personal data is ever committed.
+
+## Ways to contribute
+
+- **Job sources.** A new board, ATS or feed is one adapter plus one registry line. See
+  [Adding a job source](docs/contributing/adding-a-job-source.md).
+- **ATS detection.** Teach the detector a new careers-site URL pattern
+  (`packages/adapters/src/detector/index.ts`).
+- **Discovery presets.** Better seed employers and feeds for a market. See
+  [Presets and discovery](docs/contributing/presets-and-discovery.md).
+- **Parsing and normalization.** Titles, skills, locations, salaries, experience
+  (`packages/core/src/normalize/`) and résumé import (`packages/core/src/resume/`). This is
+  where match quality is won. Add tests with every change. When you change what the location
+  parser or the agency rule returns, bump `NORMALIZE_VERSION`
+  (`packages/core/src/normalize/version.ts`): every store re-derives its stored postings once
+  on its next sync.
+- **UI and UX.** The web app follows a small design system and a set of UX rules. See
+  [Working on the web UI](docs/contributing/web-ui.md).
+- **The CLI.** See [Working on the CLI](docs/contributing/cli.md).
+- **Docs.** Fix what confused you. User docs are in [docs/](docs/README.md).
+- **Translations.** All copy is English today and lives inline in components and commands;
+  there is no translation layer yet. If you'd like to add one, open an issue first so we can
+  agree on the approach.
+- **Bug reports and ideas.** Use the [issue forms](.github/ISSUE_TEMPLATE/). Output from
+  `jobflow doctor --json` helps a lot. Never paste keys, tokens, cookies or a résumé.
+
+### Good first issues
+
+Each of these is small, self-contained and has an existing example to copy:
+
+- **Poll Recruitee and Personio boards.** Both are in `AtsType` and the detector already
+  recognises their URLs, but neither has an adapter in `ADAPTERS`, so a detected board is
+  never polled. Model it on `packages/adapters/src/ats/lever.ts`.
+- **Add RemoteOK or Jobicy.** Both have a `SourceKind`, a trust prior and a
+  `REDATED_SOURCES` entry in `packages/core/src/match/trust.ts`, but no adapter. Model it on
+  `packages/adapters/src/aggregators/remotive.ts`.
+- **Finish the copy pass.** `CompaniesView`, `EvidenceEditor` and `TokensPanel` in
+  `apps/web/components/` still use pre-overhaul wording
+  ([UX_AUDIT.md](docs/internal/UX_AUDIT.md), "Still open").
+- **Move markup to canonical classes.** Legacy names such as `.card-block`, `.save` and `.cmd`
+  are aliased in `apps/web/app/globals.css`. Converting a component to the primitives in
+  `apps/web/components/ui/` is a tidy, reviewable change.
+- **Teach the normalizer a skill or title.** Add an alias to `SKILL_ALIASES` in
+  `packages/core/src/normalize/skills.ts` (or a title pattern in `titles.ts`) with a test in
+  `packages/core/test/normalize.test.ts`.
+
+Look for the `good first issue` label on GitHub too. Unsure whether something fits? Open an
+issue or a discussion before you write a lot of code.
 
 ## Development setup
 
-Requirements: Node 20+ (22 recommended) and pnpm 9 (`corepack enable`).
+You need **Node 22** (Node 20 works; CI uses 22) and **pnpm 9**. Corepack installs the right
+pnpm from `package.json`:
 
 ```bash
+corepack enable
+git clone https://github.com/jagritvats/autohire.git jobflow && cd jobflow
 pnpm install
-pnpm -r build
-pnpm -r test
-pnpm demo          # the whole pipeline against live public APIs, as a fictional candidate (~1 min)
-pnpm web           # http://localhost:3000
+pnpm -r build          # tsc -b across packages, plus the Next.js build
+pnpm -r test           # vitest, offline
 ```
 
-No database or API keys are needed: storage defaults to in-memory (web) or PGlite under
-`~/.jobflow` (CLI), and the `echo` LLM provider runs offline. See
-[docs/configuration.md](docs/configuration.md) for every setting.
+No database, API keys or model are needed. Storage defaults to PGlite (Postgres in WASM) in
+`~/.jobflow`, and the offline `echo` model stands in for an LLM.
 
-### Repository layout
+Then run it:
+
+```bash
+pnpm jobflow                     # the CLI: shows where you are and the next step
+pnpm jobflow --help
+pnpm web                         # web app dev server on http://localhost:3000
+pnpm jobflow serve               # the web app on the same data as the CLI
+pnpm demo                        # the whole pipeline against live public APIs, fictional persona, in memory
+```
+
+### Keep development data apart
+
+The CLI and web app share one data directory, and PGlite allows one writer at a time. Use a
+scratch directory while developing so you never touch, or lock, your own job search:
+
+```bash
+export JOBFLOW_DATA_DIR="$(mktemp -d)"     # or: pnpm jobflow --data-dir /tmp/jf-dev …
+pnpm jobflow init --yes --sample           # the fictional sample persona
+```
+
+For UI work, demo mode serves an offline, fictional corpus and saves nothing:
+
+```bash
+JOBFLOW_DEMO_DATA=1 JOBFLOW_STORE=memory pnpm web
+```
+
+Every setting is in [docs/configuration.md](docs/configuration.md).
+
+## How the code is laid out
 
 ```
 packages/
-  core/       Zod schemas + pure domain logic: normalize, dedup, match, salary, résumé parsing
-  adapters/   one SourceAdapter per job source, tier-tagged; ATS detector; Tier-3 (local only)
-  db/         Repository interface, in-memory + Postgres/PGlite implementations, migrations
-  llm/        swappable providers + grounded generation + re-rank
-  pipeline/   orchestration: ingest, discover, poll, presets, searches, profile import
-  resume-io/  bytes → résumé text (PDF, DOCX, LinkedIn export)
-  service/    application services shared by web, CLI and worker (feed, tailor, onboarding)
-  autofill/   Playwright form-filler with a review gate (never submits)
+  core/       Zod schemas (the one type system) + pure logic: normalize, dedup, match, views, salary, résumé parsing
+  adapters/   one SourceAdapter per source, tier-tagged; search targets; ATS detector; SSRF guard; tier3/ (local only)
+  db/         the Repository interface; in-memory, PGlite and Postgres stores; migrations with RLS; file store
+  llm/        providers (Anthropic, OpenAI-compatible, echo), grounded generation, re-rank, résumé extraction
+  pipeline/   discover, poll, ingest, liveness, presets, the discovery plan, search, salary estimates
+  resume-io/  file bytes → résumé text (PDF, DOCX, LinkedIn export)
+  service/    what the CLI, web app and worker share: feed, search, discovery, onboarding, tailoring, apply plan
+  autofill/   the Playwright form-filler, which stops at the review gate
+  mcp/        the MCP server for AI agents (`jobflow mcp`): tools, prompts, resources over service
 apps/
-  web/        Next.js control plane
   cli/        the `jobflow` command
-  worker/     cloud job runner (Tier 1–2 only)
-  agent/      local agent (Tier 3 + form fill, on your machine)
-  extension/  MV3 browser extension (read-only capture + match panel)
+  web/        Next.js UI and API
+  worker/     scheduled discover → poll → rank for hosted setups (Tier 1–2 only)
+  agent/      the local agent: Tier-3 sources and form filling, on your machine
+  extension/  MV3 browser extension: match panel and page capture (read-only)
+scripts/      CI guards (check-pii, check-tenant), screenshots, dev helpers
+docs/         user docs; docs/contributing/ for contributors; docs/internal/ for design notes
 ```
 
-Dependencies point inwards: `core` depends on nothing; `adapters`, `db`, `llm`, `autofill`
-and `resume-io` depend only on `core`; `pipeline` composes `core` + `adapters` + `db`;
-`service` adds `llm` and `resume-io`; apps compose everything.
+Dependencies point inwards:
+
+```
+core                                     depends on nothing
+adapters · db · llm · autofill · resume-io → core
+pipeline                                 → core, adapters, db
+service                                  → pipeline, llm, resume-io, autofill (and what they use)
+mcp                                      → service (and what it uses), never autofill's browser side
+apps/cli · apps/web · apps/worker        → service and the packages
+apps/agent                               → pipeline, autofill, llm (no service)
+```
+
+Nothing points outwards: `core` never imports another package, and `pipeline` never imports
+`llm` (it is handed an embedder instead). Put app logic in `packages/service`, not in
+`apps/web/lib` or a CLI command, so every interface gets it.
+[docs/architecture.md](docs/architecture.md) explains the pipeline and the two planes.
 
 ### Conventions
 
-- ESM with `.js` import specifiers in TypeScript source (`import { x } from "./foo.js"`).
-- Strict TypeScript with `noUncheckedIndexedAccess` — handle `undefined` on index access.
-- Pure functions in `core`; adapters are thin classes implementing `SourceAdapter`.
-- Adapters return `[]` on recoverable errors and never throw the pipeline.
-- Comments explain *why*, not *what*.
-- Tests use **fictional** people and companies (`example.com` addresses). Never commit a real
-  résumé, name, email, token or screenshot of real data — `scripts/check-pii.mjs` runs in CI.
+- ESM with `.js` import specifiers in TypeScript (`import { x } from "./foo.js"` for
+  `foo.ts`).
+- Strict TypeScript with `noUncheckedIndexedAccess`: handle `undefined` on index access.
+- Pure functions in `core`. Adapters are thin classes that return `[]` on recoverable errors
+  and never throw into the pipeline.
+- Comments explain *why*. Older comments cite the original design spec as `(§N)`.
+- Tests and fixtures use fictional people and companies at `example.com`.
 
-## Common changes
+## Checks
 
-### Add a job source
+CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs on every pull request, offline,
+with Node 22. Run the same locally before you push:
 
-1. Create `packages/adapters/src/<group>/<name>.ts` implementing `SourceAdapter`
-   (`source`, `tier`, `fetch`; `isLive` if the source has a per-job endpoint that says
-   "gone" definitively; `toTargets` + `searchCaps` if it supports search queries).
-2. Register it in `packages/adapters/src/registry.ts` — unless it's Tier 3, in which case it
-   goes in `tier3/` and is **not** registered for the cloud.
-3. Add its trust prior to `SOURCE_TRUST` in `packages/core/src/match/trust.ts` (and
-   `REDATED_SOURCES` if it re-stamps dates).
-4. Add a fixture-based test — no live HTTP in tests.
+```bash
+pnpm -r build
+pnpm -r typecheck
+pnpm -r test
+node scripts/check-pii.mjs       # no real personal data in tracked files
+node scripts/check-tenant.mjs    # every API route resolves its caller; no hard-coded tenant
+```
 
-Open a "New job source" issue first if you're unsure which tier it belongs to.
+After changing `core`, `adapters` or `pipeline`, also run `pnpm demo`. It hits live free APIs
+and catches integration breaks that offline tests can't. See
+[Testing](docs/contributing/testing.md) for how the suites are organised.
 
-### Add an ATS to the detector
+## Commits and pull requests
 
-Add a URL pattern and a `probe()` case in `packages/adapters/src/detector/index.ts`, with a
-test.
+- **Sign off every commit** with `git commit -s`. This adds a `Signed-off-by:` line and
+  certifies the [Developer Certificate of Origin](https://developercertificate.org/): you
+  wrote the change or otherwise have the right to submit it. Maintainers check sign-offs
+  during review.
+- **Licensing.** JobFlow is [AGPL-3.0-only](LICENSE). Contributions are accepted under the
+  same licence (inbound = outbound). Don't copy code from projects under incompatible
+  licences.
+- **Commit messages.** A short summary in the imperative, often prefixed with the area
+  ("Sources: show each source's last run"), then a body that explains why.
+- **One topic per pull request.** Describe the user-visible change and how you tested it, and
+  fill in the [PR template](.github/PULL_REQUEST_TEMPLATE.md) checklist.
+- **UI changes** include screenshots in light and dark, and at mobile width when layout
+  changes. **CLI changes** update the help text, keep `--json` working, and update
+  [docs/cli.md](docs/cli.md).
+- Add a line to the [CHANGELOG](CHANGELOG.md) under `## [Unreleased]` for anything users
+  will notice.
 
-### Add a discovery preset
+## What to expect in review
 
-Presets are data in `packages/pipeline/src/presets/`. Use stable feed ids (users can turn
-individual feeds off) and prefer well-known public boards.
+Reviewers check, in this order:
 
-### Change matching
+1. **The promises above.** Tier boundary, never-submit, grounding, soft ranking, idempotent
+   upserts, one type system, tenant isolation and privacy. These aren't negotiable.
+2. **Tests** for the behaviour you changed, using fictional data and no live HTTP.
+3. **Honest UX.** Views report what they hide, empty and error states say what to do next,
+   estimates look like estimates.
+4. **Scope and placement.** Logic in the right package, no drive-by refactors.
 
-Weights and components live in `packages/core/src/match/score.ts`; keep each component in
-`[0, 1]` and the weights summing to ≈ 1. Add tests for the behaviour you're changing.
+Expect questions and requests for changes; it's normal, and it's how the codebase stays
+coherent. If a review stalls, a polite ping on the pull request is welcome.
 
-### Change a generator or prompt
+## Deeper guides
 
-Keep `HONEST_VOICE`, and bump `PROMPT_VERSION` (`packages/service/src/tailor.ts`) so drafts
-made by the old prompt read as stale.
+| Guide | For |
+|---|---|
+| [Adding a job source](docs/contributing/adding-a-job-source.md) | adapters, tiers, search targets, liveness, the SSRF guard, fixture tests |
+| [Presets and discovery](docs/contributing/presets-and-discovery.md) | preset data, stable feed ids, the discovery plan, preset tags |
+| [Working on the web UI](docs/contributing/web-ui.md) | design system, primitives, page structure, accessibility, UX rules, screenshots |
+| [Working on the CLI](docs/contributing/cli.md) | commands, output and `--json`, exit codes, row references, in-process tests |
+| [Data, storage and migrations](docs/contributing/data-and-migrations.md) | the Repository, stores, migrations and RLS, contract tests, tenant isolation |
+| [Testing](docs/contributing/testing.md) | where tests live, fixtures, the real-browser autofill test, live checks |
+| [Releasing](docs/contributing/releasing.md) | versions, the CHANGELOG, cutting a release |
 
-### Add a database field
+## Security and conduct
 
-Add a numbered migration in `packages/db/migrations/` (idempotent, with RLS for tenant
-tables), update both `InMemoryRepository` and `PgRepository`, and extend the contract test in
-`packages/db/test/contract.test.ts` — it runs against both stores.
+Please don't open public issues for vulnerabilities. Report them privately as described in
+[SECURITY.md](SECURITY.md). Anything that could make the form-filler submit, let the server
+run a Tier-3 source, or cross tenants is a security bug.
 
-## Pull requests
-
-- Keep PRs focused; describe the user-visible change and how you tested it.
-- `pnpm -r build && pnpm -r typecheck && pnpm -r test` must pass, plus
-  `node scripts/check-pii.mjs` and `node scripts/check-tenant.mjs`.
-- Fill in the invariants checklist in the PR template.
-- Commit messages: imperative mood, a short summary line, and a body that explains why.
-
-## Reporting security issues
-
-Please don't open public issues for vulnerabilities — see [SECURITY.md](SECURITY.md).
-
-## Code of conduct
-
-Participation is governed by our [Code of Conduct](CODE_OF_CONDUCT.md).
+Everyone taking part is expected to follow our [Code of Conduct](CODE_OF_CONDUCT.md).

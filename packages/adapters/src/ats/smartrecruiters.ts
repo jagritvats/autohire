@@ -1,5 +1,5 @@
 import type { LevelBand, RawPosting } from "@jobflow/core";
-import { DETAIL_CAP, pickForDetail, htmlToText, httpJson, mapPool, httpStatus, liveFromStatus, type FetchTarget, type SourceAdapter, type LivenessTarget } from "../types.js";
+import { DETAIL_CAP, markPartial, pickForDetail, htmlToText, httpJson, mapPool, httpStatus, liveFromStatus, type FetchTarget, type SourceAdapter, type LivenessTarget } from "../types.js";
 
 /**
  * SmartRecruiters public posting API (Tier 1, free, no auth). Used by Freshworks,
@@ -46,7 +46,8 @@ export class SmartRecruitersAdapter implements SourceAdapter {
     const base = `https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(slug)}/postings`;
     const country = target.location?.toLowerCase();
 
-    const list: SrPosting[] = [];
+    const listed: SrPosting[] = [];
+    let total = 0;
     for (let offset = 0; offset < MAX_LIST; offset += 100) {
       const qs = new URLSearchParams({ limit: "100", offset: String(offset) });
       if (country) qs.set("country", country);
@@ -54,9 +55,14 @@ export class SmartRecruitersAdapter implements SourceAdapter {
       // a failed page mid-list would make the tail look closed to markStale — all or nothing
       if (!page) return [];
       const content = page?.content ?? [];
-      list.push(...content);
-      if (content.length < 100 || list.length >= (page?.totalFound ?? 0)) break;
+      listed.push(...content);
+      total = page?.totalFound ?? listed.length;
+      if (content.length < 100 || listed.length >= total) break;
     }
+    // a posting released mid-poll shifts the pages, so a row can repeat
+    const list = [...new Map(listed.map((p) => [p.id, p])).values()];
+    // cut at MAX_LIST with more on the board: never a markStale diff (invariant #5)
+    const truncated = listed.length < total;
 
     // newest first, so the detail budget goes to fresh roles
     list.sort((a, b) => (b.releasedDate ?? "").localeCompare(a.releasedDate ?? ""));
@@ -64,7 +70,7 @@ export class SmartRecruitersAdapter implements SourceAdapter {
     const details = new Map<string, SrDetail | null>();
     await mapPool(needDetail, 4, async (p) => details.set(p.id, await httpJson<SrDetail>(`${base}/${p.id}`)));
 
-    return list.map((p) => {
+    const out = list.map((p) => {
       const d = details.get(p.id);
       const loc = p.location;
       const place = loc?.fullLocation ?? [loc?.city, loc?.region, loc?.country].filter(Boolean).join(", ");
@@ -90,6 +96,7 @@ export class SmartRecruitersAdapter implements SourceAdapter {
         raw: p as unknown as Record<string, unknown>,
       } satisfies RawPosting;
     });
+    return truncated ? markPartial(out) : out;
   }
 }
 

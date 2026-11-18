@@ -19,14 +19,14 @@ export const DEFAULT_TENANT = "00000000-0000-0000-0000-000000000001";
  * Keka, Kula, TurboHire) — those reach the feed through the India boards instead.
  */
 
-/** International product/fintech targets — remote-worldwide or India-office roles. */
+/**
+ * International product/fintech targets — remote-worldwide or India-office roles. Ramp,
+ * Plaid, Linear, Match Group and Palantir left this list in the 2026-11 audit: none had a
+ * single India-workable role (they stay in the us / eu-uk presets). Audit:
+ * docs/internal/PRESET_COVERAGE.md.
+ */
 const GLOBAL_TARGETS: SeedCompany[] = [
   { name: "Stripe", careersUrl: "https://boards.greenhouse.io/stripe", tags: ["fintech", "target", "global"], pollCadence: "daily" },
-  { name: "Ramp", careersUrl: "https://jobs.ashbyhq.com/ramp", tags: ["fintech", "target"] },
-  { name: "Linear", careersUrl: "https://jobs.ashbyhq.com/Linear", tags: ["product", "remote"] },
-  { name: "Plaid", careersUrl: "https://jobs.ashbyhq.com/plaid", tags: ["fintech"] }, // moved off Greenhouse (404) to Ashby
-  { name: "Match Group", careersUrl: "https://jobs.lever.co/matchgroup", tags: ["product"] },
-  { name: "Palantir", careersUrl: "https://jobs.lever.co/palantir", tags: ["platform"] },
   { name: "Vercel", careersUrl: "https://boards.greenhouse.io/vercel", tags: ["product", "remote"] },
   { name: "Supabase", careersUrl: "https://jobs.ashbyhq.com/supabase", tags: ["product", "remote", "oss"] },
   { name: "Notion", careersUrl: "https://jobs.ashbyhq.com/notion", tags: ["global", "saas"] },
@@ -48,7 +48,6 @@ const INDIA_TARGETS: SeedCompany[] = [
   { name: "Zeta", careersUrl: "https://jobs.lever.co/zeta", tags: ["india", "fintech"], pollCadence: "daily" },
   { name: "Fampay", careersUrl: "https://jobs.lever.co/fampay", tags: ["india", "fintech"] },
   { name: "Observe.AI", careersUrl: "https://boards.greenhouse.io/observeai", tags: ["india", "ai", "saas"] },
-  { name: "Fi Money", careersUrl: "https://jobs.lever.co/epifi", tags: ["india", "fintech"] },
   { name: "ixigo", careersUrl: "https://careers.smartrecruiters.com/ixigo", tags: ["india", "consumer"] },
   { name: "Atlan", careersUrl: "https://jobs.ashbyhq.com/atlan", tags: ["india", "saas", "infra"] },
   { name: "Paytm", careersUrl: "https://jobs.lever.co/paytm", tags: ["india", "fintech"] },
@@ -58,7 +57,8 @@ const INDIA_TARGETS: SeedCompany[] = [
   { name: "SpotDraft", careersUrl: "https://jobs.ashbyhq.com/spotdraft", tags: ["india", "saas", "ai"] },
   { name: "CRED", careersUrl: "https://jobs.lever.co/cred", tags: ["india", "fintech", "target"] },
   { name: "Groww", careersUrl: "https://boards.greenhouse.io/groww", tags: ["india", "fintech", "target"] },
-  // India-market ATSes (Kula / Keka / Zoho Recruit / Freshteam) — verified live 2026-09
+  // India-market ATSes (Kula / Keka / Zoho Recruit / Freshteam) — verified live 2026-09.
+  // Removed 2026-11: Locus (Freshteam board empty) and Fi Money (Lever "epifi" empty).
   { name: "Cashfree Payments", careersUrl: "https://careers.kula.ai/cashfree", tags: ["india", "fintech"], pollCadence: "daily" },
   { name: "Slice", careersUrl: "https://careers.kula.ai/slice", tags: ["india", "fintech"], pollCadence: "daily" },
   { name: "Acko", careersUrl: "https://careers.kula.ai/acko", tags: ["india", "fintech"] },
@@ -70,7 +70,6 @@ const INDIA_TARGETS: SeedCompany[] = [
   { name: "Zluri", careersUrl: "https://zluri.keka.com/careers", tags: ["india", "saas"] },
   { name: "Wissen Technology", careersUrl: "https://wissen.zohorecruit.in/jobs/Careers", tags: ["india", "services"] },
   { name: "Everstage", careersUrl: "https://everstage.freshteam.com", tags: ["india", "saas"] },
-  { name: "Locus", careersUrl: "https://locus.freshteam.com", tags: ["india", "saas"] },
   // no pollable ATS found (own portal / Darwinbox / TurboHire…) — kept so the
   // detector can pick them up if they move, and so discovered roles attach to them
   { name: "Zerodha", tags: ["india", "fintech", "target"] },

@@ -3,12 +3,14 @@ import {
   LevelBandOrder,
   MARKET_CURRENCY,
   MID_LEVEL,
-  calibrateByMarket,
+  calibrateSalaryScores,
+  calibrationKey,
   compSampleOf,
   estimateSalary,
   estimateTargetOf,
   hasStatedSalary,
   parseStatedSalary,
+  salaryRoleFamily,
   type BacktestRow,
   type EstimateTarget,
   type MarketCalibration,
@@ -114,7 +116,7 @@ export async function loadSalaryEstimator(
     const own = !o.withoutEmployerEvidence;
     const pool = own ? comps : comps.filter((c) => c.companyId !== p.companyId);
     const benchmarks = [...(own ? companyBenchmarks(companies.get(p.companyId), t) : []), ...marketBenchmarks(t, cache)];
-    return estimateSalary(t, pool, benchmarks, now, calibration.get(t.market));
+    return estimateSalary(t, pool, benchmarks, now, calibration.get(calibrationKey(t.market, salaryRoleFamily(t.archetype))));
   };
 }
 
@@ -468,7 +470,7 @@ export async function backtestSalaryEstimates(
   const active = await repo.listActivePostings();
   const calibrated = opts.calibrated ?? true;
   const estimate = await loadSalaryEstimator(repo, { postings: active, calibrated });
-  const rows: Array<{ conf: number; market: string; inBand: boolean; overlap: boolean; err: number }> = [];
+  const rows: Array<{ conf: number; market: string; family: BacktestRow["family"]; inBand: boolean; overlap: boolean; err: number }> = [];
   let evaluated = 0;
   for (const p of active) {
     const truth = compSampleOf(p);
@@ -479,6 +481,7 @@ export async function backtestSalaryEstimates(
     rows.push({
       conf: e.confidenceScore,
       market: truth.market,
+      family: salaryRoleFamily(p.roleArchetype),
       inBand: truth.mid >= e.min && truth.mid <= e.max,
       overlap: truth.hi >= e.min && truth.lo <= e.max,
       err: Math.abs(e.median / truth.mid - 1),
@@ -503,28 +506,31 @@ export async function backtestSalaryEstimates(
     overall: bucket("all", rows),
     byConfidence: bands.map(([l, lo, hi]) => bucket(l, rows.filter((r) => r.conf >= lo && r.conf < hi))),
     byMarket: [...new Set(rows.map((r) => r.market))].map((m) => bucket(m, rows.filter((r) => r.market === m))).sort((a, b) => b.n - a.n),
-    rows: rows.map((r) => ({ market: r.market, confidence: r.conf, err: r.err })),
+    rows: rows.map((r) => ({ market: r.market, family: r.family, confidence: r.conf, err: r.err })),
   };
 }
 
 // ── calibration ────────────────────────────────────────────────────────────────────────
 
-const CAL_KEY = (market: string) => `cal:v1:${market}`;
-const CAL_STAMP = "cal:v1:_run";
+// v2: per market × role family (v1 was per market; its rows are simply no longer read, and
+// the new stamp makes the next poll recalibrate)
+const CAL_KEY = (segment: string) => `cal:v2:${segment}`;
+const CAL_STAMP = "cal:v2:_run";
+const CAL_SEGMENTS = Object.keys(MARKET_CURRENCY).flatMap((m) => [calibrationKey(m, "eng"), calibrationKey(m, "other")]);
 const CAL_TTL_DAYS = 7;
 
 /**
  * Backtest the uncalibrated estimator leak-free (no employer evidence — the typical case)
- * and store a confidence factor per market, cached a week. A market without enough stated
- * ranges to judge keeps factor 1 (its stored entry is cleared).
+ * and store a confidence factor per market × role family (`calibrateSalaryScores`), cached a
+ * week. A segment without enough stated ranges to judge keeps factor 1 (its entry is cleared).
  */
 export async function calibrateSalaryConfidence(repo: Repository): Promise<Map<string, MarketCalibration>> {
   const bt = await backtestSalaryEstimates(repo, { withoutEmployerEvidence: true, calibrated: false });
-  const cal = calibrateByMarket(bt.rows);
-  for (const market of Object.keys(MARKET_CURRENCY)) {
-    const c = cal.get(market);
+  const cal = calibrateSalaryScores(bt.rows);
+  for (const segment of CAL_SEGMENTS) {
+    const c = cal.get(segment);
     await repo.putSalaryCache({
-      key: CAL_KEY(market), roleArchetype: null, location: market,
+      key: CAL_KEY(segment), roleArchetype: null, location: segment,
       estMin: null, estMax: null, estMedian: c?.factor ?? null, sampleCount: c?.n ?? null,
       currency: "", source: "backtest", confidence: "medium", ttlDays: CAL_TTL_DAYS,
     });
@@ -545,9 +551,9 @@ export async function ensureSalaryCalibration(repo: Repository): Promise<boolean
 
 async function loadCalibration(repo: Repository): Promise<Map<string, MarketCalibration>> {
   const out = new Map<string, MarketCalibration>();
-  for (const market of Object.keys(MARKET_CURRENCY)) {
-    const e = await repo.getSalaryCache(CAL_KEY(market));
-    if (e?.estMedian != null && e.sampleCount != null) out.set(market, { factor: e.estMedian, n: e.sampleCount });
+  for (const segment of CAL_SEGMENTS) {
+    const e = await repo.getSalaryCache(CAL_KEY(segment));
+    if (e?.estMedian != null && e.sampleCount != null) out.set(segment, { factor: e.estMedian, n: e.sampleCount });
   }
   return out;
 }

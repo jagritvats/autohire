@@ -526,6 +526,84 @@ describe.each(stores)("Repository contract — %s", (name, open) => {
     expect((await repo.getPosting(p.id))?.status).toBe("active");
   });
 
+  it("a re-upsert refreshes the dedup key and company spelling but keeps the row's identity", async () => {
+    const co = await repo.upsertCompany({ name: "Acme", nameNorm: `acme-${randomUUID()}`, atsType: "greenhouse", atsSlug: "acme" });
+    const other = await repo.upsertCompany({ name: "Acme Two", nameNorm: `acme2-${randomUUID()}`, atsType: "greenhouse", atsSlug: "acme2" });
+    const np = postingFor(co.id, { dedupKey: "acme|software-engineer|blr" });
+    const p = await repo.upsertPosting(np);
+    // the same req re-polled after a key change (and via another company row), retitled
+    const again = await repo.upsertPosting({
+      ...np,
+      companyId: other.id,
+      companyName: "Acme Inc",
+      source: "lever",
+      tier: "tier2",
+      title: "Backend Engineer, Payments",
+      dedupKey: "acme|backend-engineer-payments|bengaluru",
+    });
+    expect(again.id).toBe(p.id);
+    const stored = await repo.getPosting(p.id);
+    expect(stored?.dedupKey).toBe("acme|backend-engineer-payments|bengaluru");
+    expect(stored?.companyName).toBe("Acme Inc");
+    expect(stored?.title).toBe("Backend Engineer, Payments");
+    expect(stored?.companyId).toBe(co.id);
+    expect(stored?.source).toBe("greenhouse");
+    expect(stored?.tier).toBe("tier1");
+    expect(iso(stored?.firstSeen)).toBe(iso(p.firstSeen));
+  });
+
+  it("setCanonical points a duplicate at its canonical and null clears the pointer", async () => {
+    const co = await repo.upsertCompany({ name: "Acme", nameNorm: `acme-${randomUUID()}`, atsType: "greenhouse", atsSlug: "acme" });
+    const a = await repo.upsertPosting(postingFor(co.id));
+    const b = await repo.upsertPosting(postingFor(co.id));
+    await repo.setCanonical(b.id, a.id);
+    expect((await repo.getPosting(b.id))?.canonicalId).toBe(a.id);
+    // a re-poll doesn't drop the pointer: only the deduper decides it
+    await repo.upsertPosting({ ...postingFor(co.id), atsJobId: b.atsJobId });
+    expect((await repo.getPosting(b.id))?.canonicalId).toBe(a.id);
+    await repo.setCanonical(b.id, null);
+    expect((await repo.getPosting(b.id))?.canonicalId).toBeNull();
+    await repo.setCanonical(b.id, null); // idempotent
+    expect((await repo.getPosting(b.id))?.canonicalId).toBeNull();
+    expect((await repo.getPosting(a.id))?.canonicalId).toBeNull();
+  });
+
+  it("postings round-trip every country + the location text; updatePostingNormalized rewrites only those", async () => {
+    const co = await repo.upsertCompany({ name: "Acme", nameNorm: `acme-${randomUUID()}`, atsType: "greenhouse", atsSlug: "acme" });
+    const base = postingFor(co.id);
+    const np: NewPosting = {
+      ...base,
+      atsJobId: `loc-${randomUUID()}`,
+      locationRaw: "Hybrid - Austin, TX; London, United Kingdom",
+      location: { ...base.location, mode: "hybrid", city: "Austin", country: "United States", countries: ["US", "GB"] },
+    };
+    const p = await repo.upsertPosting(np);
+    expect(p.location.countries).toEqual(["US", "GB"]);
+    expect(p.locationRaw).toBe("Hybrid - Austin, TX; London, United Kingdom");
+    const lastSeen = (await repo.getPosting(p.id))!.lastSeen;
+    await repo.updatePostingNormalized(p.id, {
+      location: { ...p.location, city: "London", country: "Europe", countries: ["GB"] },
+      postedByAgency: true,
+    });
+    const got = await repo.getPosting(p.id);
+    expect(got?.location).toMatchObject({ city: "London", country: "Europe", countries: ["GB"] });
+    expect(got?.postedByAgency).toBe(true);
+    expect(got?.locationRaw).toBe("Hybrid - Austin, TX; London, United Kingdom");
+    expect(got?.lastSeen).toEqual(lastSeen); // no lifecycle side effects
+    // a location with no countries reads back without the field (older rows alike)
+    await repo.updatePostingNormalized(p.id, { location: { ...p.location, countries: undefined }, postedByAgency: false });
+    expect((await repo.getPosting(p.id))?.location.countries).toBeUndefined();
+  });
+
+  it("store meta: absent → null, set, overwrite (no TTL)", async () => {
+    const key = `test_${randomUUID()}`;
+    expect(await repo.getStoreMeta(key)).toBeNull();
+    await repo.setStoreMeta(key, "1");
+    expect(await repo.getStoreMeta(key)).toBe("1");
+    await repo.setStoreMeta(key, "2");
+    expect(await repo.getStoreMeta(key)).toBe("2");
+  });
+
   if (name === "pglite") {
     it("encrypts the LLM key at rest when JOBFLOW_SECRET_KEY is set (callers see plaintext)", async () => {
       const pg = repo as PgRepository;

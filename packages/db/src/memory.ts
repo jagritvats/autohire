@@ -12,6 +12,7 @@ import type {
   Company,
   ConnectedContext,
   Evidence,
+  ParsedLocation,
   Generation,
   GenerationKind,
   Job,
@@ -53,6 +54,7 @@ export class InMemoryRepository implements Repository {
   private jobs: Job[] = [];
   private heartbeats = new Map<string, AgentHeartbeat>();
   private salaryCache = new Map<string, SalaryCacheEntry & { fetchedAt: number }>();
+  private storeMeta = new Map<string, string>();
   private generations: Generation[] = [];
   private contexts = new Map<string, ConnectedContext>(); // key: `${tenantId}:${source}`
   // per-user posting overlay (archive + bookmark), key: `${tenantId}:${postingId}`
@@ -198,7 +200,12 @@ export class InMemoryRepository implements Repository {
         ...p,
         // keep the ORIGINAL publish date: a repost re-stamps the source's date (§3)
         postedAt: earlierDate(existing.postedAt, p.postedAt),
+        // identity stays with the first write, like PgRepository's upsert; content (the
+        // dedup key and company spelling included) is refreshed by the spread above
         id: existing.id,
+        companyId: existing.companyId,
+        source: existing.source,
+        tier: existing.tier,
         firstSeen: existing.firstSeen,
         lastSeen: now,
         isActive: true,
@@ -243,7 +250,7 @@ export class InMemoryRepository implements Repository {
     );
   }
 
-  async setCanonical(postingId: string, canonicalId: string): Promise<void> {
+  async setCanonical(postingId: string, canonicalId: string | null): Promise<void> {
     const p = this.postings.get(postingId);
     if (p) p.canonicalId = canonicalId;
   }
@@ -256,6 +263,12 @@ export class InMemoryRepository implements Repository {
       n++;
     }
     return n;
+  }
+  async updatePostingNormalized(id: string, patch: { location: ParsedLocation; postedByAgency: boolean }): Promise<void> {
+    const p = this.postings.get(id);
+    if (!p) return;
+    p.location = patch.location;
+    p.postedByAgency = patch.postedByAgency;
   }
   async updatePostingSalary(id: string, band: SalaryBand, salaryRaw?: string | null): Promise<void> {
     const p = this.postings.get(id);
@@ -443,6 +456,13 @@ export class InMemoryRepository implements Repository {
   async listMatchesForPostings(tenantId: string, postingIds: string[]): Promise<Match[]> {
     const ids = new Set(postingIds);
     return (this.matches.get(tenantId) ?? []).filter((m) => ids.has(m.postingId));
+  }
+
+  async getStoreMeta(key: string): Promise<string | null> {
+    return this.storeMeta.get(key) ?? null;
+  }
+  async setStoreMeta(key: string, value: string): Promise<void> {
+    this.storeMeta.set(key, value);
   }
 
   async getSalaryCache(key: string): Promise<SalaryCacheEntry | null> {

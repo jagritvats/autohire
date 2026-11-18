@@ -22,7 +22,11 @@ interface AnJob {
 }
 interface AnResponse {
   data: AnJob[];
+  links?: { next?: string | null };
 }
+
+/** pages walked per fetch (politeness: ~2 MB each). */
+const MAX_PAGES = 3;
 
 export class ArbeitnowAdapter implements SourceAdapter {
   readonly source = "arbeitnow" as const;
@@ -41,16 +45,27 @@ export class ArbeitnowAdapter implements SourceAdapter {
   }
 
   async fetch(target: FetchTarget): Promise<RawPosting[]> {
-    const data = await httpJson<AnResponse>("https://www.arbeitnow.com/api/job-board-api");
-    if (!data?.data) return [];
-    let jobs = data.data;
-    if (target.query) {
-      const q = target.query.toLowerCase();
-      jobs = jobs.filter(
-        (j) => j.title.toLowerCase().includes(q) || (j.tags ?? []).some((t) => t.toLowerCase().includes(q)),
-      );
+    // The API has no search parameter: the query is a client-side filter over the newest
+    // pages (300 jobs each, verified 2026-11). One page used to be all we read, so a
+    // narrow term found a handful — walk a few pages until `limit` matches.
+    const q = target.query?.toLowerCase();
+    const limit = target.limit ?? 300; // no limit: one page, as before
+    const seen = new Set<string>();
+    let jobs: AnJob[] = [];
+    for (let page = 1; page <= MAX_PAGES && jobs.length < limit; page++) {
+      const data = await httpJson<AnResponse>(`https://www.arbeitnow.com/api/job-board-api?page=${page}`);
+      if (!data?.data) {
+        if (page === 1) return [];
+        break;
+      }
+      for (const j of data.data) {
+        if (!j.slug || seen.has(j.slug)) continue;
+        seen.add(j.slug);
+        if (!q || j.title.toLowerCase().includes(q) || (j.tags ?? []).some((t) => t.toLowerCase().includes(q))) jobs.push(j);
+      }
+      if (!data.links?.next || data.data.length === 0) break;
     }
-    if (target.limit) jobs = jobs.slice(0, target.limit);
+    jobs = jobs.slice(0, limit);
 
     return jobs.map((j) => ({
       source: "arbeitnow",
@@ -62,7 +77,7 @@ export class ArbeitnowAdapter implements SourceAdapter {
       title: j.title,
       jdText: htmlToText(j.description),
       jdHtml: j.description ?? null,
-      locationRaw: j.remote ? `Remote ${j.location ?? ""}`.trim() : j.location ?? null,
+      locationRaw: j.remote ? `Remote ${j.location ?? ""}`.trim() : j.location?.trim() || null,
       applyUrl: j.url ?? null,
       salaryRaw: null,
       postedAt: j.created_at ? new Date(j.created_at * 1000).toISOString() : null,

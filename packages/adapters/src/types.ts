@@ -79,7 +79,7 @@ export interface LivenessTarget {
 export async function httpStatus(
   url: string,
   init: RequestInit & { timeoutMs?: number } = {},
-): Promise<{ status: number; body: string } | null> {
+): Promise<{ status: number; body: string; location: string | null } | null> {
   const { timeoutMs = 15_000, ...rest } = init;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -94,7 +94,7 @@ export async function httpStatus(
         ...(rest.headers ?? {}),
       },
     });
-    return { status: res.status, body: await res.text() };
+    return { status: res.status, body: await res.text(), location: res.headers.get("location") };
   } catch {
     return null;
   } finally {
@@ -237,6 +237,76 @@ export async function httpJson<T = unknown>(
   }
 }
 
+/**
+ * httpJson that waits out a rate limit instead of failing the whole poll: on 429/503 it
+ * sleeps (Retry-After when the server gives one, capped; else an exponential backoff from
+ * `baseDelayMs`) and retries up to `retries` times. Any other failure → null at once, so a
+ * board that is really down isn't hammered. Used by tenants that throttle bursts
+ * (Microsoft's Eightfold answers 429 to roughly every fourth request at 2 s spacing).
+ */
+export async function httpJsonPolite<T = unknown>(
+  url: string,
+  init: RequestInit & { timeoutMs?: number } = {},
+  opts: {
+    retries?: number;
+    baseDelayMs?: number;
+    maxDelayMs?: number;
+    sleep?: (ms: number) => Promise<void>;
+    /** told why the call gave up (the last HTTP status, or null for a network error/timeout) */
+    onGiveUp?: (status: number | null) => void;
+  } = {},
+): Promise<T | null> {
+  const { retries = 3, baseDelayMs = 4000, maxDelayMs = 60_000, sleep = defaultSleep, onGiveUp } = opts;
+  const { timeoutMs = 20_000, ...rest } = init;
+  let status: number | null = null;
+  const giveUp = (): null => {
+    onGiveUp?.(status);
+    return null;
+  };
+  for (let attempt = 0; ; attempt++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    let wait: number | null = null;
+    try {
+      const res = await fetch(url, {
+        ...rest,
+        signal: ctrl.signal,
+        headers: { "User-Agent": "JobFlow/0.1 (+personal job-search; contact via app)", Accept: "application/json", ...(rest.headers ?? {}) },
+      });
+      if (res.ok) return (await res.json()) as T;
+      status = res.status;
+      if (res.status !== 429 && res.status !== 503) return giveUp();
+      const after = Number(res.headers.get("retry-after"));
+      wait = Number.isFinite(after) && after > 0 ? after * 1000 : baseDelayMs * 2 ** attempt;
+    } catch {
+      status = null;
+      return giveUp();
+    } finally {
+      clearTimeout(timer);
+    }
+    // a Retry-After beyond the cap (Workable's Cloudflare says ~23 h) won't clear in this poll
+    if (attempt >= retries || wait > maxDelayMs) return giveUp();
+    await sleep(wait);
+  }
+}
+
+/**
+ * Say once per process why a source returned nothing (a missing key, a rate limit), on
+ * stderr, so `jobflow sync` / the worker log explain an empty feed instead of hiding it.
+ * Adapters still return [] (never throw); this is only the reason.
+ */
+const NOTICED = new Set<string>();
+export function adapterNotice(source: string, reason: string): void {
+  const key = `${source}\u0000${reason}`;
+  if (NOTICED.has(key)) return;
+  NOTICED.add(key);
+  console.warn(`[${source}] ${reason}`);
+}
+
+function defaultSleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 /** Text twin of httpJson (careers-page HTML, XML feeds); null on any failure. */
 export async function httpText(
   url: string,
@@ -271,21 +341,67 @@ export function decodeEntities(s: string): string {
     .replace(/&amp;/g, "&");
 }
 
-/** Strip HTML to readable text for JD parsing (ATS JDs come as HTML). */
+/**
+ * Strip HTML to readable text for JD parsing (ATS JDs come as HTML). Greenhouse sends its
+ * content entity-ESCAPED ("&lt;p&gt;…"), so escaped markup is unescaped before the tags are
+ * stripped; numeric entities ("C&#43;&#43;", "3&#43; years", "&#xa0;") are decoded too —
+ * left in, they hid C++ and "3+ years" from the parsers and showed as junk on the Job page
+ * (2026-11 feed review: 1,781 Greenhouse and 1,997 Workday JDs in one corpus).
+ */
 export function htmlToText(html: string | null | undefined): string {
   if (!html) return "";
-  return html
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<\/(p|div|li|br|h[1-6])>/gi, "\n")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&#39;|&rsquo;|&lsquo;/gi, "'")
-    .replace(/&quot;|&ldquo;|&rdquo;/gi, '"')
+  const src = /&lt;\/?[a-z][a-z0-9]*[\s&]|&lt;\/?[a-z][a-z0-9]*&gt;/i.test(html) ? decodeBasicEntities(html) : html;
+  return decodeAllEntities(
+    src
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<li\b[^>]*>/gi, "\n• ")
+      .replace(/<\/(p|div|li|ul|ol|h[1-6]|tr|section)>/gi, "\n")
+      .replace(/<[^>]+>/g, " "),
+  )
+    .replace(/\u00a0/g, " ")
     .replace(/[ \t]+/g, " ")
+    .replace(/ *\n */g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+/**
+ * A job title as a person reads it: entities decoded ("Partnerships &amp; Growth"), tags
+ * dropped, whitespace collapsed, and a repeated comma segment kept once (Amazon joins
+ * team names into the title: "SDE, Middle Mile, Middle Mile, Relay Yard Automation").
+ */
+export function cleanTitle(raw: string | null | undefined): string {
+  const t = decodeAllEntities(decodeBasicEntities(raw ?? "").replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+  const seen = new Set<string>();
+  const parts = t.split(/\s*,\s*/).filter((seg) => {
+    const k = seg.toLowerCase();
+    if (!k || seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  return parts.join(", ");
+}
+
+function decodeBasicEntities(s: string): string {
+  return s.replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&quot;/gi, '"').replace(/&#0?39;|&apos;/gi, "'").replace(/&amp;/gi, "&");
+}
+
+const NAMED_ENTITIES: Readonly<Record<string, string>> = {
+  nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", rsquo: "'", lsquo: "'", ldquo: '"', rdquo: '"',
+  mdash: "—", ndash: "–", hellip: "…", bull: "•", middot: "·", copy: "©", reg: "®", trade: "™", euro: "€", pound: "£",
+  rupee: "₹", yen: "¥", times: "×", deg: "°", eacute: "é", egrave: "è", aacute: "á", agrave: "à", iacute: "í",
+  oacute: "ó", uacute: "ú", ntilde: "ñ", ouml: "ö", uuml: "ü", auml: "ä", szlig: "ß", ccedil: "ç", zwj: "", zwnj: "",
+};
+
+/** every named entity we know, plus all decimal / hex numeric ones; unknown names stay as they are */
+function decodeAllEntities(s: string): string {
+  return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z][a-z0-9]*);/gi, (m, e: string) => {
+    if (e[0] === "#") {
+      const n = e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+      return Number.isFinite(n) && n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : m;
+    }
+    return NAMED_ENTITIES[e.toLowerCase()] ?? m;
+  });
 }

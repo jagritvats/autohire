@@ -109,7 +109,7 @@ export function compSampleOf(p: Posting): CompSample | null {
   if (s.source === "none" || s.min == null || s.max == null) return null;
   if (s.confidence !== "high" && s.confidence !== "medium_high") return null;
   if (s.min <= 0 || s.max < s.min || s.max / s.min > 3) return null; // too wide to inform
-  const market = salaryMarketOf(p.location);
+  const market = salaryMarketOf(p.location, s.currency);
   // a market's comps must be priced in its currency (a USD role "in India" is a different regime)
   if (!market || MARKET_CURRENCY[market] !== s.currency) return null;
   const lvl = salaryLevelOf(p.levelBand, p.experience);
@@ -128,7 +128,7 @@ export function compSampleOf(p: Posting): CompSample | null {
 }
 
 export function estimateTargetOf(p: Posting): EstimateTarget | null {
-  const market = salaryMarketOf(p.location);
+  const market = salaryMarketOf(p.location, hasStatedSalary(p) ? p.salary.currency : null);
   if (!market) return null;
   const lvl = salaryLevelOf(p.levelBand, p.experience);
   return {
@@ -221,7 +221,9 @@ export function estimateSalary(
     sources: usable.map((c) => ({ source: c.source, median: round3(c.median), weight: round2(c.confidence), detail: c.detail })),
     basis: [
       ...usable.map((c) => c.detail),
-      ...(calFactor < 0.97 ? [`confidence ×${calFactor} from ${calibration!.n} backtested ${MARKET_LABEL[target.market]} postings`] : []),
+      ...(calFactor < 0.97
+        ? [`confidence ×${calFactor} from ${calibration!.n} backtested ${salaryRoleFamily(target.archetype) === "other" ? "non-engineering " : ""}${MARKET_LABEL[target.market]} postings`]
+        : []),
     ].join(" · "),
     computedAt: now.toISOString(),
   };
@@ -362,9 +364,9 @@ function round3(x: number): number {
   return Math.round(x / mag) * mag;
 }
 
-// ── calibration: make the score mean the same thing in every market ─────────────────
+// ── calibration: make the score mean the same thing in every market and role family ──
 
-/** Per-market multiplier on confidence, learned from a leave-one-out backtest. */
+/** Per-segment multiplier on confidence, learned from a leave-one-out backtest. */
 export interface MarketCalibration {
   /** ≤ 1: calibration only ever LOWERS confidence, never inflates the model's own score */
   factor: number;
@@ -372,16 +374,66 @@ export interface MarketCalibration {
   n: number;
 }
 
+/**
+ * Pay heterogeneity differs by role family: engineering pay moves with level and family
+ * (±10%), while "other" pools sales, legal, design and operations, whose comparables are
+ * loose (a different title counts 0.2) — so its confidence is calibrated on its own.
+ */
+export type SalaryRoleFamily = "eng" | "other";
+
+export function salaryRoleFamily(archetype: RoleArchetype): SalaryRoleFamily {
+  return ENG.has(archetype) ? "eng" : "other";
+}
+
+/** The calibration a target uses: its market × role family. */
+export function calibrationKey(market: string, family: SalaryRoleFamily): string {
+  return `${market}:${family}`;
+}
+
 export interface BacktestRow {
   market: string;
   confidence: number;
   /** |estimate median ÷ true midpoint − 1| */
   err: number;
+  /** the backtested posting's role family (default "eng") */
+  family?: SalaryRoleFamily;
 }
 
 const CAL_BANDS = [0, 0.3, 0.5, 0.7, 1.01];
 const CAL_MIN_N = 5;
-const CAL_SHRINK = 30; // n/(n+30): 30 backtests move a market halfway to its measured factor
+const CAL_SHRINK = 30; // n/(n+30): 30 backtests move a segment halfway to its measured factor
+
+const calBand = (c: number) => CAL_BANDS.findIndex((lo, i) => c >= lo && c < (CAL_BANDS[i + 1] ?? Infinity));
+
+/** median error per confidence band — what a score is worth, measured on `rows` */
+function errorCurve(rows: ReadonlyArray<{ confidence: number; err: number }>): Map<number, number> {
+  const m = new Map<number, number>();
+  for (let b = 0; b < CAL_BANDS.length - 1; b++) {
+    const errs = rows.filter((r) => calBand(r.confidence) === b).map((r) => r.err);
+    if (errs.length) m.set(b, median(errs));
+  }
+  return m;
+}
+
+/**
+ * How much to scale a segment's confidence so its errors match what `reference` rows of the
+ * same confidence achieve: expected ÷ actual median error, never above 1, floored at 0.35,
+ * shrunk toward 1 while the segment's sample is small. null = not enough to judge.
+ */
+function relativeFactor(
+  rows: ReadonlyArray<{ confidence: number; err: number }>,
+  reference: ReadonlyArray<{ confidence: number; err: number }>,
+): number | null {
+  if (rows.length < CAL_MIN_N) return null;
+  const curve = errorCurve(reference);
+  if (!curve.size) return null; // nothing to compare against
+  const expected = median(rows.map((r) => curve.get(calBand(r.confidence)) ?? r.err));
+  const actual = median(rows.map((r) => r.err));
+  if (!(actual > 0)) return null;
+  const raw = Math.max(0.35, Math.min(1, expected / actual));
+  const w = rows.length / (rows.length + CAL_SHRINK);
+  return 1 - w * (1 - raw);
+}
 
 /**
  * The global backtest maps confidence → typical error (e.g. ≥0.7 ≈ 8%, 0.3–0.5 ≈ 22%). A
@@ -390,29 +442,45 @@ const CAL_SHRINK = 30; // n/(n+30): 30 backtests move a market halfway to its me
  * by expected÷actual error, shrunk toward 1 while its sample is small.
  */
 export function calibrateByMarket(rows: readonly BacktestRow[]): Map<string, MarketCalibration> {
-  const band = (c: number) => CAL_BANDS.findIndex((lo, i) => c >= lo && c < (CAL_BANDS[i + 1] ?? Infinity));
-  // the reference curve for a market comes from the OTHER markets — a big market would
-  // otherwise define its own baseline and always look calibrated
-  const curve = (rs: readonly BacktestRow[]) => {
-    const m = new Map<number, number>();
-    for (let b = 0; b < CAL_BANDS.length - 1; b++) {
-      const errs = rs.filter((r) => band(r.confidence) === b).map((r) => r.err);
-      if (errs.length) m.set(b, median(errs));
-    }
-    return m;
-  };
   const out = new Map<string, MarketCalibration>();
   for (const market of new Set(rows.map((r) => r.market))) {
     const rs = rows.filter((r) => r.market === market);
-    if (rs.length < CAL_MIN_N) continue;
-    const others = curve(rows.filter((r) => r.market !== market));
-    if (!others.size) continue; // nothing to compare against
-    const expected = median(rs.map((r) => others.get(band(r.confidence)) ?? r.err));
-    const actual = median(rs.map((r) => r.err));
-    if (!(actual > 0)) continue;
-    const raw = Math.max(0.35, Math.min(1, expected / actual));
-    const w = rs.length / (rs.length + CAL_SHRINK);
-    out.set(market, { factor: round2(1 - w * (1 - raw)), n: rs.length });
+    // the reference curve for a market comes from the OTHER markets — a big market would
+    // otherwise define its own baseline and always look calibrated
+    const f = relativeFactor(rs, rows.filter((r) => r.market !== market));
+    if (f != null) out.set(market, { factor: round2(f), n: rs.length });
+  }
+  return out;
+}
+
+/**
+ * Per market, then per role family within it (audit 2026-11 follow-up). After the location
+ * fixes the leak-free backtest read 19% / 21% in the 0.3–0.5 / 0.5–0.7 bands — no longer
+ * monotonic — because non-engineering postings, priced from loosely related titles, sat at
+ * ~0.5 whatever their evidence (their many weak comparables saturate the sample-size term)
+ * and missed by ~21%, while engineering estimates at 0.5–0.7 missed by ~15%. Within each
+ * market a family whose errors exceed what the market's OTHER family achieves at the same
+ * confidence is scaled down by the same expected÷actual rule as the market step (measured
+ * on market-calibrated scores). A family alone in its market keeps the market factor.
+ * Keyed `calibrationKey(market, family)`; factor = market × family.
+ */
+export function calibrateSalaryScores(rows: readonly BacktestRow[]): Map<string, MarketCalibration> {
+  const byMarket = calibrateByMarket(rows);
+  const scaled = rows.map((r) => ({
+    market: r.market,
+    family: r.family ?? "eng",
+    err: r.err,
+    confidence: Math.min(MAX_ESTIMATE_CONFIDENCE, r.confidence * (byMarket.get(r.market)?.factor ?? 1)),
+  }));
+  const out = new Map<string, MarketCalibration>();
+  for (const market of new Set(rows.map((r) => r.market))) {
+    const m = byMarket.get(market)?.factor ?? 1;
+    for (const family of ["eng", "other"] as const) {
+      const rs = scaled.filter((r) => r.market === market && r.family === family);
+      if (!rs.length) continue;
+      const f = relativeFactor(rs, scaled.filter((r) => r.market === market && r.family !== family)) ?? 1;
+      out.set(calibrationKey(market, family), { factor: round2(m * f), n: rs.length });
+    }
   }
   return out;
 }

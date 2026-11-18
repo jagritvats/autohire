@@ -50,8 +50,32 @@ const ARCHETYPE_PATTERNS: Array<[RegExp, RoleArchetype]> = [
   [/\b(front[ -]?end|frontend|react|ui engineer)\b/i, "frontend"],
   [/\b(mobile|android|ios|react native|flutter)\b/i, "mobile"],
   [/\b(backend|back[ -]?end|server[ -]?side|api engineer|distributed systems)\b/i, "backend"],
-  [/\b(software engineer|sde|swe|developer|programmer)\b/i, "backend"],
+  // web/CMS developers build sites end to end — the far edge of a backend target
+  [/\b(web|wordpress|shopify|drupal|webflow) (developer|engineer)\b/i, "fullstack"],
+  // Amazon's "Software Development Engineer" / "Software Dev Engineer" carry none of the
+  // words below — 500-role boards read as non-engineering without this (audit, 2026-11)
+  [/\b(software (development |dev |engineering )?engineer|sde|swe|developer|programmer)\b/i, "backend"],
+  // "SW Engineer II", "Software Engineering Intern / Senior Associate" (audit 2026-11, 4th pass)
+  [/\b(sw engineer|software engineering (intern|associate|senior associate|graduate|apprentice))\b/i, "backend"],
 ];
+
+/**
+ * The role noun of a title: what comes before the team/domain suffix. "Software Engineer,
+ * Financial Business Insights", "Senior Software Engineer - Marketplace" and "Backend
+ * Engineer, People Platform" are engineering roles on a finance / marketplace / people TEAM —
+ * the non-engineering guard must read the head, or every such title becomes "other".
+ */
+function titleHead(title: string): string {
+  return title.split(/\s*(?:,|\(|\||:|\s[-–—]\s|\s@\s|\bfor\b)\s*/i)[0] ?? title;
+}
+/** an engineering role noun in the head — then a non-eng word in the suffix is the team. */
+const ENG_HEAD = /\b(software|engineer(?:ing)?|developer|sde|swe|programmer|back[ -]?end|front[ -]?end|full[ -]?stack|devops|sre)\b/i;
+
+function isNonEngineeringTitle(title: string): boolean {
+  const head = titleHead(title);
+  if (NON_ENG_TITLE.test(head)) return true;
+  return !ENG_HEAD.test(head) && NON_ENG_TITLE.test(title);
+}
 
 /** Words we strip so two postings of the same role collapse to one canonical title.
  *  Seniority is stripped here because it's captured separately in `levelBand` — so
@@ -69,7 +93,7 @@ const NOISE = [
 ];
 
 const CANONICAL_MAP: Array<[RegExp, string]> = [
-  [/\b(sde|swe|software (development )?engineer|software developer|developer|programmer)\b/i, "software-engineer"],
+  [/\b(sde|swe|sw engineer|software (development )?engineer|software developer|developer|programmer)\b/i, "software-engineer"],
   [/\bsite reliability\b/i, "site-reliability-engineer"],
   [/\b(devops|platform engineer)\b/i, "platform-engineer"],
   [/\bdata engineer\b/i, "data-engineer"],
@@ -97,7 +121,7 @@ export function parseTitle(rawTitle: string): TitleParse {
 
   // 2. archetype — non-eng guard wins first (DevRel/Sales Eng aren't backend roles)
   let roleArchetype: RoleArchetype = "other";
-  if (!NON_ENG_TITLE.test(title)) {
+  if (!isNonEngineeringTitle(title)) {
     for (const [re, arch] of ARCHETYPE_PATTERNS) {
       if (re.test(title)) {
         roleArchetype = arch;
@@ -120,6 +144,57 @@ export function parseTitle(rawTitle: string): TitleParse {
   }
 
   return { titleNorm, levelBand, roleArchetype };
+}
+
+/** phrasings of the same role noun, substituted IN PLACE (the rest of the title is kept). */
+const ROLE_SYNONYMS: Array<[RegExp, string]> = [
+  [/\b(software (development |dev )?engineer|software developer|sde|swe)\b/gi, "software engineer"],
+  [/\b(developer|programmer)\b/gi, "engineer"],
+  [/\bback[ -]end\b/gi, "backend"],
+  [/\bfront[ -]end\b/gi, "frontend"],
+  [/\bfull[ -]stack\b/gi, "fullstack"],
+];
+/** level spellings → one token each; the level itself STAYS in the key ("Senior PM" ≠ "PM I") */
+const LEVEL_SPELLINGS: Array<[RegExp, string]> = [
+  [/\b(sr|snr)\b\.?/gi, "senior"],
+  [/\bjr\b\.?/gi, "junior"],
+  [/\biv\b/gi, "4"],
+  [/\biii\b/gi, "3"],
+  [/\bii\b/gi, "2"],
+  [/\bi\b/gi, "1"],
+];
+/** words a parenthetical may consist of and still only say where / how / on what terms */
+const TAG_WORD = /^(remote|hybrid|onsite|on|site|office|in|wfh|work|from|home|full|part|time|contract|contractor|permanent|temporary|all|genders?|or|and|only|based|[a-z]|india|bengaluru|bangalore|hyderabad|pune|mumbai|chennai|delhi|ncr|gurgaon|gurugram|noida|kolkata|ahmedabad|us|usa|united|states|uk|kingdom|europe|eu|emea|apac|latam|americas|canada|anywhere|worldwide|global|new|york|nyc|sf|san|francisco|london|berlin|toronto|singapore)$/i;
+/** a parenthetical that's only a location / work mode / employment / gender tag: "(Remote, US)", "(f/m/d)" */
+function isTagOnly(inner: string): boolean {
+  const words = inner.toLowerCase().split(/[\s,/|;:+&.-]+/).filter(Boolean);
+  return words.length > 0 && words.every((w) => TAG_WORD.test(w));
+}
+
+/**
+ * The title part of the dedup key (§ Deduper). Unlike `titleNorm` — a COARSE role family
+ * ("software-engineer") used for salary comparables — this keeps everything that tells two
+ * roles at one company apart: the team ("Software Engineer, Payments" ≠ "Software Engineer,
+ * Search"), the specialty and the level ("Senior PM" ≠ "PM II"). Only phrasing noise
+ * collapses: level spellings ("Sr." / "Senior", "II" / "2"), "Developer" / "Engineer",
+ * "SDE" / "Software Engineer", word order, req ids and location/employment tags. Keying on
+ * `titleNorm` merged every "… Software Engineer …" at a company+city into one card (audit
+ * 2026-11: 43% of the corpus hidden from ranking). Format: "<levelBand|x>~<sorted tokens>".
+ */
+export function dedupTitleKey(rawTitle: string): string {
+  const { levelBand } = parseTitle(rawTitle);
+  let t = rawTitle
+    .replace(/\(([^)]*)\)/g, (_m, inner: string) => (isTagOnly(inner) ? " " : ` ${inner} `))
+    .replace(/[#@].*$/g, " ") // trailing req ids "#1234", "@ Acme"
+    .replace(/\b(job id|req(uisition)?( id)?)\b[^,|]*$/gi, " ")
+    .replace(/\b[a-z]{0,4}[-_]?\d{4,}\b/gi, " "); // "AMZ10587293", "R-12345"
+  for (const [re, to] of ROLE_SYNONYMS) t = t.replace(re, to);
+  for (const [re, to] of LEVEL_SPELLINGS) t = t.replace(re, to);
+  t = t.replace(/\b(remote|hybrid|onsite|on-site)\b/gi, " ");
+  // tokens, order-insensitive: "Engineer, Backend" and "Backend Engineer" are one role
+  const words = slugify(t.replace(/[,\-–—/|:&+.]+/g, " ")).split("-");
+  const tokens = [...new Set(words.filter((w) => w && w !== "and" && w !== "the" && w !== "of"))].sort();
+  return `${levelBand ?? "x"}~${tokens.join("-")}`;
 }
 
 export function slugify(s: string): string {

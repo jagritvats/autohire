@@ -206,6 +206,50 @@ describe("saved searches", () => {
     expect((await cli(["--json", "searches"])).json()).toHaveLength(0);
     expect((await cli(["searches", "rm", "go-remote"])).code).toBe(3);
   });
+
+  it("a query passed as ONE string (flags inside) saves exactly like separate arguments", async () => {
+    const pick = (q: Record<string, unknown>) => ({
+      keywords: q.keywords,
+      remote: q.remote,
+      postedWithinDays: q.postedWithinDays,
+      locations: q.locations,
+      mustSkills: q.mustSkills,
+    });
+    const split = await cli(["searches", "add", "split", "backend engineer", "--remote", "--posted", "7d", "--loc", "Berlin,DE", "--must", "go"]);
+    expect(split.code, split.err).toBe(0);
+    const one = await cli(["searches", "add", "one", '"backend engineer" --remote --posted 7d --loc "Berlin,DE" --must go']);
+    expect(one.code, one.err).toBe(0);
+    // the plain-text confirmation renders the keyword once, with no stray quotes
+    expect(one.out).toContain("“backend engineer”");
+    expect(one.out).not.toMatch(/“"|"”/);
+    const mixed = await cli(["searches", "add", "mixed", '"backend engineer" --posted 7d', "--remote", "--loc", "Berlin,DE", "--must", "go"]);
+    expect(mixed.code, mixed.err).toBe(0);
+    const unquoted = await cli(["searches", "add", "bare", "backend engineer --remote --posted 7d --loc Berlin,DE --must go"]);
+    expect(unquoted.code, unquoted.err).toBe(0);
+
+    const list = (await cli(["--json", "searches", "list"])).json() as Array<{ name: string; query: Record<string, unknown> }>;
+    const by = Object.fromEntries(list.map((s) => [s.name, pick(s.query)]));
+    expect(by.split).toEqual({
+      keywords: ["backend engineer"],
+      remote: "only",
+      postedWithinDays: 7,
+      locations: [{ city: "Berlin", country: "DE" }],
+      mustSkills: ["go"],
+    });
+    expect(by.one).toEqual(by.split);
+    expect(by.mixed).toEqual(by.split);
+    expect(by.bare).toEqual(by.split);
+    expect((await cli(["searches", "list"])).out).not.toMatch(/“"|"”/);
+  });
+
+  it("flags inside a one-string query are validated like real flags", async () => {
+    const bad = await cli(["searches", "add", "x", '"backend" --posted soon']);
+    expect(bad.code).toBe(2);
+    expect(bad.err).toMatch(/--posted/);
+    const unknown = await cli(["searches", "add", "x", '"backend" --frobnicate']);
+    expect(unknown.code).toBe(2);
+    expect(unknown.err).toMatch(/frobnicate/);
+  });
 });
 
 describe("feed, posting refs, search, apply, tailor", () => {
@@ -248,12 +292,15 @@ describe("feed, posting refs, search, apply, tailor", () => {
 
     const j = (await cli(["--json", "apply", "1"])).json();
     expect(j.submitted).toBe(false);
-    expect(j.tracker).toBe("ready");
+    // the fictional sample has no résumé FILE to attach → not "ready" yet: "drafting", with the fix as next step
+    expect(j.missing).toContain("resume");
+    expect(j.tracker).toBe("drafting");
     expect(j.plan.fields.map((f: { field: string }) => f.field)).toContain("email");
 
     const track = (await cli(["--json", "track", "list"])).json();
     expect(track).toHaveLength(1);
-    expect(track[0].status).toBe("ready");
+    expect(track[0].status).toBe("drafting");
+    expect(track[0].nextAction).toMatch(/^fix: .*resume/);
     expect((await cli(["track", "status", "1", "applied"])).code).toBe(0);
     expect((await cli(["--json", "track"])).json()[0].status).toBe("applied");
   });
@@ -282,6 +329,21 @@ describe("feed, posting refs, search, apply, tailor", () => {
     expect(cover.code).toBe(4);
     expect(cover.err).toContain("jobflow config set llm.provider");
     expect((await cli(["tailor", p.id, "--kind", "answer"])).code).toBe(2);
+  });
+});
+
+describe("renormalize", () => {
+  it("re-parses stored locations with a summary line, and a second run changes nothing", async () => {
+    await cli(["init", "--yes", "--sample"]);
+    const p = await seedPosting(repo, 7, "Backend Engineer");
+    // as an older parser stored it: "Remote" with a stray country
+    await repo.updatePostingNormalized(p.id, { location: { ...p.location, country: "Europe" }, postedByAgency: false });
+    const first = await cli(["renormalize"]);
+    expect(first.code, first.err).toBe(0);
+    expect(first.out).toMatch(/Re-normalized: 1 scanned → 1 changed/);
+    expect((await repo.getPosting(p.id))?.location.country).toBeNull();
+    const second = await cli(["--json", "renormalize"]);
+    expect(second.json()).toMatchObject({ scanned: 1, changed: 0, ranked: false });
   });
 });
 
@@ -343,6 +405,14 @@ describe("exit codes", () => {
     expect((await cli(["search", "x", "--posted", "soon"])).code).toBe(2);
     expect((await cli(["--help"])).code).toBe(0);
     expect((await cli(["apply", "--help"])).code).toBe(0);
+  });
+
+  it("`jobflow mcp --help` documents the MCP server; a bad --idle is a usage error", async () => {
+    const r = await cli(["mcp", "--help"]);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("Model Context Protocol");
+    expect(r.out).toContain("claude mcp add jobflow");
+    expect((await cli(["mcp", "--idle", "soon"])).code).toBe(2);
   });
 
   it("an empty corpus says how to fill it", async () => {

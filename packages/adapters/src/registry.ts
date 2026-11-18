@@ -5,6 +5,13 @@ import { LeverAdapter } from "./ats/lever.js";
 import { AshbyAdapter } from "./ats/ashby.js";
 import { WorkableAdapter } from "./ats/workable.js";
 import { SmartRecruitersAdapter } from "./ats/smartrecruiters.js";
+import { RecruiteeAdapter } from "./ats/recruitee.js";
+import { PersonioAdapter } from "./ats/personio.js";
+import { TeamtailorAdapter } from "./ats/teamtailor.js";
+import { BambooHrAdapter } from "./ats/bamboohr.js";
+import { BreezyAdapter } from "./ats/breezy.js";
+import { RemoteOkAdapter } from "./aggregators/remoteok.js";
+import { JobicyAdapter } from "./aggregators/jobicy.js";
 import { WorkdayAdapter } from "./ats/workday.js";
 import { EightfoldAdapter } from "./ats/eightfold.js";
 import { AmazonJobsAdapter } from "./ats/amazon.js";
@@ -41,6 +48,12 @@ export const ADAPTERS: Record<string, SourceAdapter> = {
   ashby: new AshbyAdapter(),
   workable: new WorkableAdapter(),
   smartrecruiters: new SmartRecruitersAdapter(),
+  // EU/US SMB ATSes (tier 1: each one's public careers feed)
+  recruitee: new RecruiteeAdapter(),
+  personio: new PersonioAdapter(),
+  teamtailor: new TeamtailorAdapter(),
+  breezy: new BreezyAdapter(),
+  bamboohr: new BambooHrAdapter(), // tier 2: the JSON its careers page calls
   // big-employer careers backends (tier 2: the public JSON their own sites call)
   workday: new WorkdayAdapter(),
   eightfold: new EightfoldAdapter(),
@@ -60,6 +73,9 @@ export const ADAPTERS: Record<string, SourceAdapter> = {
   arbeitnow: new ArbeitnowAdapter(),
   hn_whoishiring: new HnWhoIsHiringAdapter(),
   himalayas: new HimalayasAdapter(),
+  // remote boards with public APIs whose terms require a link back (applyUrl = their listing)
+  remoteok: new RemoteOkAdapter(),
+  jobicy: new JobicyAdapter(),
   // key-gated search APIs: return [] (no request) until their env keys are set
   adzuna: new AdzunaSearchAdapter(),
   careerjet: new CareerjetAdapter(),

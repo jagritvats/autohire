@@ -1,202 +1,260 @@
 import type { FeedCard } from "@/lib/feed";
+import { ageText, experienceText, locationText, payText, roleText } from "@/lib/cardText";
+import { Badge, Icon } from "@/components/ui";
 
 const TIER3 = new Set(["naukri", "ambitionbox", "glassdoor", "linkedin"]);
 
+/*
+ * One job in a list (Jobs, Search) — the card is the product. Scan path, top to bottom:
+ * score → title (opens the Job page, the hub for deciding and acting) → company · location →
+ * honesty badges (freshness, source, trust, YoE asked, pay — an estimate is always marked as
+ * one) → stack/level notes → red flags → skills → quick actions (Save, Hide, Tailor, Apply →
+ * the Job page's apply checklist). Unscored cards (before onboarding) show no score and no
+ * fit judgement. Nothing the scorer knows about a caveat hides behind a hover; tooltips only
+ * add the "why".
+ */
 export function MatchCard({
   card,
-  index,
-  onTrack,
-  onBookmark,
-  onArchive,
+  index: _index,
+  scored = true,
+  selected = false,
+  onSave,
+  onHide,
   onInvalidate,
+  moreAtCompany = 0,
 }: {
-  card: FeedCard;
+  card: FeedCard & { inFeed?: boolean };
+  /** this company's cards further down the list (the spread or the page put them there) */
+  moreAtCompany?: number;
   index: number;
-  onTrack?: (card: FeedCard) => void;
-  onBookmark?: (card: FeedCard) => void;
-  onArchive?: (card: FeedCard) => void;
+  /** false before onboarding: no score, no fit judgement */
+  scored?: boolean;
+  /** keyboard focus on the Jobs page */
+  selected?: boolean;
+  onSave?: (card: FeedCard) => void;
+  onHide?: (card: FeedCard) => void;
+  /** only in the "Reported" collection: restore a listing marked invalid */
   onInvalidate?: (card: FeedCard) => void;
 }) {
-  const band = card.score >= 78 ? "s-hi" : card.score >= 60 ? "s-mid" : "s-lo";
+  const band = !scored ? "none" : card.score >= 78 ? "hi" : card.score >= 60 ? "mid" : "lo";
   const geoBad = card.location.remoteGeo === "us_only" || card.location.remoteGeo === "eu_only";
   const locUncertain = card.location.confidence < 0.5;
-  const locText =
-    card.location.mode === "remote"
-      ? `Remote · ${card.location.remoteGeo.replace("_", "-")}`
-      : `${cap(card.location.mode)}${card.location.label ? ` · ${card.location.label}` : ""}`;
-  const exp = expLabel(card.experience);
+  const locText = locationText(card);
+  const exp = experienceText(card.experience);
+  const pay = payText(card);
+  const jobHref = `/jobs/${card.id}`;
+  const titleId = `match-${card.id}-title`;
+  const presets = card.presets ?? [];
 
   return (
-    <article className="card" style={{ animationDelay: `${Math.min(index * 28, 600)}ms` }}>
-      <div className="gutter">
-        <span className={`bar ${band}`} />
-        <span className={`score ${band}`}>{card.score}</span>
-      </div>
+    <article
+      className="match"
+      aria-labelledby={titleId}
+      data-selected={selected || undefined}
+      data-card-id={card.id}
+      data-invalid={card.invalidated || undefined}
+    >
+      {scored ? (
+        <div className="match__score" data-band={band} aria-label={`Match score ${card.score} of 100`} role="img" title="How well this matches your profile (0–100)">
+          <span className="score-num" aria-hidden="true">
+            {card.score}
+          </span>
+          <span className="score-meter" aria-hidden="true">
+            <span style={{ width: `${Math.max(0, Math.min(100, card.score))}%` }} />
+          </span>
+        </div>
+      ) : (
+        <div className="match__score" data-band="none" title="Not scored — add your résumé to rank jobs for you">
+          <span className="score-num" aria-hidden="true">
+            —
+          </span>
+          <span className="sr-only">Not scored yet</span>
+        </div>
+      )}
 
-      <div className="body">
-        <div className="row1">
-          <span className="title">{card.title}</span>
-          <a className="company" href={`/company/${card.companyId}`}>
-            {card.company}
-          </a>
-          <span className="dot">·</span>
-          <span className="loc">
-            {geoBad ? <span className="geo-bad">{locText}</span> : locText}
-            {locUncertain && (
-              <span className="loc-uncertain" title="Parsed location is low-confidence — verify before applying">
-                {" "}· verify?
+      <div className="match__body">
+        <div className="match__head">
+          <h2 className="match__title" id={titleId}>
+            <a className="match__title-link" href={jobHref}>
+              {card.title}
+            </a>
+          </h2>
+          <div className="match__kind">
+            <span className="match__arch">{roleText(card.archetype)}</span>
+            {presets.length > 0 && (
+              <span className="preset-tags" title="The discovery presets this job belongs to">
+                {presets.map((p) => (
+                  <span key={p} className="match__preset">
+                    #{p}
+                  </span>
+                ))}
               </span>
             )}
-          </span>
-          {card.applied && <span className="applied-badge">✓ in CRM</span>}
+          </div>
         </div>
 
-        <div className="meta">
-          <span className="tag fresh">
-            <span className="pulse" />
-            {card.ageDays <= 0 ? "today" : `${card.ageDays}d`}
+        <div className="match__sub">
+          <a className="match__company" href={`/company/${card.companyId}`}>
+            {card.company}
+          </a>
+          <span className="dot" aria-hidden="true">
+            ·
           </span>
-          {card.atsDirect ? (
-            <span className="tag ats">{card.ats} · ATS-direct</span>
-          ) : (
-            <span className="tag">{card.source}</span>
-          )}
-          {TIER3.has(card.source) && <span className="tag tier3">tier-3 · local</span>}
-          {card.services && <span className="tag" title="IT-services / outsourcing employer">IT services</span>}
-          {card.trust < 0.4 && (
-            <span className="tag" title="Source trust: source prior × listing signals (agency, gig, re-dated, thin JD…)">
-              low trust {Math.round(card.trust * 100)}%
+          <span className={geoBad ? "loc--warn" : undefined}>
+            {geoBad && <Icon name="warn" size={13} />} {locText}
+          </span>
+          {locUncertain && (
+            <span className="loc-uncertain" title="We couldn't read the location confidently — check it before applying">
+              · check location
             </span>
+          )}
+          {card.applied && (
+            <Badge tone="good" title="This role is in your Applications">
+              <Icon name="check" size={12} />
+              in Applications
+            </Badge>
+          )}
+        </div>
+
+        <div className="match__tags">
+          <Badge tone={card.ageDays <= 3 ? "good" : "neutral"} title="When the source first posted it">
+            <span className="badge__dot" aria-hidden="true" />
+            {ageText(card.ageDays)}
+          </Badge>
+          {card.atsDirect ? (
+            <Badge tone="info" title="Straight from the employer's job board — complete and current">
+              employer board
+            </Badge>
+          ) : (
+            <Badge title="Found on a job aggregator — check the original listing">via {card.source.replace(/_/g, " ")}</Badge>
+          )}
+          {TIER3.has(card.source) && <Badge tone="warn">found by your local agent</Badge>}
+          {card.agency && (
+            <Badge tone="warn" title="A recruiter posted this for a client, not the employer itself — the client may be unnamed and replies are usually slower">
+              staffing agency
+            </Badge>
+          )}
+          {card.services && <Badge title="IT-services / outsourcing employer">IT services</Badge>}
+          {card.trust < 0.4 && (
+            <Badge tone="warn" title="This listing has signs of being stale, re-posted, or from an agency">
+              low trust {Math.round(card.trust * 100)}%
+            </Badge>
           )}
           {exp && (
-            <span className="tag exp" data-fit={card.experience.fit ?? undefined} title="Years of experience the JD asks for (parsed) vs yours">
-              {exp}
-            </span>
-          )}
-          {card.comp && (
-            <span
-              className="tag comp"
-              data-estimate={card.comp.estimate || undefined}
-              title={
-                card.comp.estimate
-                  ? `Estimated — the posting states no pay. ${card.comp.basis ?? ""}`
-                  : `Stated in the posting (parse confidence: ${card.comp.confidence})`
-              }
+            <Badge
+              tone={scored && card.experience.fit === "far" ? "bad" : scored && card.experience.fit === "stretch" ? "warn" : "neutral"}
+              data-fit={card.experience.fit ?? undefined}
+              title="Years of experience the posting asks for"
             >
-              {card.comp.estimate ? "~" : ""}
+              asks {exp}
+            </Badge>
+          )}
+          {card.comp && pay && (
+            <Badge estimate={pay.estimate} className="tag comp" data-estimate={pay.estimate || undefined} title={pay.title}>
+              {pay.estimate ? "~" : ""}
               {card.comp.label}{" "}
               <span className="conf">
-                · {card.comp.estimate ? `est ${Math.round((card.comp.confidenceScore ?? 0) * 100)}%` : card.comp.confidence}
+                · {pay.estimate ? `est ${Math.round((card.comp.confidenceScore ?? 0) * 100)}%` : card.comp.confidence}
               </span>
-            </span>
+            </Badge>
           )}
         </div>
 
-        <div className="notes">
-          {card.stackNote && (
-            <div className="note">
-              <span className="k">stack</span>
-              <span className={isLangNote(card.stackNote) ? "stack-lang" : ""}>{card.stackNote}</span>
-            </div>
-          )}
-          {card.levelNote && (
-            <div className="note">
-              <span className="k">level</span>
-              <span>{card.levelNote}</span>
-            </div>
-          )}
-        </div>
+        {(card.stackNote || card.levelNote) && (
+          <dl className="match__notes">
+            {card.stackNote && (
+              <>
+                <dt>stack</dt>
+                <dd className={/primary language/i.test(card.stackNote) ? "stack-lang" : undefined}>{card.stackNote}</dd>
+              </>
+            )}
+            {card.levelNote && (
+              <>
+                <dt>level</dt>
+                <dd>{card.levelNote}</dd>
+              </>
+            )}
+          </dl>
+        )}
+
+        {(card.redFlags.length > 0 || (card.invalidated && card.invalidReason)) && (
+          <ul className="match__flags" aria-label="Flags">
+            {card.redFlags.map((f, i) => (
+              <li className="match__flag" key={i}>
+                <Icon name="warn" size={14} />
+                <span>{f}</span>
+              </li>
+            ))}
+            {card.invalidated && card.invalidReason && (
+              <li className="match__flag match__flag--bad">
+                <Icon name="ban" size={14} />
+                <span>reported · {card.invalidReason}</span>
+              </li>
+            )}
+          </ul>
+        )}
+
+        {moreAtCompany > 0 && (
+          <p className="match__more">
+            <a href={`/company/${card.companyId}`}>
+              +{moreAtCompany} more at {card.company} further down
+            </a>
+          </p>
+        )}
 
         {card.skills.length > 0 && (
-          <div className="skills">
+          <div className="match__skills" aria-label="Skills in the posting">
             {card.skills.map((s) => (
-              <span className="skill" key={s}>
+              <span className="match__skill" key={s}>
                 {s.replace(/_/g, " ")}
               </span>
             ))}
           </div>
         )}
-
-        {card.redFlags.length > 0 && (
-          <div className="flags">
-            {card.redFlags.map((f, i) => (
-              <span className="flag" key={i}>
-                {f}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {card.invalidated && card.invalidReason && (
-          <div className="flags">
-            <span className="flag invalid">invalidated · {card.invalidReason}</span>
-          </div>
-        )}
       </div>
 
-      <div className="actions">
-        <span className="arch">{card.archetype.replace(/_/g, "/")}</span>
-        {(card.presets ?? []).length > 0 && (
-          <span className="preset-tags" title="discovery presets this posting belongs to">
-            {card.presets.map((p) => (
-              <span key={p} className="preset-tag">
-                #{p}
-              </span>
-            ))}
-          </span>
-        )}
-        <div className="action-btns">
-          {onBookmark && (
-            <button className="mini" data-on={card.bookmarked} onClick={() => onBookmark(card)} title={card.bookmarked ? "Remove bookmark" : "Bookmark"}>
-              {card.bookmarked ? "★ saved" : "☆ save"}
+      <div className="match__foot">
+        <div className="match__manage">
+          {onSave && (
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm"
+              aria-pressed={card.bookmarked}
+              onClick={() => onSave(card)}
+              title={card.bookmarked ? "Remove from Saved" : "Save for later — it's added to Applications as Saved"}
+            >
+              <Icon name="bookmark" size={14} />
+              <span className="btn__text">{card.bookmarked ? "saved" : "save"}</span>
             </button>
           )}
-          {onArchive && (
-            <button className="mini" onClick={() => onArchive(card)} title={card.archived ? "Unarchive" : "Archive (hide from feed)"}>
-              {card.archived ? "⤴ unarchive" : "⤓ archive"}
+          {onHide && (
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm"
+              onClick={() => onHide(card)}
+              title={card.archived ? "Show it in your Jobs again" : "Not for me — hide it (find it under Hidden)"}
+            >
+              <Icon name={card.archived ? "unarchive" : "archive"} size={14} />
+              <span className="btn__text">{card.archived ? "unhide" : "hide"}</span>
             </button>
           )}
-          {onInvalidate && (
-            <button className="mini danger" data-on={card.invalidated} onClick={() => onInvalidate(card)} title={card.invalidated ? "Restore" : "Mark invalid (spam/dupe/fake)"}>
-              {card.invalidated ? "↺ restore" : "⊘ invalid"}
+          {onInvalidate && card.invalidated && (
+            <button type="button" className="btn btn--ghost btn--sm btn--danger-quiet" onClick={() => onInvalidate(card)} title="Restore this listing">
+              <Icon name="restore" size={14} />
+              <span className="btn__text">restore</span>
             </button>
           )}
-          <a className="tailor-link" href={`/tailor/${card.id}`} title="Tailor resume + answers for this role">
-            ✎ tailor
+        </div>
+        <div className="match__go">
+          <a className="btn btn--secondary btn--sm" href={`/tailor/${card.id}`} title="Draft a résumé, cover letter or answers for this job — from your own material">
+            <Icon name="pencil" size={14} />
+            tailor
           </a>
-          {onTrack &&
-            (card.applied ? (
-              <span className="track tracked">✓ tracked</span>
-            ) : (
-              <button className="track" onClick={() => onTrack(card)}>
-                + track
-              </button>
-            ))}
-          {card.applyUrl ? (
-            <a className="apply" href={card.applyUrl} target="_blank" rel="noreferrer">
-              Apply →
-            </a>
-          ) : (
-            <span className="apply disabled">no link</span>
-          )}
+          <a className="btn btn--primary btn--sm" href={`${jobHref}#apply`} title="See what's ready, open or pre-fill the form — you always submit">
+            Apply →
+          </a>
         </div>
       </div>
     </article>
   );
-}
-
-function cap(s: string) {
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-/** "~2–3 yrs" style label for the parsed YoE band (§11.2); null when unstated. */
-function expLabel(e: { min: number | null; max: number | null }): string | null {
-  const { min, max } = e;
-  if (min == null && max == null) return null;
-  if (min != null && max != null)
-    return min === max ? `~${min} yr${min === 1 ? "" : "s"}` : `~${min}–${max} yrs`;
-  if (min != null) return `~${min}+ yrs`;
-  return `≤${max} yrs`;
-}
-function isLangNote(note: string) {
-  return /primary language/i.test(note);
 }

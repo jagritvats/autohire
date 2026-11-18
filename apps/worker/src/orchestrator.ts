@@ -4,6 +4,8 @@ import {
   enrichTopMatches,
   estimatePostingSalaries,
   refreshSalaryBenchmarks,
+  renormalizeIfStale,
+  renormalizeSummary,
   reparseStatedSalaries,
   backtestSalaryEstimates,
   calibrateSalaryConfidence,
@@ -14,7 +16,8 @@ import {
 import { createProvider, providerEmbedder } from "@jobflow/llm";
 import { loadRootEnv } from "@jobflow/db";
 import { makeRepository } from "./repo.js";
-import { handleJob, runLoop } from "./jobs.js";
+import { runCloudJob } from "@jobflow/service";
+import { runLoop } from "./jobs.js";
 import type { Job } from "@jobflow/core";
 
 loadRootEnv();
@@ -24,7 +27,7 @@ loadRootEnv();
  * ever runs Tier 1-2 adapters. Tier 3 (Naukri/Glassdoor/AmbitionBox/LinkedIn) is
  * never touched here — it runs exclusively on the local agent (§7.1).
  *
- * Subcommands: discover | poll | rank | enrich | salary | salary-backtest | (default: all).
+ * Subcommands: discover | poll | rank | enrich | salary | salary-backtest | renormalize | (default: all).
  */
 
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a);
@@ -46,7 +49,7 @@ async function rank(): Promise<void> {
   // the same per-tenant fan-out the scheduled rank job runs (never ranks an un-onboarded profile)
   const llm = createProvider();
   const job = { id: "cli", tenantId: DEFAULT_TENANT, type: "rank", runtime: "cloud", payload: { scheduled: true } } as unknown as Job;
-  const r = await handleJob(repo, job, { embedder: providerEmbedder(llm), llm });
+  const r = await runCloudJob(repo, job, { embedder: providerEmbedder(llm), llm });
   log(`rank: ${r.tenants} tenant(s) ranked, ${r.skipped} not onboarded yet · ${r.scored} scored → ${r.ranked} ranked, ${r.narrated} narrated`);
 }
 
@@ -83,13 +86,26 @@ async function salary(): Promise<void> {
 }
 
 /**
+ * Re-normalize stored postings after a location / agency parser change (§11.3): re-parse
+ * each location from its stored `locationRaw`, re-read the agency flag. Idempotent; then
+ * re-rank so scores see the new locations.
+ */
+async function renormalize(): Promise<void> {
+  const repo = await makeRepository();
+  // force + record the version, so the next sync doesn't rescan for nothing
+  const r = (await renormalizeIfStale(repo, { force: true }))!;
+  log(`renormalize: ${renormalizeSummary(r)}`);
+  if (r.changed) await rank();
+}
+
+/**
  * Leave-one-out backtest of the estimator on postings that DO state pay (§11.4): is the
  * error small, and does a higher confidence score actually mean a smaller error?
  */
 async function salaryBacktest(): Promise<void> {
   const repo = await makeRepository();
   printBacktest(await backtestSalaryEstimates(repo, { withoutEmployerEvidence: false }));
-  // leak-free, before and after the per-market calibration
+  // leak-free, before and after the per market × role family calibration
   printBacktest(await backtestSalaryEstimates(repo, { withoutEmployerEvidence: true, calibrated: false }));
   printBacktest(await backtestSalaryEstimates(repo, { withoutEmployerEvidence: true }));
 }
@@ -133,9 +149,19 @@ async function main(): Promise<void> {
   if (cmd === "enrich" || cmd === "all") await enrich();
   if (cmd === "salary") await salary();
   if (cmd === "salary-backtest") await salaryBacktest();
+  if (cmd === "renormalize") await renormalize();
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+main()
+  .then(async () => {
+    // a one-shot command is done: close the store (PGlite flushes and releases its data-dir
+    // lock; a pg pool's idle sockets would otherwise keep the process alive until killed)
+    if (process.argv[2] === "runner") return;
+    const repo = (await makeRepository()) as Awaited<ReturnType<typeof makeRepository>> & { close?: () => Promise<void> };
+    await repo.close?.().catch(() => {});
+    process.exit(0);
+  })
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });

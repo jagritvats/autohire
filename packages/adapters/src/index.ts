@@ -24,12 +24,19 @@ export {
   type TextFetcher,
 } from "./feeds/rss.js";
 export { JsonFeedAdapter, parseJsonFeed, getPath } from "./feeds/jsonfeed.js";
-export { GreenhouseAdapter } from "./ats/greenhouse.js";
+export { GreenhouseAdapter, greenhouseLocation } from "./ats/greenhouse.js";
 export { LeverAdapter } from "./ats/lever.js";
 export { AshbyAdapter } from "./ats/ashby.js";
-export { WorkableAdapter } from "./ats/workable.js";
+export { WorkableAdapter, parseWorkableJobs, workablePosted } from "./ats/workable.js";
 export { SmartRecruitersAdapter } from "./ats/smartrecruiters.js";
-export { WorkdayAdapter, findCountryFacet, findCountrySites, relativePosted, parseWorkdaySlug } from "./ats/workday.js";
+export { RecruiteeAdapter, parseRecruiteeOffers, recruiteeDate } from "./ats/recruitee.js";
+export { PersonioAdapter, parsePersonioXml, personioHost, personioYears } from "./ats/personio.js";
+export { TeamtailorAdapter, parseTeamtailorRss, parseTeamtailorItems, teamtailorHost } from "./ats/teamtailor.js";
+export { BambooHrAdapter, parseBambooJobs } from "./ats/bamboohr.js";
+export { BreezyAdapter, parseBreezyPositions, breezyGoneRedirect } from "./ats/breezy.js";
+export { RemoteOkAdapter, parseRemoteOk } from "./aggregators/remoteok.js";
+export { JobicyAdapter, parseJobicyJobs, resetJobicyPacing, JOBICY_MIN_INTERVAL_MS } from "./aggregators/jobicy.js";
+export { WorkdayAdapter, findCountryFacet, findCountrySites, relativePosted, parseWorkdaySlug, splitRedacted } from "./ats/workday.js";
 export { EightfoldAdapter, parseEightfoldSlug } from "./ats/eightfold.js";
 export { AmazonJobsAdapter } from "./ats/amazon.js";
 export { OracleHcmAdapter } from "./ats/oracle.js";
@@ -42,7 +49,7 @@ export { KekaAdapter } from "./ats/keka.js";
 export { ZohoRecruitAdapter } from "./ats/zoho.js";
 export { FreshteamAdapter } from "./ats/freshteam.js";
 export { KulaAdapter } from "./ats/kula.js";
-export { HimalayasAdapter } from "./aggregators/himalayas.js";
+export { HimalayasAdapter, resetHimalayasPause } from "./aggregators/himalayas.js";
 export { HiristAdapter } from "./india/hirist.js";
 export { CutshortAdapter, parseCutshortPage, CUTSHORT_CITY_SLUGS } from "./india/cutshort.js";
 export { TimesJobsAdapter } from "./india/timesjobs.js";
@@ -54,7 +61,7 @@ export { ArbeitnowAdapter } from "./aggregators/arbeitnow.js";
 export { AdzunaSearchAdapter, parseAdzunaResults } from "./aggregators/adzuna.js";
 export { CareerjetAdapter, hasCareerjetKey, parseCareerjetResponse, CAREERJET_LOCALES } from "./aggregators/careerjet.js";
 export { JSearchAdapter, hasJSearchKey, parseJSearchResponse } from "./aggregators/jsearch.js";
-export { HnWhoIsHiringAdapter } from "./hn/whoishiring.js";
+export { HnWhoIsHiringAdapter, isSeekerPost } from "./hn/whoishiring.js";
 // Tier-1 enrichment (§11.4) — comp cascade, cloud-safe.
 export {
   fetchLevelsComp,

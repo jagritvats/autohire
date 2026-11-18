@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { AppFrame } from "@/components/AppFrame";
+import { Icon } from "@/components/ui";
 import { notFound } from "next/navigation";
 import { LEVELS_ATTRIBUTION } from "@jobflow/adapters";
 import { formatSalary, type Posting } from "@jobflow/core";
@@ -15,19 +17,22 @@ export default async function CompanyPage({ params }: { params: { id: string } }
   const postings = await repo.listPostingsByCompany(params.id);
 
   return (
-    <div className="settings-shell">
-      <header className="settings-head">
-        <h1 className="wordmark">
-          Job<span className="flow">Flow</span> <span className="settings-sub">/ {company.name}</span>
-        </h1>
-        <Link className="back" href="/">
-          ← feed
-        </Link>
-      </header>
+    <AppFrame
+      wide
+      title={company.name}
+      eyebrow={
+        <>
+          <Link href="/">
+            <Icon name="arrowLeft" size={14} /> Jobs
+          </Link>{" "}
+          · <Link href="/companies">All companies</Link>
+        </>
+      }
+    >
 
       <div className="company-grid">
         <section className="card-block">
-          <h3>Profile</h3>
+          <h2>Profile</h2>
           <div className="kv">
             <span>ATS</span>
             <span>{company.atsType === "unknown" ? "unresolved" : `${company.atsType} / ${company.atsSlug}`}</span>
@@ -49,7 +54,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
         </section>
 
         <section className="card-block">
-          <h3>Compensation <span className="hint">benchmark</span></h3>
+          <h2>Compensation <span className="hint">benchmark</span></h2>
           {company.compMedian != null ? (
             <>
               <div className="comp-median">
@@ -91,7 +96,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
         </section>
 
         <section className="card-block">
-          <h3>Ratings <span className="hint">& culture</span></h3>
+          <h2>Ratings <span className="hint">& culture</span></h2>
           {company.ratingOverall != null ? (
             <>
               <div className="rating-big">{company.ratingOverall.toFixed(1)}★ <span className="hint">{company.reviewCount ?? 0} reviews · {company.ratingSource}</span></div>
@@ -108,7 +113,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
       </div>
 
       <section className="card-block" style={{ marginTop: 16 }}>
-        <h3>Open postings <span className="hint">({postings.length})</span></h3>
+        <h2>Open postings <span className="hint">({postings.length})</span></h2>
         <div className="cp-list">
           {postings.slice(0, 40).map((p) => (
             <div className="cp-row" key={p.id}>
@@ -124,7 +129,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
           ))}
         </div>
       </section>
-    </div>
+    </AppFrame>
   );
 }
 

@@ -28,8 +28,8 @@ export function register(program: Command, ctx: Ctx): void {
         apps.map((a) => ({ ...a, posting: a.posting ? { id: a.posting.id, title: a.posting.title, company: a.posting.companyName, applyUrl: a.posting.applyUrl } : null })),
         () => {
           if (!apps.length) {
-            ctx.out.line("Nothing tracked yet.");
-            ctx.out.hint("`jobflow apply <ref>` adds a posting as ready; or `jobflow track add <ref>`.");
+            ctx.out.line(o.status ? `Nothing with status "${o.status}".` : "Nothing tracked yet.");
+            ctx.out.hint("Track a job from your feed or a search: `jobflow feed`, then `jobflow track add 1` (or `jobflow apply 1`).");
             return;
           }
           ctx.out.table(

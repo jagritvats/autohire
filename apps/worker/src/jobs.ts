@@ -1,167 +1,14 @@
-import type { Job, Profile } from "@jobflow/core";
-import { rerankMatch, type LlmProvider } from "@jobflow/llm";
 import { JOB_RUNTIME } from "@jobflow/core";
 import type { Repository } from "@jobflow/db";
-import { tenantProvider, operatorLlmAllowed } from "@jobflow/service";
-import {
-  DEFAULT_TENANT,
-  SEED_COMPANIES,
-  isOnboarded,
-  discoverCompanies,
-  pollAll,
-  rebuildMatches,
-  enrichTopMatches,
-  recheckPostings,
-  checkLiveness,
-  type SeedCompany,
-  type Embedder,
-  type Narrator,
-} from "@jobflow/pipeline";
+import { DEFAULT_TENANT } from "@jobflow/pipeline";
+import { runNextCloudJob, STUCK_AFTER_MINUTES, type JobCtx } from "@jobflow/service";
 
 /**
- * Cloud job handlers (§ control plane Phase 2). The web enqueues jobs; this drains
- * runtime='cloud' ones. INVARIANT: only Tier 1-2 work runs here — a 'local' job type
- * arriving on the cloud runner is refused, never executed (invariant #1).
+ * The worker's drain loop + self-scheduling. The job handlers themselves live in
+ * @jobflow/service (`runCloudJob`), shared with the web server's in-process drainer for
+ * the single-writer local store. INVARIANT: only Tier 1-2 work runs here — a 'local' job
+ * is never claimed and would be refused if it were (invariant #1).
  */
-export interface JobCtx {
-  embedder: Embedder;
-  /** the configured LLM — writes the re-rank narratives for the top matches */
-  llm?: LlmProvider;
-}
-
-/**
- * The LLM re-ranker for a rank run (§11.6): top-N only (JOBFLOW_RERANK_TOP, default 15,
- * 0 = off), never with the offline echo provider (its "[echo]" text isn't a write-up).
- * Narratives are cached per posting, so a paid model only sees new or changed top cards.
- */
-export async function narratorFor(repo: Repository, llm: LlmProvider | undefined, profile: Profile): Promise<Narrator | undefined> {
-  // a blank value (Actions var / docker env_file) means "default", not 0 = off
-  const top = Number(process.env.JOBFLOW_RERANK_TOP?.trim() || 15);
-  if (!llm || llm.name === "echo" || !(top > 0)) return undefined;
-  const evidence = await repo.listEvidence(profile.tenantId);
-  return {
-    model: llm.name,
-    top,
-    narrate: (posting, prior) => rerankMatch(llm, profile, evidence, { posting, priorNotes: prior }),
-  };
-}
-
-/** tenants worth ranking: active in the last 30 days (or never-tracked single-user ones). */
-async function rankableTenants(repo: Repository): Promise<string[]> {
-  const tenants = await repo.listTenants({ activeSinceDays: 30 });
-  const ids = tenants.map((t) => t.id);
-  return ids.length ? ids : [DEFAULT_TENANT];
-}
-
-/**
- * Rank the shared corpus for one tenant, narrated by THAT tenant's model (their own key;
- * the operator's only when allowed). Never ranks an un-onboarded profile — there's no
- * candidate to score yet, so any score would be invented.
- */
-async function rankTenant(repo: Repository, tenantId: string, ctx: JobCtx) {
-  const profile = await repo.getProfile(tenantId);
-  if (!profile || !isOnboarded(profile)) return null;
-  const config = await repo.getConfig(tenantId);
-  const llm = config ? tenantProvider(config) : operatorLlmAllowed() ? ctx.llm : undefined;
-  const narrator = await narratorFor(repo, llm, profile);
-  return rebuildMatches(repo, profile, { embedder: ctx.embedder, narrator });
-}
-
-export async function handleJob(repo: Repository, job: Job, ctx: JobCtx): Promise<Record<string, unknown>> {
-  if (JOB_RUNTIME[job.type] !== "cloud") {
-    throw new Error(`Refusing ${job.type}: it is a LOCAL-agent job, never run on the cloud runner (invariant #1).`);
-  }
-  switch (job.type) {
-    case "discover": {
-      const seeds = (job.payload.companies as SeedCompany[] | undefined) ?? SEED_COMPANIES;
-      const s = await discoverCompanies(repo, seeds);
-      return { seeded: s.seeded, resolved: s.resolved, unresolved: s.unresolved };
-    }
-    case "poll": {
-      // one shared routine (boards → feeds → resolve shells → expire); a single company
-      // when the registry UI asks for "poll now"
-      const r = await pollAll(repo, { embedder: ctx.embedder, companyId: job.payload.companyId as string | undefined });
-      return {
-        companiesPolled: r.companiesPolled,
-        postingsFetched: r.fetched,
-        staled: r.staled,
-        feeds: r.feeds,
-        resolved: r.resolved,
-        expired: r.expired,
-      };
-    }
-    case "rank": {
-      // a scheduled rank (after the shared corpus was polled) re-ranks EVERY active tenant;
-      // a rank a user asked for re-ranks only theirs
-      const tenantIds = job.payload.scheduled ? await rankableTenants(repo) : [job.tenantId];
-      const out: Record<string, unknown> = { tenants: 0, skipped: 0, scored: 0, ranked: 0, narrated: 0 };
-      for (const tenantId of tenantIds) {
-        const r = await rankTenant(repo, tenantId, ctx);
-        if (!r) {
-          (out.skipped as number)++;
-          continue;
-        }
-        (out.tenants as number)++;
-        out.scored = (out.scored as number) + r.scored;
-        out.ranked = (out.ranked as number) + r.ranked;
-        out.narrated = (out.narrated as number) + r.narrated;
-      }
-      return out;
-    }
-    case "enrich_t1": {
-      const limit = (job.payload.limit as number | undefined) ?? 40;
-      const r = await enrichTopMatches(repo, { tenantId: job.tenantId, limit });
-      return {
-        companiesEnriched: r.companiesEnriched,
-        companyLaddersFetched: r.companyLaddersFetched,
-        levelsMarketFetched: r.levelsMarketFetched,
-        adzunaFetched: r.adzunaFetched,
-        adzuna: r.adzunaUsed,
-        postingsEstimated: r.postingsEstimated,
-        estimateUnchanged: r.estimate.unchanged,
-        estimateNoMarket: r.estimate.noMarket,
-      };
-    }
-    case "recheck": {
-      // Re-verify postings by re-polling their boards (§3): refetch → bump lastSeen →
-      // markStale for any that disappeared. Explicit ids > a company's postings > all active.
-      const postingIds = job.payload.postingIds as string[] | undefined;
-      const companyId = job.payload.companyId as string | undefined;
-      let ids: string[] = Array.isArray(postingIds) ? postingIds : [];
-      if (ids.length === 0 && companyId) {
-        ids = (await repo.listPostingsByCompany(companyId)).map((p) => p.id);
-      }
-      if (ids.length === 0) {
-        ids = (await repo.listActivePostings()).map((p) => p.id);
-      }
-      const stats = await recheckPostings(repo, ids, { embedder: ctx.embedder });
-      return { ...stats };
-    }
-    case "liveness": {
-      // dead-link check on the top cards between polls (§3); retired cards leave the feed
-      // at once (listMatches only returns active postings), so no re-rank is needed
-      // the union of every active tenant's top cards (a dead link is dead for everyone)
-      const limit = (job.payload.limit as number | undefined) ?? 40;
-      const totals: Record<string, number> = {};
-      for (const tenantId of await rankableTenants(repo)) {
-        const r = await checkLiveness(repo, { tenantId, limit });
-        for (const [k, v] of Object.entries(r)) if (typeof v === "number") totals[k] = (totals[k] ?? 0) + v;
-      }
-      return totals;
-    }
-    case "purge": {
-      // Bulk soft-delete (markStale) / hard-delete postings older than a threshold.
-      const olderThanDays = job.payload.olderThanDays as number;
-      const field = job.payload.field as "lastSeen" | "firstSeen" | undefined;
-      const hard = job.payload.hard as boolean | undefined;
-      const n = await repo.purgeOldPostings({ olderThanDays, field, hard });
-      return { purged: n };
-    }
-    default:
-      throw new Error(`Unhandled cloud job type: ${job.type}`);
-  }
-}
-
 /**
  * Drain loop: claim → run → complete, repeatedly. `once` drains the backlog and
  * returns; otherwise it polls every `intervalMs`. The web triggers jobs; this turns
@@ -186,8 +33,8 @@ export async function runLoop(
   // the liveness scheduler (it waits for queued/running polls) indefinitely
   await requeueStuck(repo, log);
   for (;;) {
-    const job = await repo.claimJob("cloud");
-    if (!job) {
+    const out = await runNextCloudJob(repo, ctx, { onStart: (job) => log(`▶ ${job.type} (${job.id.slice(0, 8)})`) });
+    if (!out) {
       if (opts.once) return;
       if (Date.now() - lastScheduleCheck > 60_000) {
         lastScheduleCheck = Date.now();
@@ -203,24 +50,14 @@ export async function runLoop(
       await sleep(intervalMs);
       continue;
     }
-    log(`▶ ${job.type} (${job.id.slice(0, 8)})`);
-    try {
-      const result = await handleJob(repo, job, ctx);
-      await repo.completeJob(job.id, "done", { result });
-      log(`✓ ${job.type} ${JSON.stringify(result)}`);
-    } catch (e) {
-      await repo.completeJob(job.id, "error", { error: (e as Error).message });
-      log(`✗ ${job.type}: ${(e as Error).message}`);
-    }
+    if (out.status === "done") log(`✓ ${out.job.type} ${JSON.stringify(out.result)}`);
+    else log(`✗ ${out.job.type}: ${out.error}`);
   }
 }
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
-
-/** cloud jobs (a full poll can take a while) count as orphaned after an hour `running` */
-const STUCK_AFTER_MINUTES = 60;
 
 async function requeueStuck(repo: Repository, log: (m: string) => void): Promise<void> {
   try {
