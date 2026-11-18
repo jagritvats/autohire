@@ -116,6 +116,32 @@ const FREEMAIL = /^(gmail|googlemail|outlook|hotmail|yahoo|proton|protonmail|icl
 const GENERIC_HOST = /(^|\.)(github\.com|gitlab\.com|notion\.site|notion\.so|medium\.com|substack\.com|google\.com|ycombinator\.com|calendly\.com|typeform\.com|jotform\.com|tally\.so|airtable\.com|lu\.ma)$/i;
 /** a "Who wants to be hired" résumé posted in the hiring thread by mistake */
 const SEEKER_POST = /^\s*(willing to relocate|résumé\/cv|resume\/cv|right to work)\s*:/im;
+/** a lede that announces a person looking for work: "SEEKING FREELANCE - Egypt", "Looking for work | Remote" */
+const SEEKER_LEDE = /^\s*(seeking (work|freelance|a (new )?(job|role|position)|employment|contracts?|opportunities)\b|looking for (work|a (new )?(job|role|position|contract)|opportunities)\b|open to (work|opportunities|roles)\b|available for (work|hire|contracts?|freelance)\b|for hire\b|hire me\b)/i;
+/** a person describing themselves: "I'm a software engineer focused on backend…" */
+const SELF_INTRO = /(^|[.!\n]\s*)(i['’]m|i am)\s+(a|an)\s+(?:[\w/&+.-]+\s+){0,4}?(engineer|developer|programmer|designer|freelancer|consultant|data scientist|architect)\b/im;
+/** résumé furniture: "Technical skills:", "Portfolio:", "My résumé:" */
+const RESUME_BITS = /^\s*(technical skills|skills|tech stack|experience|portfolio|my (résumé|resume|cv))\s*:/im;
+/**
+ * The employer's voice: "we're hiring", "our team", "join us", "you'll". A post that has it
+ * is a job post even when its lede says "SEEKING FREELANCER" (an employer seeking one).
+ */
+const EMPLOYER_VOICE = /\b(hiring|we['’]re|we are|we['’]ve|we have|we (build|make|offer|need|use|pay|want)|our (team|company|startup|mission|product|customers|platform|stack|office|engineers)|join (us|our)|you['’]ll|you will|the role|this role|responsibilities)\b/i;
+
+/**
+ * A job SEEKER's self-post in the hiring thread (they belong in "Who wants to be hired?"):
+ * a lede announcing a person looking for work, or a first-person self-introduction in the
+ * opening lines (or anywhere beside résumé furniture), and none of the employer's voice.
+ * Hiring posts that open with "I'm the founder…" or "SEEKING FREELANCER … We're looking
+ * for…" are kept.
+ */
+export function isSeekerPost(text: string): boolean {
+  if (SEEKER_POST.test(text)) return true;
+  if (EMPLOYER_VOICE.test(text)) return false;
+  const lede = (text.split("\n")[0] ?? "").trim();
+  // a self-introduction counts in the opening lines, or anywhere next to résumé furniture
+  return SEEKER_LEDE.test(lede) || SELF_INTRO.test(text.slice(0, 400)) || (SELF_INTRO.test(text) && RESUME_BITS.test(text));
+}
 
 /**
  * The convention is "Company | Role | Location | …", but ~2% of posts break it: they
@@ -126,7 +152,7 @@ const SEEKER_POST = /^\s*(willing to relocate|résumé\/cv|resume\/cv|right to w
  */
 export function deriveCompany(text: string): string {
   const line = (text.split("\n")[0] ?? "").trim();
-  if (META_LEDE.test(line) || SEEKER_POST.test(text)) return "";
+  if (META_LEDE.test(line) || isSeekerPost(text)) return "";
   const segs = line.split(SEGMENT_SEP).map(cleanSegment).filter(Boolean);
   for (const s of segs) {
     // prose first: a sentence can mention a role or "$30 trillion" and still name the company

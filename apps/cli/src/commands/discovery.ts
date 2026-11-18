@@ -16,8 +16,8 @@ import { CliError, EXIT, notFound, usage } from "../errors.js";
 import { presetIds, readUserFile } from "./shared.js";
 
 /**
- * What `jobflow sync` polls: the built-in presets you switch on (india / global-remote / us /
- * eu-uk — several at once) PLUS your own sources. A preset is also a TAG: `jobflow search
+ * What `jobflow sync` polls: the built-in presets you switch on (`listPresets()`: india,
+ * global-remote, us, eu-uk, canada — several at once) PLUS your own sources. A preset is also a TAG: `jobflow search
  * … --preset us` and `jobflow feed --preset india` filter by it. Everything stays Tier 1–2 public data (invariant #1); every URL you add
  * passes the SSRF guard before it's saved.
  */

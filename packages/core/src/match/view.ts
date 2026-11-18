@@ -3,7 +3,7 @@ import { LevelBandOrder, type RemoteGeo } from "../schema/enums.js";
 import { SearchQuery, type SearchQueryInput, type ViewHiddenReason } from "../schema/search.js";
 import { extractSkills } from "../normalize/skills.js";
 import { normCompany } from "../normalize/titles.js";
-import { isWorkableIn, parsedCountryMatches } from "../normalize/location.js";
+import { isWorkableIn, locationInCountry } from "../normalize/location.js";
 import { postingAgeDays } from "./score.js";
 
 /**
@@ -218,7 +218,7 @@ function normCity(c: string): string {
 /** onsite place vs one query location; anything the posting doesn't state passes. */
 function placeMatches(posting: Posting, q: { city: string | null; country: string | null }): boolean {
   const loc = posting.location;
-  if (q.country && parsedCountryMatches(loc.country, q.country) === false) return false;
+  if (q.country && locationInCountry(loc, q.country) === false) return false; // any of its countries
   if (q.city && loc.city) {
     const a = normCity(loc.city);
     const b = normCity(q.city);
@@ -249,4 +249,53 @@ function hasSkill(posting: Posting, skill: string): boolean {
   if (canon.length && canon.every((c) => posting.jdSkills.includes(c))) return true;
   if (posting.jdSkills.some((s) => s.toLowerCase() === skill.trim().toLowerCase())) return true;
   return containsWord(`${posting.title}\n${posting.jdText}`, skill);
+}
+
+// ── company spread: a presentation ORDER over the ranked list ─────────────────────────
+
+/** In any run of this many consecutive cards… */
+export const DIVERSIFY_WINDOW = 20;
+/** …at most this many come from one company. */
+export const DIVERSIFY_PER_COMPANY = 3;
+
+export interface DiversifyOptions {
+  window?: number;
+  perCompany?: number;
+}
+
+/**
+ * Spread a ranked list so a few big employers don't fill the page (audit 2026-11: with false
+ * merges gone, Amazon held 19 of an India top 50). Greedy and stable: each position takes
+ * the best-ranked remaining item whose company has fewer than `perCompany` items in the
+ * last `window - 1` positions; when only capped companies remain it takes the best one
+ * anyway. So nothing is dropped, scores are untouched, every company's own items keep their
+ * order, and the cards it moves down follow a little later (invariant #4: a view, not a
+ * score and not a filter — callers keep a "score order only" switch).
+ */
+export function diversifyByCompany<T>(items: readonly T[], companyOf: (item: T) => string, opts: DiversifyOptions = {}): T[] {
+  const window = Math.max(1, opts.window ?? DIVERSIFY_WINDOW);
+  const cap = Math.max(1, opts.perCompany ?? DIVERSIFY_PER_COMPANY);
+  const pending = items.map((item, i) => ({ item, key: companyOf(item) || `#${i}` }));
+  const out: T[] = [];
+  const placed: string[] = [];
+  const inWindow = new Map<string, number>();
+  while (pending.length) {
+    let pick = pending.findIndex((p) => (inWindow.get(p.key) ?? 0) < cap);
+    if (pick === -1) pick = 0;
+    const [next] = pending.splice(pick, 1);
+    out.push(next!.item);
+    placed.push(next!.key);
+    inWindow.set(next!.key, (inWindow.get(next!.key) ?? 0) + 1);
+    // the window for the NEXT position drops the item `window - 1` places back
+    if (placed.length >= window) {
+      const old = placed[placed.length - window]!;
+      inWindow.set(old, (inWindow.get(old) ?? 1) - 1);
+    }
+  }
+  return out;
+}
+
+/** The company key the spread groups by: the normalized name, so a board and an aggregator agree. */
+export function diversifyKey(company: string): string {
+  return normCompany(company);
 }

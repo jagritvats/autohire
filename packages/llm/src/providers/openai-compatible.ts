@@ -10,10 +10,9 @@ import {
   withRetry,
 } from "../http.js";
 
-export const OPENAI_DEFAULT_CHEAP = "gpt-5-mini";
-export const OPENAI_DEFAULT_STRONG = "gpt-5";
-export const GROK_DEFAULT_CHEAP = "grok-3-mini";
-export const GROK_DEFAULT_STRONG = "grok-4";
+import { GROK_DEFAULT_CHEAP, GROK_DEFAULT_STRONG, OPENAI_DEFAULT_CHEAP, OPENAI_DEFAULT_STRONG } from "../models.js";
+
+export { GROK_DEFAULT_CHEAP, GROK_DEFAULT_STRONG, OPENAI_DEFAULT_CHEAP, OPENAI_DEFAULT_STRONG };
 const OPENAI_API = "https://api.openai.com/v1";
 
 /**

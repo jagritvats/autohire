@@ -13,7 +13,17 @@ body:
     id: proposal
     attributes:
       label: Proposal
-      description: How could JobFlow solve it? Note any interaction with the invariants in CONTRIBUTING.md (tier boundary, never-submit, grounded generation, soft ranking).
+      description: How could JobFlow solve it? Which part does it touch (CLI, web app, sources, matching, tailoring, applying)?
+  - type: checkboxes
+    id: promises
+    attributes:
+      label: JobFlow's promises
+      description: See "Our promises" in CONTRIBUTING.md. Proposals that need one of these broken can't be accepted.
+      options:
+        - label: It doesn't need a server to use a logged-in site (LinkedIn, Naukri, Glassdoor) on my behalf
+        - label: It doesn't submit applications automatically
+        - label: It doesn't generate claims that aren't in my own résumé or evidence
+        - label: It doesn't silently hide jobs (filters say what they hid)
   - type: textarea
     id: alternatives
     attributes:

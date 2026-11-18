@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
-import type { Repository } from "@jobflow/db";
-import { SearchQuery, effectiveMarkets, type Posting, type SavedSearch, type SearchQueryInput, type SourceKind } from "@jobflow/core";
-import { adhocSearch, loadProfile, runSavedSearch, type AdhocSearchResult } from "@jobflow/pipeline";
+import type { NewPosting, Repository } from "@jobflow/db";
+import { SearchQuery, effectiveMarkets, normCompany, scorePosting, type Match, type Posting, type SavedSearch, type SearchQueryInput, type SourceKind } from "@jobflow/core";
+import type { SourceAdapter } from "@jobflow/adapters";
+import { adhocSearch, isOnboarded, loadProfile, runSavedSearch, type AdhocSearchResult } from "@jobflow/pipeline";
 import { corpusEmbedder } from "./embedder.js";
 import { rankTenant, toCards, type FeedCard } from "./feed.js";
 import { ensureTenant } from "./tenant.js";
@@ -13,6 +14,11 @@ import { ensureTenant } from "./tenant.js";
  */
 export interface SearchOutput extends Omit<AdhocSearchResult, "results"> {
   cards: Array<FeedCard & { relevance: number; inFeed: boolean }>;
+  /**
+   * false before the profile is set up: results are UNSCORED — no score, no fit notes, no
+   * hard exclusions (a blank profile has no stack, floor or location to judge against).
+   */
+  scored: boolean;
   /** with `withPostings`: the scored postings behind `cards` (same order) — transient
    *  unless `inFeed`/ingested, so a local client can keep one the user picks */
   postings?: Posting[];
@@ -22,17 +28,28 @@ export async function searchJobs(
   repo: Repository,
   tenantId: string,
   query: SearchQueryInput,
-  opts: { ingest?: boolean; limit?: number; sources?: SourceKind[]; sort?: "score" | "relevance"; withPostings?: boolean } = {},
+  opts: {
+    ingest?: boolean;
+    limit?: number;
+    sources?: SourceKind[];
+    sort?: "score" | "relevance";
+    withPostings?: boolean;
+    /** ask these adapters instead of the registry's (tests, offline clients) — the pipeline still keeps only Tier 1–2 */
+    adapters?: SourceAdapter[];
+  } = {},
 ): Promise<SearchOutput> {
   await ensureTenant(repo, tenantId);
   const profile = await loadProfile(repo, tenantId);
+  const scored = isOnboarded(profile);
   const r = await adhocSearch(query, profile, {
+    hardExclude: scored,
     repo,
     embedder: corpusEmbedder(),
     ingest: opts.ingest ?? false,
     limit: opts.limit ?? 30,
     sources: opts.sources,
     sort: opts.sort,
+    adapters: opts.adapters,
   });
   // ingested results join the feed: re-rank so they show up there with stored matches
   if (opts.ingest && r.results.length) await rankTenant(repo, tenantId);
@@ -41,12 +58,13 @@ export async function searchJobs(
     tenantId,
     r.results.map((x) => ({
       posting: x.posting,
-      match: { score: x.match.score, levelNote: x.match.flags.levelNote, stackNote: x.match.flags.stack.note, redFlags: x.match.flags.redFlags },
+      match: scored ? { score: x.match.score, levelNote: x.match.flags.levelNote, stackNote: x.match.flags.stack.note, redFlags: x.match.flags.redFlags } : null,
     })),
   );
   const { results, ...rest } = r;
   return {
     ...rest,
+    scored,
     cards: cards.map((c, i) => ({ ...c, relevance: results[i]!.relevance, inFeed: results[i]!.inFeed })),
     ...(opts.withPostings ? { postings: results.map((x) => x.posting) } : {}),
   };
@@ -106,4 +124,90 @@ export async function runSearchNow(repo: Repository, tenantId: string, id: strin
   const r = await runSavedSearch(repo, search, { embedder: corpusEmbedder(), markets: effectiveMarkets(profile.prefs), yoe: profile.yoe });
   await rankTenant(repo, tenantId);
   return r;
+}
+
+// ── keeping a search result ──
+
+/**
+ * Save a transient search result into the corpus, exactly as ingest would (idempotent upsert
+ * on (atsType, atsJobId), invariant #5). The company joins the registry as a discovered shell.
+ * Used when a person picks a result (opens it, tailors, applies) — searching alone writes nothing.
+ */
+export async function keepPosting(repo: Repository, p: Posting): Promise<Posting> {
+  const company = await repo.upsertCompany({
+    name: p.companyName,
+    nameNorm: normCompany(p.companyName),
+    atsType: p.atsType,
+    tags: ["discovered", p.source],
+  });
+  const {
+    id: _id,
+    firstSeen: _f,
+    lastSeen: _l,
+    isActive: _a,
+    repostCount: _r,
+    canonicalId: _c,
+    status: _s,
+    invalidReason: _ir,
+    invalidatedAt: _ia,
+    ...rest
+  } = p;
+  const np: NewPosting = { ...rest, companyId: company.id, companyName: company.name };
+  return repo.upsertPosting(np);
+}
+
+/**
+ * The web's recent search results, per tenant, held server-side (never trusted from the
+ * client) so "open / save / tailor" on a result that isn't in the corpus can keep it.
+ * Process memory, bounded; a restart just means searching again.
+ */
+const recent = new Map<string, Map<string, Posting>>();
+const MAX_PER_TENANT = 300;
+
+export function rememberSearchResults(tenantId: string, postings: Posting[]): void {
+  const m = recent.get(tenantId) ?? new Map<string, Posting>();
+  for (const p of postings) {
+    m.delete(p.id);
+    m.set(p.id, p);
+  }
+  while (m.size > MAX_PER_TENANT) m.delete(m.keys().next().value as string);
+  recent.set(tenantId, m);
+}
+
+/** Keep a remembered result (or return the stored posting if it's already in the corpus). */
+export async function keepSearchResult(repo: Repository, tenantId: string, id: string): Promise<Posting | null> {
+  const stored = await repo.getPosting(id).catch(() => null);
+  if (stored) return stored;
+  const p = recent.get(tenantId)?.get(id);
+  if (!p) return null;
+  const kept = await keepPosting(repo, p);
+  recent.get(tenantId)?.delete(id);
+  await scoreKept(repo, tenantId, kept);
+  return kept;
+}
+
+/**
+ * Score ONE newly kept posting for this tenant (the same scorer as a full rank; matches
+ * upsert per posting), so its Job page shows a real score without re-ranking the corpus.
+ * Does nothing before onboarding — there's no candidate to score against.
+ */
+export async function scoreKept(repo: Repository, tenantId: string, posting: Posting): Promise<void> {
+  const profile = await repo.getProfile(tenantId);
+  if (!profile || !isOnboarded(profile)) return;
+  const s = scorePosting(posting, profile);
+  const match: Match = {
+    id: randomUUID(),
+    tenantId,
+    postingId: posting.id,
+    score: s.score,
+    scoreBreakdown: s.breakdown,
+    rulePass: s.rulePass,
+    whyFit: s.flags.stack.note,
+    gap: null,
+    stackNote: s.flags.stack.note,
+    levelNote: s.flags.levelNote,
+    redFlags: s.flags.hardExclusionReason ? [...s.flags.redFlags, s.flags.hardExclusionReason] : s.flags.redFlags,
+    generatedAt: new Date(),
+  };
+  await repo.saveMatches([match]);
 }

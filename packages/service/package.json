@@ -22,5 +22,6 @@
     "@jobflow/llm": "workspace:*",
     "@jobflow/pipeline": "workspace:*",
     "@jobflow/resume-io": "workspace:*"
-  }
+  },
+  "license": "AGPL-3.0-only"
 }

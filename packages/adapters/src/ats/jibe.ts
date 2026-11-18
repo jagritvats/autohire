@@ -1,5 +1,5 @@
 import type { RawPosting } from "@jobflow/core";
-import { COUNTRY_NAMES, htmlToText, httpJson, type FetchTarget, type SourceAdapter } from "../types.js";
+import { COUNTRY_NAMES, htmlToText, httpJson, markPartial, type FetchTarget, type SourceAdapter } from "../types.js";
 
 /**
  * iCIMS Jibe career sites (Tier 2: the JSON the careers site itself calls, no auth) —
@@ -41,7 +41,8 @@ export interface JibeList {
 
 const PAGE = 100;
 const HTML_TAG = /<\/?[a-z][^>]*>/i;
-/** newest first (sortBy=posted_date); a board past this ages its oldest reqs out → markStale. */
+/** newest first (sortBy=posted_date); a board past this is listed PARTIALLY — its oldest
+ *  reqs are left to the lastSeen TTL sweep, never diffed away by markStale (invariant #5). */
 const MAX_LIST = 1000;
 
 export class JibeAdapter implements SourceAdapter {
@@ -55,6 +56,7 @@ export class JibeAdapter implements SourceAdapter {
 
     const jobs: JibeJob[] = [];
     let total = Infinity;
+    let listed = 0;
     for (let page = 1; (page - 1) * PAGE < Math.min(total, MAX_LIST); page++) {
       const qs = new URLSearchParams({ page: String(page), limit: String(PAGE), sortBy: "posted_date", descending: "true" });
       if (country) qs.set("country", country);
@@ -62,11 +64,14 @@ export class JibeAdapter implements SourceAdapter {
       // a failed page mid-list would make the tail look closed to markStale — all or nothing
       if (!res || !Array.isArray(res.jobs)) return [];
       total = res.totalCount ?? 0;
+      listed += res.jobs.length;
       const batch = res.jobs.map((j) => j.data).filter((d): d is JibeJob => !!d?.title);
       jobs.push(...batch);
       if (res.jobs.length < PAGE) break;
     }
-    return parseJibeJobs(jobs, host, country);
+    const out = parseJibeJobs(jobs, host, country);
+    // stopped at MAX_LIST with more on the board
+    return listed < total && listed >= MAX_LIST ? markPartial(out) : out;
   }
 }
 

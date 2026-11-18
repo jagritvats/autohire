@@ -16,7 +16,10 @@ hosted service).
 - **Sessions** — httpOnly, SameSite=Lax cookies; state-changing requests must come from the
   app's own origin.
 - **API tokens** — Settings → API tokens mints scoped, revocable tokens (`cli`, `extension`,
-  `agent`), shown once and stored as hashes.
+  `agent`), shown once and stored as hashes. (A token is only needed for the browser
+  extension, the local agent, or a script calling the HTTP API with
+  `Authorization: Bearer <token>`. The `cli` scope, labelled "scripts / API" in Settings, is
+  for that. The `jobflow` CLI itself works on its own local store and needs no token.)
 - **Admin-only** — instance-wide jobs (discover, full polls, purges) and registry edits.
 - **LLM keys** — users bring their own; the operator's env key is used for them only with
   `JOBFLOW_OPERATOR_LLM=shared`.
@@ -36,7 +39,17 @@ hosted service).
 5. Back up the database privately: it holds people's résumés and contact details. Publish a
    privacy notice.
 
-Docker Compose works for this too: set the variables above in `.env` and change the web bind
-with `JOBFLOW_WEB_BIND=0.0.0.0:3000` (only behind your TLS proxy).
+Docker Compose works for this too. Set the variables above in `.env`, and change the address
+the web port binds to with `JOBFLOW_WEB_BIND=0.0.0.0` (only behind your TLS proxy). It's an
+address, not `host:port`: the published port stays 3000. `pnpm docker:logs` follows the web
+and worker logs. See [Troubleshooting](troubleshooting.md#port-3000-is-already-in-use) for port
+clashes.
+
+## Licence obligations
+
+JobFlow is AGPL-3.0-only. Running it unmodified for others is fine — the footer's "source"
+link points at the upstream repository. If you run a **modified** version as a service, §13
+of the licence requires you to offer its users the corresponding source of your version: set
+`JOBFLOW_SOURCE_URL` to where your modified source is published.
 
 See [SECURITY.md](../../SECURITY.md) for what counts as a vulnerability and how to report it.

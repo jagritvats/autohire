@@ -2,10 +2,27 @@ name: New job source
 description: Propose a job board, ATS or feed to support
 labels: [source]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Want to write it yourself? See [Adding a job source](https://github.com/jagritvats/autohire/blob/main/docs/contributing/adding-a-job-source.md).
+        If you only want to follow one company or feed, you may not need a new source: `jobflow discovery add-company`, `add-rss` and `add-json` cover many cases.
   - type: input
     id: url
     attributes:
       label: Source URL
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of source is it?
+      options:
+        - A company ATS / careers backend (one board per employer)
+        - A job board or aggregator (many companies)
+        - A feed (RSS / Atom / JSON)
+        - A community channel (forum, chat, newsletter)
+        - Salary or company data (enrichment)
     validations:
       required: true
   - type: dropdown
@@ -25,11 +42,16 @@ body:
     id: tier
     attributes:
       label: Proposed tier
-      description: Tier 1–2 may run in the cloud worker; anything needing a login or scraping a hostile site is Tier 3 (local agent only).
+      description: Tier 1–2 may run in the CLI, web server and worker. Anything needing a login, or a site that blocks non-browser clients, is Tier 3 (local agent only).
       options:
         - Tier 1 (official / public API)
         - Tier 2 (public, low-risk)
         - Tier 3 (local agent only)
+  - type: input
+    id: markets
+    attributes:
+      label: Markets
+      description: Countries or regions it covers, and whether it fits an existing discovery preset (india, global-remote, us, eu-uk).
   - type: textarea
     id: tos
     attributes:
@@ -38,11 +60,13 @@ body:
     id: sample
     attributes:
       label: Sample payload
-      description: A trimmed example response (no personal data).
+      description: A trimmed example response. Replace real names and contact details with fictional ones.
       render: json
   - type: checkboxes
-    id: liveness
+    id: capabilities
     attributes:
-      label: Freshness
+      label: Capabilities
       options:
-        - label: The source has a per-job endpoint that definitively says a job is gone (404/410 or a closed flag)
+        - label: It can search by keyword (and maybe location / remote), so saved searches can use it
+        - label: It has a per-job endpoint that definitively says a job is gone (404/410 or a closed flag)
+        - label: Its "posted" dates are the employer's real publish dates (not re-stamped on repost)

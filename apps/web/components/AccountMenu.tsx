@@ -18,8 +18,10 @@ export function AccountMenu() {
   }
   return (
     <span className="account-menu">
-      <span className="hint" title="signed in">{me.email}</span>
-      <button type="button" className="chip" onClick={signOut}>
+      <span className="account-menu__email" title={`signed in as ${me.email}`}>
+        {me.email}
+      </span>
+      <button type="button" className="btn btn--ghost btn--sm" onClick={signOut}>
         sign out
       </button>
     </span>

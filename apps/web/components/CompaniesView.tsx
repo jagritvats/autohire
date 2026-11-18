@@ -72,6 +72,7 @@ export function CompaniesView() {
     <div className="companies">
       <div className="add-row">
         <input
+          aria-label="Add company by name or careers URL"
           placeholder="Add company by name or careers URL…  (e.g. Razorpay  ·  https://boards.greenhouse.io/acme)"
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -81,7 +82,7 @@ export function CompaniesView() {
           {adding ? "resolving…" : "+ add"}
         </button>
       </div>
-      {msg && <div className="add-msg">{msg}</div>}
+      <div aria-live="polite">{msg && <div className="add-msg">{msg}</div>}</div>
 
       <div className="reg-meta">
         {rows.length} companies · {resolved} resolved to an ATS board · {rows.reduce((s, r) => s + r.postings, 0)} active postings
@@ -106,7 +107,7 @@ export function CompaniesView() {
               {r.atsType === "unknown" ? <em>unresolved</em> : <code>{r.atsType}/{r.atsSlug}</code>}
             </span>
             <span className="rcount">{r.postings}</span>
-            <select value={r.pollCadence} onChange={(e) => setCadence(r.id, e.target.value)}>
+            <select aria-label={`Poll cadence for ${r.name}`} value={r.pollCadence} onChange={(e) => setCadence(r.id, e.target.value)}>
               {["daily", "weekly", "manual"].map((c) => (
                 <option key={c}>{c}</option>
               ))}
@@ -119,7 +120,7 @@ export function CompaniesView() {
               <button onClick={() => setStatus(r.id, r.status === "active" ? "paused" : "active")}>
                 {r.status === "active" ? "pause" : "resume"}
               </button>
-              <button className="danger" onClick={() => remove(r.id)} title="remove">
+              <button className="danger" onClick={() => remove(r.id)} title="remove" aria-label={`Remove ${r.name}`}>
                 ✕
               </button>
             </span>

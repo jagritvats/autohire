@@ -7,7 +7,7 @@ import { isOnboarded, loadProfile, profileReadiness } from "@jobflow/pipeline";
 import { latexEngineAvailable, tenantProvider } from "@jobflow/service";
 import type { Ctx } from "../context.js";
 import { CliError, SET_MODEL_HINT } from "../errors.js";
-import { PLAYWRIGHT_INSTALL_HINT, playwrightStatus } from "../browser.js";
+import { browserCheck, playwrightStatus } from "../browser.js";
 
 type Status = "ok" | "warn" | "fail" | "skip";
 interface Check {
@@ -102,14 +102,8 @@ export function register(program: Command, ctx: Ctx): void {
       }
 
       // ── local tools ──
-      const pw = await playwrightStatus();
-      add(
-        pw.installed && pw.chromium
-          ? { name: "playwright", status: "ok", detail: `v${pw.version} + chromium` }
-          : pw.installed
-            ? { name: "playwright", status: "warn", detail: `v${pw.version}, chromium missing`, fix: "npx playwright install chromium" }
-            : { name: "playwright", status: "warn", detail: "not installed (only needed for apply --fill)", fix: PLAYWRIGHT_INSTALL_HINT },
-      );
+      const bc = browserCheck(await playwrightStatus(ctx.io.env));
+      add(bc.ok ? { name: "playwright", status: "ok", detail: bc.detail } : { name: "playwright", status: "warn", detail: bc.detail, fix: bc.fix });
       const tex = await latexEngineAvailable();
       add(tex ? { name: "latex", status: "ok", detail: tex } : { name: "latex", status: "warn", detail: "no engine (only needed for tailor --pdf)", fix: "install tectonic: https://tectonic-typesetting.github.io" });
 

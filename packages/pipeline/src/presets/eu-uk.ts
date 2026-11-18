@@ -3,7 +3,7 @@ import { EU_UK_COMPANIES } from "./companies.js";
 
 /**
  * `eu-uk` — UK + EU: EU/UK-eligible remote roles (Himalayas by country), the key-gated
- * national indexes (Adzuna gb/de, Careerjet en_GB/de_DE — no-ops without keys), Arbeitnow
+ * national indexes (Adzuna gb/de/nl, Careerjet en_GB/de_DE/nl_NL — no-ops without keys), Arbeitnow
  * (a German-market board, so EU-only), remote boards, HN, and well-known UK/EU employers.
  */
 export const EU_UK_PRESET: DiscoveryPreset = {
@@ -23,13 +23,35 @@ export const EU_UK_PRESET: DiscoveryPreset = {
     },
     { id: "eu-uk.arbeitnow", source: "arbeitnow", targets: [{ query: "engineer", limit: 60 }, { query: "developer", limit: 60 }] },
     { id: "eu-uk.remotive", source: "remotive", targets: [{ query: "software engineer", limit: 60 }] },
-    { id: "eu-uk.hn_whoishiring", source: "hn_whoishiring", targets: [{ query: "europe", limit: 60 }, { query: "london", limit: 60 }] },
+    // Jobicy: remote roles by Jobicy geo, last 7 days. Its terms allow one automated pass an
+    // hour, which the adapter enforces per target; `slow` keeps request-bound refreshes off it.
+    {
+      id: "eu-uk.jobicy",
+      source: "jobicy",
+      slow: true,
+      targets: [
+        { limit: 100, params: { geo: "uk", industry: "engineering" } },
+        { limit: 100, params: { geo: "germany", industry: "engineering" } },
+        { limit: 100, params: { geo: "netherlands", industry: "engineering" } },
+      ],
+    },
+    {
+      id: "eu-uk.hn_whoishiring",
+      source: "hn_whoishiring",
+      targets: [
+        { query: "europe", limit: 60 },
+        { query: "london", limit: 60 },
+        { query: "berlin", limit: 40 },
+        { query: "amsterdam", limit: 40 },
+      ],
+    },
     {
       id: "eu-uk.adzuna",
       source: "adzuna",
       targets: [
         { query: "software engineer", limit: 50, params: { country: "gb", titleOnly: true, maxDaysOld: 14 } },
         { query: "software engineer", limit: 50, params: { country: "de", titleOnly: true, maxDaysOld: 14 } },
+        { query: "software engineer", limit: 50, params: { country: "nl", titleOnly: true, maxDaysOld: 14 } },
       ],
     },
     {
@@ -38,6 +60,7 @@ export const EU_UK_PRESET: DiscoveryPreset = {
       targets: [
         { query: "software engineer", limit: 50, params: { locale: "en_GB" } },
         { query: "software engineer", limit: 50, params: { locale: "de_DE" } },
+        { query: "software engineer", limit: 50, params: { locale: "nl_NL" } },
       ],
     },
   ],

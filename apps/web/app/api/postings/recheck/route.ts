@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { JOB_RUNTIME } from "@jobflow/core";
-import { getRepo } from "@/lib/repo";
+import { getRepo, wakeJobRunner } from "@/lib/repo";
 import { guard } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -8,8 +8,9 @@ export const dynamic = "force-dynamic";
 /**
  * Mass recheck. Body accepts `{ postingIds }` (explicit), `{ companyId }` (all its
  * postings), or neither (every active posting). Re-polling live ATS boards is slow and
- * Tier 1-2 work, so this ENQUEUES a cloud `recheck` job for the worker to drain (rather
- * than blocking the request). Returns the queued job; the feed refreshes when it lands.
+ * Tier 1-2 work, so this ENQUEUES a cloud `recheck` job (the worker, or this server's
+ * runner on the local store) rather than blocking the request. Returns the queued job;
+ * the feed refreshes when it lands.
  */
 export async function POST(req: Request) {
   const auth = await guard(req);
@@ -18,11 +19,16 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const postingIds: string[] | undefined = Array.isArray(body?.postingIds) ? body.postingIds : undefined;
   const companyId: string | undefined = typeof body?.companyId === "string" ? body.companyId : undefined;
+  // re-polling EVERY board touches the shared corpus — admin-only, as in POST /api/jobs
+  if (!postingIds?.length && !companyId && auth.role !== "admin") {
+    return NextResponse.json({ error: "Only an admin can recheck every job on a shared instance." }, { status: 403 });
+  }
   const job = await repo.enqueueJob({
     tenantId: auth.tenantId,
     type: "recheck",
     runtime: JOB_RUNTIME["recheck"],
     payload: { postingIds, companyId },
   });
+  wakeJobRunner();
   return NextResponse.json({ queued: true, job });
 }

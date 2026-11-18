@@ -288,17 +288,7 @@ export function TailorView({ posting, inputs, initialDrafts }: { posting: Tailor
           signal,
         });
         const parts = [`${Object.keys(answers).length - (letter ? 1 : 0)} answer(s)`, letter ? "the cover letter" : "", `the “${variant.replace("_", "/")}” variant`].filter(Boolean);
-        setMsg("app", res.ok ? `Saved to your application — ${parts.join(", ")}.` : "Save to application failed.", res.ok ? "ok" : "err");
-      } catch (e) {
-        setMsg("app", (e as Error).message, "err");
-      }
-    });
-
-  const fillViaAgent = () =>
-    run("app-fill", "queuing…", async (signal) => {
-      try {
-        await fetch("/api/jobs", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type: "form_fill", payload: { postingId: posting.id } }), signal });
-        setMsg("app", "Queued a form-fill — your local agent pre-fills the form in your session with these answers and stops at review (never submits). Offline → it runs when the agent is back.", "ok");
+        setMsg("app", res.ok ? `Saved to this job's application — ${parts.join(", ")}. Next: apply →` : "Save to application failed.", res.ok ? "ok" : "err");
       } catch (e) {
         setMsg("app", (e as Error).message, "err");
       }
@@ -315,23 +305,16 @@ export function TailorView({ posting, inputs, initialDrafts }: { posting: Tailor
 
   return (
     <div className="tailor">
+      {/* the page header carries the role title and "Next: apply"; this line is the context */}
       <div className="tailor-head">
-        <div>
-          <div className="tailor-role">{posting.title}</div>
-          <div className="tailor-sub">
-            <a href={`/company/${posting.companyId}`}>{posting.company}</a>
-            <span className="dot">·</span>
-            {posting.location}
-            {posting.level ? <> · {posting.level}</> : null}
-          </div>
+        <div className="tailor-sub">
+          <a href={`/company/${posting.companyId}`}>{posting.company}</a>
+          <span className="dot">·</span>
+          {posting.location}
+          {posting.level ? <> · {posting.level}</> : null}
         </div>
         <div className="tailor-actions">
           <span className="llm-pill">llm: {posting.llm}</span>
-          {posting.applyUrl && (
-            <a className="apply" href={posting.applyUrl} target="_blank" rel="noreferrer">
-              Apply →
-            </a>
-          )}
         </div>
       </div>
 
@@ -341,12 +324,12 @@ export function TailorView({ posting, inputs, initialDrafts }: { posting: Tailor
       <section className="card-block tailor-block">
         <div className="tailor-block-head">
           <div>
-            <h3>Tailored résumé</h3>
+            <h2>Tailored résumé</h2>
             <span className="hint">your résumé, rewritten for this role — edit the source, check the preview, export</span>
           </div>
           <div className="variant-tabs">
             {(["markdown", "latex", "bullets"] as Fmt[]).map((f) => (
-              <button key={f} className="chip" data-on={fmt === f} onClick={() => setFmt(f)}>
+              <button key={f} className="chip" data-on={fmt === f} aria-pressed={fmt === f} onClick={() => setFmt(f)}>
                 {f}
               </button>
             ))}
@@ -414,7 +397,7 @@ export function TailorView({ posting, inputs, initialDrafts }: { posting: Tailor
             hint={
               inputs.hasLatex
                 ? "Rewrites the content of your LaTeX template; its preamble (styling, packages, macros) is kept byte-for-byte."
-                : "No LaTeX template imported, so this uses the built-in one. Import your .tex in Settings to keep your own styling."
+                : "No LaTeX template imported, so this uses the built-in one. Import your .tex under Profile → Résumé to keep your own styling."
             }
           >
             {latex && (
@@ -495,9 +478,9 @@ export function TailorView({ posting, inputs, initialDrafts }: { posting: Tailor
       <section className="card-block tailor-block">
         <div className="tailor-block-head">
           <div>
-            <h3>
+            <h2>
               Cover letter <span className="hint">— optional</span>
-            </h3>
+            </h2>
             <span className="hint">grounded in your material; company facts only from this JD</span>
           </div>
         </div>
@@ -560,7 +543,7 @@ export function TailorView({ posting, inputs, initialDrafts }: { posting: Tailor
           <section className="card-block tailor-block" key={kind}>
             <div className="tailor-block-head">
               <div>
-                <h3>{title}</h3>
+                <h2>{title}</h2>
                 <span className="hint">{blurb}</span>
               </div>
               <div className="tailor-block-btns">
@@ -581,7 +564,7 @@ export function TailorView({ posting, inputs, initialDrafts }: { posting: Tailor
             {d?.stale && <div className="tailor-warn">Your profile, evidence, model or this posting changed since this was written — regenerate to pick that up.</div>}
             {d?.text && (
               <div className="answer-block">
-                <textarea className="answer-text" value={textOf(kind)} onChange={(e) => edit(kind, e.target.value)} onBlur={() => void saveEdit(kind)} rows={6} />
+                <textarea className="answer-text" aria-label={title} value={textOf(kind)} onChange={(e) => edit(kind, e.target.value)} onBlur={() => void saveEdit(kind)} rows={6} />
                 <div className="answer-foot">
                   <span className="hint">
                     {wordCount(textOf(kind))} words · {d.edited || isDirty(kind) ? "edited" : "editable"} before you copy
@@ -604,14 +587,15 @@ export function TailorView({ posting, inputs, initialDrafts }: { posting: Tailor
           <button className="save ghost" disabled={isBusy("app-save")} onClick={saveToApplication}>
             {isBusy("app-save") ? `${busy?.label} ${elapsed}s` : "Save to application"}
           </button>
-          <button className="cmd" disabled={isBusy("app-fill")} onClick={fillViaAgent}>
-            {isBusy("app-fill") ? `${busy?.label} ${elapsed}s` : "Fill via local agent →"}
-          </button>
+          <a className="apply" href={`/jobs/${posting.id}#apply`}>
+            Next: apply →
+          </a>
         </div>
         <p className="hint">
-          “Save” attaches your edited answers, cover letter and chosen bullet variant to this role’s application. “Fill” hands it to your
-          local agent, which pre-fills the form in your own browser and <strong>stops at review</strong> — it never submits. For the
-          résumé attachment, use <strong>use for autofill</strong> under Markdown or LaTeX (else your base résumé is attached).
+          “Save to application” attaches your edited answers, cover letter and chosen bullet variant to this job’s application, so the
+          form-filler types them. For the résumé file, use <strong>use for autofill</strong> under Markdown or LaTeX (otherwise your base
+          résumé is attached). Then <strong>Next: apply</strong> shows the checklist and how to open or pre-fill the form — it always stops
+          for you to review and submit.
         </p>
         <MsgLine msg={msgs["app"]} />
       </section>
@@ -626,19 +610,19 @@ function InputsStrip({ inputs }: { inputs: TailorInputs }) {
     warnings.push(
       <>
         No generation model is set, so nothing here is tailored: résumés are your own, reformatted, and answers and cover letters are
-        off. <a href="/settings">Set a model in Settings</a>.
+        off. <a href="/settings#model">Connect a writing model in Settings</a> — or use these as they are.
       </>,
     );
-  if (!inputs.resumeChars && !inputs.hasLatex) warnings.push(<>No base résumé yet — upload one in <a href="/settings">Settings</a>; tailoring rewrites it.</>);
+  if (!inputs.resumeChars && !inputs.hasLatex) warnings.push(<>No base résumé yet — <a href="/profile#resume">add one under Profile</a>; tailoring rewrites it.</>);
   if (inputs.sampleEvidence)
     warnings.push(
       <>
         {inputs.sampleEvidence === inputs.evidence ? "All" : inputs.sampleEvidence} of your {inputs.evidence} Evidence Bank entries{" "}
         {inputs.sampleEvidence === 1 ? "is a built-in sample" : "are the built-in samples"} — replace or remove them in{" "}
-        <a href="/settings">Settings</a>, or they can end up in your résumé.
+        <a href="/profile#evidence">Profile → Evidence Bank</a>, or they can end up in your résumé.
       </>,
     );
-  if (!inputs.hasEmail) warnings.push(<>Your contact email is empty — the résumé header falls back to your résumé text, and autofill needs it (Settings › Contact).</>);
+  if (!inputs.hasEmail) warnings.push(<>Your contact email is empty — the résumé header falls back to your résumé text, and autofill needs it (<a href="/profile#contact">Profile → Contact</a>).</>);
   const chip = (ok: boolean, label: string) => (
     <span className="in-chip" data-ok={ok}>
       {ok ? "✓" : "–"} {label}
@@ -699,7 +683,7 @@ function Pane({
         <div className="pane-btns">
           {draft && !mine && (
             <span className="gen-meta" style={{ marginRight: 8 }} suppressHydrationWarning>
-              {draft.source === "builtin" ? "built-in" : draft.model} · {timeAgo(draft.createdAt)}
+              {draft.source === "builtin" ? "from your résumé (template)" : `written by ${draft.model}`} · {timeAgo(draft.createdAt)}
             </span>
           )}
           {mine ? (
@@ -719,7 +703,7 @@ function Pane({
       {draft?.source === "builtin" && !mine && (
         <div className="tailor-warn">
           Not tailored — no generation model is set, so this is {draft.kind === "resume" ? "your own bullets, ranked by overlap with this JD" : "your own résumé, reformatted"}.
-          Set a model in Settings › Generation model, then regenerate.
+          <a href="/settings#model">Connect a writing model</a> to tailor it, then regenerate.
         </div>
       )}
       {draft?.stale && draft.source !== "builtin" && !mine && (
@@ -757,7 +741,7 @@ function DocSplit({
           {prose ? "text" : "source"}
           {dirty ? " · unsaved edit" : edited ? " · edited" : ""}
         </div>
-        <textarea className={`doc-src${prose ? " prose" : ""}`} value={value} spellCheck={!!prose} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} />
+        <textarea className={`doc-src${prose ? " prose" : ""}`} aria-label={prose ? "Document text" : "Document source"} value={value} spellCheck={!!prose} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} />
       </div>
       <div className="doc-col">
         <div className="doc-label">preview</div>
@@ -806,7 +790,7 @@ function CompilerLog({ log }: { log: string }) {
 function MsgLine({ msg }: { msg?: Msg }) {
   if (!msg) return null;
   return (
-    <div className={msg.tone === "ok" ? "tailor-app-msg" : msg.tone === "warn" ? "tailor-warn" : "tailor-err"}>
+    <div className={msg.tone === "ok" ? "tailor-app-msg" : msg.tone === "warn" ? "tailor-warn" : "tailor-err"} role={msg.tone === "err" ? "alert" : "status"}>
       {msg.text}
       {msg.detail && (
         <details className="src-preview" style={{ marginTop: 6 }}>
@@ -840,7 +824,7 @@ function ResumeBlock({ variants, variant, onVariant }: { variants: ResumeVariant
       </div>
       <div className="variant-tabs">
         {tabs.map((t) => (
-          <button key={t.key} className="chip" data-on={variant === t.key} onClick={() => onVariant(t.key)}>
+          <button key={t.key} className="chip" data-on={variant === t.key} aria-pressed={variant === t.key} onClick={() => onVariant(t.key)}>
             {t.label}
           </button>
         ))}

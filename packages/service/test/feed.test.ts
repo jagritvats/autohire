@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { InMemoryRepository } from "@jobflow/db";
-import { normCompany, normalizePosting, type RawPosting } from "@jobflow/core";
+import { normCompany, normalizePosting, type Match, type RawPosting } from "@jobflow/core";
 import { toNewPosting } from "@jobflow/pipeline";
 import { getFeed, loadSampleProfile, rankTenant, ensureTenant } from "../src/index.js";
 
@@ -56,5 +56,49 @@ describe("feed (service)", () => {
     expect(p?.masterResume).toBe("");
     expect(p?.onboardedAt).toBeNull();
     expect(await repo.listEvidence(t.id)).toHaveLength(0);
+  });
+});
+
+describe("feed company spread (an order, never a score — invariant #4)", () => {
+  async function seedAt(repo: InMemoryRepository, company: string, id: string) {
+    const slug = normCompany(company).replace(/\W/g, "");
+    const co = await repo.upsertCompany({ name: company, nameNorm: normCompany(company), atsType: "greenhouse", atsSlug: slug });
+    const raw: RawPosting = {
+      source: "greenhouse", tier: "tier1", atsType: "greenhouse", atsJobId: id, companyName: company,
+      companySlug: slug, title: `Backend Engineer ${id}`, jdText: "Java, Kafka, Postgres. Remote.", jdHtml: null, locationRaw: "Remote",
+      applyUrl: "https://example.com/apply", salaryRaw: null, postedAt: new Date(), fetchedAt: new Date(), raw: {},
+    };
+    return repo.upsertPosting(await toNewPosting(normalizePosting(raw), co.id, co.name, embed));
+  }
+
+  it("at most 3 cards per company in any 20, the rest later, every card at its true score; opt out for score order", async () => {
+    const repo = new InMemoryRepository();
+    const t = await repo.createTenant({ name: "t" });
+    await loadSampleProfile(repo, t.id);
+    const scores = new Map<string, number>();
+    const matches: Match[] = [];
+    // one employer holds the 12 best scores, then 18 other companies
+    for (let i = 0; i < 30; i++) {
+      const p = await seedAt(repo, i < 12 ? "Example Corp" : `Other Co ${i}`, `job-${i}`);
+      const score = 95 - i;
+      scores.set(p.id, score);
+      matches.push({
+        id: `m-${i}`, tenantId: t.id, postingId: p.id, score, rulePass: true, whyFit: null, gap: null, stackNote: null, levelNote: null, redFlags: [],
+        scoreBreakdown: { semantic: 0, stackAdjacency: 0, archetype: 0, seniority: 0, location: 0, freshness: 0, salary: 0, sourceTrust: 0 },
+        generatedAt: new Date(),
+      });
+    }
+    await repo.saveMatches(matches);
+
+    const spread = await getFeed(repo, t.id, { bootstrap: false });
+    expect(spread.cards).toHaveLength(30);
+    expect(spread.cards.slice(0, 20).filter((c) => c.company === "Example Corp")).toHaveLength(3);
+    expect(spread.cards[0]!.score).toBe(95);
+    for (const c of spread.cards) expect(c.score).toBe(scores.get(c.id));
+
+    const byScore = await getFeed(repo, t.id, { bootstrap: false, diversify: false });
+    expect(byScore.cards.map((c) => c.score)).toEqual([...scores.values()].sort((a, b) => b - a));
+    expect(byScore.cards.slice(0, 12).every((c) => c.company === "Example Corp")).toBe(true);
+    expect(new Set(byScore.cards.map((c) => c.id))).toEqual(new Set(spread.cards.map((c) => c.id)));
   });
 });

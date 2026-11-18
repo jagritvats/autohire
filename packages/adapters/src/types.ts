@@ -79,7 +79,7 @@ export interface LivenessTarget {
 export async function httpStatus(
   url: string,
   init: RequestInit & { timeoutMs?: number } = {},
-): Promise<{ status: number; body: string } | null> {
+): Promise<{ status: number; body: string; location: string | null } | null> {
   const { timeoutMs = 15_000, ...rest } = init;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -94,7 +94,7 @@ export async function httpStatus(
         ...(rest.headers ?? {}),
       },
     });
-    return { status: res.status, body: await res.text() };
+    return { status: res.status, body: await res.text(), location: res.headers.get("location") };
   } catch {
     return null;
   } finally {
@@ -235,6 +235,76 @@ export async function httpJson<T = unknown>(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * httpJson that waits out a rate limit instead of failing the whole poll: on 429/503 it
+ * sleeps (Retry-After when the server gives one, capped; else an exponential backoff from
+ * `baseDelayMs`) and retries up to `retries` times. Any other failure → null at once, so a
+ * board that is really down isn't hammered. Used by tenants that throttle bursts
+ * (Microsoft's Eightfold answers 429 to roughly every fourth request at 2 s spacing).
+ */
+export async function httpJsonPolite<T = unknown>(
+  url: string,
+  init: RequestInit & { timeoutMs?: number } = {},
+  opts: {
+    retries?: number;
+    baseDelayMs?: number;
+    maxDelayMs?: number;
+    sleep?: (ms: number) => Promise<void>;
+    /** told why the call gave up (the last HTTP status, or null for a network error/timeout) */
+    onGiveUp?: (status: number | null) => void;
+  } = {},
+): Promise<T | null> {
+  const { retries = 3, baseDelayMs = 4000, maxDelayMs = 60_000, sleep = defaultSleep, onGiveUp } = opts;
+  const { timeoutMs = 20_000, ...rest } = init;
+  let status: number | null = null;
+  const giveUp = (): null => {
+    onGiveUp?.(status);
+    return null;
+  };
+  for (let attempt = 0; ; attempt++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    let wait: number | null = null;
+    try {
+      const res = await fetch(url, {
+        ...rest,
+        signal: ctrl.signal,
+        headers: { "User-Agent": "JobFlow/0.1 (+personal job-search; contact via app)", Accept: "application/json", ...(rest.headers ?? {}) },
+      });
+      if (res.ok) return (await res.json()) as T;
+      status = res.status;
+      if (res.status !== 429 && res.status !== 503) return giveUp();
+      const after = Number(res.headers.get("retry-after"));
+      wait = Number.isFinite(after) && after > 0 ? after * 1000 : baseDelayMs * 2 ** attempt;
+    } catch {
+      status = null;
+      return giveUp();
+    } finally {
+      clearTimeout(timer);
+    }
+    // a Retry-After beyond the cap (Workable's Cloudflare says ~23 h) won't clear in this poll
+    if (attempt >= retries || wait > maxDelayMs) return giveUp();
+    await sleep(wait);
+  }
+}
+
+/**
+ * Say once per process why a source returned nothing (a missing key, a rate limit), on
+ * stderr, so `jobflow sync` / the worker log explain an empty feed instead of hiding it.
+ * Adapters still return [] (never throw); this is only the reason.
+ */
+const NOTICED = new Set<string>();
+export function adapterNotice(source: string, reason: string): void {
+  const key = `${source}\u0000${reason}`;
+  if (NOTICED.has(key)) return;
+  NOTICED.add(key);
+  console.warn(`[${source}] ${reason}`);
+}
+
+function defaultSleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 /** Text twin of httpJson (careers-page HTML, XML feeds); null on any failure. */
