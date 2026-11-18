@@ -346,7 +346,7 @@ export function TailorView({ posting, inputs, initialDrafts }: { posting: Tailor
           </div>
           <div className="variant-tabs">
             {(["markdown", "latex", "bullets"] as Fmt[]).map((f) => (
-              <button key={f} className="chip" data-on={fmt === f} onClick={() => setFmt(f)}>
+              <button key={f} className="chip" data-on={fmt === f} aria-pressed={fmt === f} onClick={() => setFmt(f)}>
                 {f}
               </button>
             ))}
@@ -581,7 +581,7 @@ export function TailorView({ posting, inputs, initialDrafts }: { posting: Tailor
             {d?.stale && <div className="tailor-warn">Your profile, evidence, model or this posting changed since this was written — regenerate to pick that up.</div>}
             {d?.text && (
               <div className="answer-block">
-                <textarea className="answer-text" value={textOf(kind)} onChange={(e) => edit(kind, e.target.value)} onBlur={() => void saveEdit(kind)} rows={6} />
+                <textarea className="answer-text" aria-label={title} value={textOf(kind)} onChange={(e) => edit(kind, e.target.value)} onBlur={() => void saveEdit(kind)} rows={6} />
                 <div className="answer-foot">
                   <span className="hint">
                     {wordCount(textOf(kind))} words · {d.edited || isDirty(kind) ? "edited" : "editable"} before you copy
@@ -757,7 +757,7 @@ function DocSplit({
           {prose ? "text" : "source"}
           {dirty ? " · unsaved edit" : edited ? " · edited" : ""}
         </div>
-        <textarea className={`doc-src${prose ? " prose" : ""}`} value={value} spellCheck={!!prose} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} />
+        <textarea className={`doc-src${prose ? " prose" : ""}`} aria-label={prose ? "Document text" : "Document source"} value={value} spellCheck={!!prose} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} />
       </div>
       <div className="doc-col">
         <div className="doc-label">preview</div>
@@ -806,7 +806,7 @@ function CompilerLog({ log }: { log: string }) {
 function MsgLine({ msg }: { msg?: Msg }) {
   if (!msg) return null;
   return (
-    <div className={msg.tone === "ok" ? "tailor-app-msg" : msg.tone === "warn" ? "tailor-warn" : "tailor-err"}>
+    <div className={msg.tone === "ok" ? "tailor-app-msg" : msg.tone === "warn" ? "tailor-warn" : "tailor-err"} role={msg.tone === "err" ? "alert" : "status"}>
       {msg.text}
       {msg.detail && (
         <details className="src-preview" style={{ marginTop: 6 }}>
@@ -840,7 +840,7 @@ function ResumeBlock({ variants, variant, onVariant }: { variants: ResumeVariant
       </div>
       <div className="variant-tabs">
         {tabs.map((t) => (
-          <button key={t.key} className="chip" data-on={variant === t.key} onClick={() => onVariant(t.key)}>
+          <button key={t.key} className="chip" data-on={variant === t.key} aria-pressed={variant === t.key} onClick={() => onVariant(t.key)}>
             {t.label}
           </button>
         ))}
