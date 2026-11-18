@@ -31,6 +31,15 @@ confirmed here. Prefer flags? `pnpm jobflow init --yes --resume ./cv.pdf --home 
 --markets US,CA --remote worldwide,us_only --floor "150000 USD" --roles backend,platform
 --preset us,global-remote`. Just exploring? `pnpm jobflow init --sample` loads a fictional candidate.
 
+Prefer a browser? Run `pnpm jobflow serve` and open http://localhost:3000. The first visit
+starts the same setup as a four-step onboarding: **Your résumé → Check what we found → What
+you want → Where to look**.
+
+<p>
+  <img src="screenshots/onboarding.png" width="49%" alt="Onboarding, step 1: your résumé">
+  <img src="screenshots/onboarding-review.png" width="49%" alt="Onboarding, step 2: check what we found">
+</p>
+
 Your data lives in `~/.jobflow` (override with `JOBFLOW_DATA_DIR`): a local database,
 your uploaded résumé and generated documents. Nothing leaves your machine except requests
 to public job boards and, if you configure one, your LLM provider.
@@ -58,6 +67,8 @@ many they hid.
 
 Keep a search running: `pnpm jobflow search "backend engineer" --remote --save-as remote-backend`.
 
+![jobflow search](screenshots/cli-search.png)
+
 ## 3. Build your feed
 
 ```bash
@@ -67,7 +78,14 @@ pnpm jobflow show '#1' # one card in full, with the job description
 ```
 
 `sync` polls the companies and boards in your discovery preset, your own sources (add RSS
-feeds, Telegram channels, companies… with `jobflow discovery`), and your saved searches.
+feeds, Telegram channels, companies… with `jobflow discovery`), and your saved searches. The
+first one takes a minute or two. If it brings back nothing, see
+[Troubleshooting](guides/troubleshooting.md#a-sync-finished-but-there-are-no-jobs).
+
+In the web app, the first sync starts by itself after onboarding, and the Jobs page fills in
+when it's done. Until you've done the basics, a **Get started** checklist sits on top:
+
+![The get-started checklist](screenshots/jobs-checklist.png)
 
 ## 4. Tailor and apply
 
@@ -80,9 +98,12 @@ pnpm jobflow apply '#1' --fill           # fill it in your browser, then YOU rev
 pnpm jobflow track status '#1' applied
 ```
 
-`--fill` uses Playwright in a browser profile on your machine (once: `pnpm add -w playwright &&
-npx playwright install chromium`, then `pnpm jobflow config set automation.fill on`). It **never submits** — there's no option for it and
-no code path that does. See [guides/apply.md](guides/apply.md).
+`--fill` uses Playwright in a browser profile on your machine. Set it up once with
+`pnpm add -w playwright && npx playwright install chromium`, then
+`pnpm jobflow config set automation.fill on`. It **never submits**: there's no option for it
+and no code path that does. See [Applying](guides/apply.md).
+
+![The filled form, stopped before submit](screenshots/apply-review-gate.png)
 
 ## Add an LLM (optional)
 
@@ -104,7 +125,7 @@ http://localhost:3000. It only answers on localhost.
 
 | Page | What it's for |
 |---|---|
-| **Jobs** | your ranked jobs; a tab per saved search; Saved and Hidden; a "get started" checklist until you're set up. Keys: `j`/`k` move, `o` open, `t` tailor, `a` apply, `s` save, `x` hide, `?` help |
+| **Jobs** | your ranked jobs; a tab per saved search; Saved and Hidden; a "get started" checklist until you're set up. Keys: `j`/`k` move, `o` open, `t` tailor, `a` apply, `s` save, `x` hide, `/` search, `?` help ([all keys](guides/keyboard-shortcuts.md)) |
 | **Search** | ask the live boards now; save a search to make it a Jobs tab |
 | **Applications** | to apply / in progress / closed, next steps and due follow-ups |
 | **Profile** | résumé, contact, skills, what you want, Evidence Bank |
@@ -117,6 +138,8 @@ Jobs filters open from a **Filters** button; the theme toggle in the header swit
 system, light and dark.
 
 ![The Jobs page](screenshots/jobs.png)
+
+Every page, with screenshots, is in the [web app tour](guides/web-app-tour.md).
 
 ## Docker
 
@@ -132,7 +155,9 @@ see [guides/self-hosting.md](guides/self-hosting.md).
 
 ## Next
 
-- [CLI reference](cli.md)
-- [Résumé & profile](guides/resume-and-profile.md) · [Search & discovery](guides/search-and-discovery.md) · [Applying](guides/apply.md)
-- [Configuration reference](configuration.md)
-- [Legal & ethics](legal-and-ethics.md)
+- [Daily workflow](guides/daily-workflow.md): the loop you'll run every day, in the CLI and the web app
+- [Web app tour](guides/web-app-tour.md): every page, themes, mobile
+- [Your résumé & profile](guides/resume-and-profile.md) · [Search & discovery](guides/search-and-discovery.md) · [Applying](guides/apply.md)
+- [Keyboard shortcuts](guides/keyboard-shortcuts.md) · [LLM providers](guides/llm-providers.md) · [The local agent](guides/local-agent.md) · [Troubleshooting](guides/troubleshooting.md)
+- [CLI reference](cli.md) · [Configuration reference](configuration.md) · [Legal & ethics](legal-and-ethics.md)
+- Running it for others: [Self-hosting](guides/self-hosting.md)
