@@ -1,12 +1,22 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Fraunces, JetBrains_Mono, Schibsted_Grotesk } from "next/font/google";
 import { AppShell } from "@/components/ui/AppShell";
 import { THEME_INIT_SCRIPT } from "@/components/ui/ThemeToggle";
 import "./globals.css";
 
-// Inter for the interface (tabular figures for scores/counts); JetBrains Mono only for
-// code-ish bits — the search query DSL, résumé/LaTeX sources, job types.
-const sans = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
+// Concept A, "Editorial light" (docs/internal/DESIGN.md): Fraunces — a soft, optical-size
+// display serif — for page titles, section heads and the score numerals; Schibsted Grotesk,
+// a grotesk drawn for a newsroom's screens, for everything you read and press; JetBrains
+// Mono only for code-ish bits (the search DSL, résumé/LaTeX sources). All self-hosted at
+// build by next/font — no font CDN at runtime.
+const display = Fraunces({
+  subsets: ["latin"],
+  axes: ["opsz", "SOFT"],
+  style: ["normal", "italic"],
+  variable: "--font-fraunces",
+  display: "swap",
+});
+const sans = Schibsted_Grotesk({ subsets: ["latin"], variable: "--font-schibsted", display: "swap" });
 const mono = JetBrains_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-jbmono", display: "swap" });
 
 export const metadata: Metadata = {
@@ -18,8 +28,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#111113" },
+    { media: "(prefers-color-scheme: light)", color: "#f6f1e7" },
+    { media: "(prefers-color-scheme: dark)", color: "#161411" },
   ],
 };
 
@@ -32,7 +42,7 @@ const SOURCE_URL = process.env.JOBFLOW_SOURCE_URL || "https://github.com/jagritv
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     // the init script sets data-theme before paint, so React must not complain about it
-    <html lang="en" className={`${sans.variable} ${mono.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>

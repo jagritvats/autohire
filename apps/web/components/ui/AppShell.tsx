@@ -14,11 +14,13 @@ const BARE = ["/login", "/signup"]; // auth screens: brand + theme only, no app 
 export function Brand() {
   return (
     <Link href="/" className="brand" aria-label="JobFlow — home">
-      <svg className="brand__mark" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-        <rect x="1" y="1" width="22" height="22" rx="6" fill="var(--accent-solid)" />
-        <path d="M7 15.5h4M7 12h7M7 8.5h10" stroke="var(--accent-on)" strokeWidth="2" strokeLinecap="round" />
+      <span className="brand__name">
+        Job<em>Flow</em>
+      </span>
+      {/* the full stop of a masthead — the one vermilion mark in the header */}
+      <svg className="brand__mark" viewBox="0 0 10 10" width="8" height="8" aria-hidden="true">
+        <circle cx="5" cy="5" r="5" fill="var(--accent-solid)" />
       </svg>
-      <span className="brand__name">JobFlow</span>
     </Link>
   );
 }

@@ -1,10 +1,129 @@
-# JobFlow web — design system ("calm ledger")
+# JobFlow web — design system
 
 The visual contract for `apps/web`. Tokens and component classes live in
 `apps/web/app/globals.css`; React wrappers in `apps/web/components/ui/`. If you add UI, compose
 these. Don't add bespoke colours or sizes.
 
-## Rationale
+The current visual layer is **Concept A, "Editorial light"** (next section). It re-skins the
+"calm ledger" system below: the class names, primitives, semantic tones, component anatomy and
+accessibility rules are unchanged, while the palette, type, shape and page layouts differ. Where
+the two disagree, Concept A wins. The older tables are kept for the reasoning behind them.
+
+## Concept A — "Editorial light"
+
+### Rationale
+
+The calm-ledger pass fixed contrast and hierarchy, but it still looked like every other dark
+SaaS dashboard: neutral greys, an indigo accent, a box around everything. JobFlow is something
+a person *reads* every morning during a stressful search, so Concept A sets it like a good
+paper instead of a control panel:
+
+- **Paper and ink.** Light is the base theme: a warm paper ground (`#f6f1e7`) and near-black
+  ink (`#1c1915`). Dark is "night paper", a warm charcoal (`#161411`) rather than blue-black,
+  with every role re-measured. Both themes are first-class; the toggle and the OS choose.
+- **Type does the hierarchy.** A characterful display serif, **Fraunces** (optical size and
+  "soft" axes), sets page titles, section heads, card headlines and, above all, the **score
+  numerals**, which are the visual anchor of each match. A newsroom grotesk, **Schibsted
+  Grotesk** (drawn for a media group's screens), sets everything you read and press.
+  **JetBrains Mono** stays for code-like content only. All three are self-hosted by
+  `next/font` at build time. There's no font CDN at runtime.
+- **Rules instead of boxes.** Sections open with a hairline (or, under a page title, an ink
+  rule) and a serif head, not a bordered card. Match cards are entries in an index, with
+  hairlines between them. Tables are open, with an ink rule on top. The only framed surface is
+  the temporary "Get started" checklist, because it is scaffolding, not content.
+- **One confident accent.** Vermilion (`#b8401c` light, `#ef7a4f` dark) means "you can act
+  here": primary buttons, links, the active nav rule, the current step, the selection mark. It
+  is never used for status. The semantic tones keep their meaning. `bad` moved to a crimson
+  (`#a31d3c`) so it stays distinct from the accent, and danger buttons are outlined while
+  primary buttons are solid.
+- **Calm tags.** A neutral fact is a hairline frame with no fill, and a toned fact gets its tint.
+  Skills read as a run of words ("java · kafka · postgres"), not a wall of pills. Chips that
+  are on get an ink frame and a tick (plus `aria-pressed`), which stays calm even with a dozen
+  on. An estimate still always looks like an estimate: a dashed frame, `~`, and `est N%`.
+- **Editorial moments.** Jobs opens with a dated masthead and a one-sentence lede ("1 new match
+  since yesterday. The strongest of 17: Backend Engineer, Ledger at Acme Pay, 92."). The count
+  is postings whose source date is within a day. Unscored lists never claim a "strongest". The
+  Job page is laid out as an article: the fit summary is the lede, and "stack / level / likely
+  gap / check before applying" are typeset sub-sections. The full description flows as the
+  body, beside a sticky fact sheet (the big score, one fact per line, Apply / Save / Tailor, the
+  status). Empty states are an italic serif line plus a sentence and the way on, with no
+  clip-art.
+
+References studied for direction (not copied): serif-led "warm editorial" product systems
+(cream paper, terracotta accent, a serif kept to headings and key metrics), newsroom
+typography (small-caps datelines and kickers, ruled section heads, "continued on" lines), and
+Craft-style ink-on-paper canvases.
+
+### Tokens
+
+| token | light | dark | role |
+|---|---|---|---|
+| `--bg` | `#f6f1e7` | `#161411` | page (paper) |
+| `--surface` | `#fcfaf5` | `#1d1a16` | inputs, menus, drawer, the checklist |
+| `--surface-2` / `-3` | `#efe8da` / `#e6ddcc` | `#25221d` / `#2e2a24` | tints: hover, code, pressed |
+| `--border` | `#e2d9c8` | `#35302a` | hairline rules (decorative) |
+| `--border-strong` | `#cdc2ad` | `#4a433b` | section rules, chip and button edges |
+| `--rule` | `#1c1915` | `#f2ede3` | the ink rule under a page title, a table, a fact sheet |
+| `--control-border` | `#8c8170` | `#80776a` | input edges (≥ 3:1) |
+| `--text` / `-2` / `-3` | `#1c1915` / `#4d473f` / `#645c51` | `#f2ede3` / `#cdc4b5` / `#a99f90` | ink, secondary, captions |
+| `--accent-solid` / `-hover` | `#b8401c` / `#9f3615` | `#ef7a4f` / `#f58e67` | primary buttons, focus, the active rule |
+| `--accent-on` | `#ffffff` | `#1c1410` | text on a primary button |
+| `--accent-text` / `-soft` / `-border` | `#a83a19` / `#f8e3d6` / `#e5ab92` | `#f59a74` / `#3a2016` / `#8a4329` | links, datelines, tonal fills |
+| `--good` / `--info` / `--warn` / `--bad` | `#2c6a33` `#205e86` `#895200` `#a31d3c` | `#86cf8c` `#7fbde3` `#efc15a` `#ff8fa0` | semantic text and icons |
+| `--*-soft` | `#e3eedb` `#dfeaf0` `#f6e9c9` `#f6dde0` | `#1c2a1c` `#152530` `#2f2310` `#3a1720` | semantic tints |
+| `--focus` | `#b8401c` | `#f59a74` | 2px focus ring, 2px offset |
+
+Shape: `--r-sm` 3 · `--r-md` 4 · `--r-lg` 6 for surfaces, and `--r-full` pills only for things
+you press (buttons, chips). Shadows are gone from resting surfaces (`--shadow-sm: none`). Only
+menus, the drawer and toasts lift. Layout: `--header-h` 64 (56 mobile), `--gutter` 32
+(16 at ≤ 640px), `--content-max` 1120, `--read-max` 720, `--measure` 68ch, `--rail-w` 264.
+
+### Measured contrast (WCAG 2.2; AA text ≥ 4.5, UI ≥ 3)
+
+| pair | light | dark |
+|---|---|---|
+| text on bg / surface / surface-2 | 15.6 / 16.8 / 14.4 | 15.8 / 14.9 / 13.6 |
+| text-2 on bg / surface / surface-2 | 8.2 / 8.8 / 7.5 | 10.6 / 10.0 / 9.2 |
+| text-3 on bg / surface / surface-2 / surface-3 | 5.9 / 6.3 / 5.4 / 4.9 | 7.1 / 6.6 / 6.1 / 5.5 |
+| accent-text on bg / surface / accent-soft | 5.7 / 6.1 / 5.2 | 8.5 / 8.1 / 7.0 |
+| accent-on on accent-solid (primary button) | 5.5 | 6.5 |
+| good / info / warn / bad on bg | 5.8 / 6.2 / 5.7 / 6.7 | 9.9 / 9.0 / 10.9 / 8.5 |
+| good / info / warn / bad on their soft tint | 5.5 / 5.7 / 5.3 / 5.8 | 8.1 / 7.7 / 9.1 / 7.3 |
+| control-border on surface / bg | 3.7 / 3.4 | 3.9 / 4.2 |
+| focus ring on bg / surface | 4.9 / 5.3 | 8.5 / 8.1 |
+
+### Type scale
+
+| token | px | face | use |
+|---|---|---|---|
+| `--fs-2xs` | 11 | grotesk, 600–700, caps +0.08em | datelines, kickers, table heads, fact labels |
+| `--fs-xs` | 12 | grotesk | badges |
+| `--fs-sm` | 13 | grotesk | secondary text, buttons, chips |
+| `--fs-base` | 15 | grotesk | body |
+| `--fs-md` | 16 | grotesk | page intros, the job description (line height 1.7) |
+| `--fs-lg` | 20 | Fraunces 500, opsz 36 | card headlines, option heads |
+| `--fs-xl` | 26 | Fraunces 450, opsz 72 | section heads (h2) |
+| `--fs-2xl` | 44 (34 mobile) | Fraunces 400, opsz 144 | page title (h1); Jobs uses 52 |
+| `--fs-score` | 46 (38 mobile) | Fraunces 350, lining tabular | score numeral on a card |
+| `--fs-score-lg` | 88 (56–64 mobile) | Fraunces 300 | score numeral on the Job page |
+
+Ledes (the Jobs masthead, the fit summary) are Fraunces 350 at 21–23px. Empty-state titles
+are Fraunces italic at 32px. The score numeral is ink for a strong match, secondary for a fair
+one, and tertiary for a weak one. A 2px rule under it carries the band colour (green / blue /
+grey), so strength reads in type weight and colour, never in colour alone.
+
+### Where it lives
+
+`globals.css` §1 (tokens), §2–4 (base, the masthead shell, primitives), §5–6 (feed and match
+card), and §13 (Concept A surfaces: the Jobs masthead, the Job page article grid, Applications
+figures, onboarding steps, presets, the Tailor grounding strip). Markup changes were limited to
+presentation: `Dateline` and `TodayLede` in `FeedView.tsx`, section class hooks in `JobView.tsx`
+(`ux-fit`, `ux-apply`, `ux-drafts`, `ux-desc`, `ux-dismiss`), the wordmark in `AppShell.tsx`,
+and the fonts in `app/layout.tsx`.
+
+## Calm ledger (the previous layer: reasoning kept, values superseded above)
+
+### Rationale
 
 JobFlow is a tool someone opens every day during a stressful search. They scan dozens of
 postings, then act on a few. So the interface should be:

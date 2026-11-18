@@ -479,7 +479,9 @@ export function FeedView({
       <div className="feed-main">
         <div className="feed-toolbar">
           <div className="feed-toolbar__start">
+            <Dateline />
             <h1 className="page-title">Jobs</h1>
+            <TodayLede cards={data.cards} scored={scored} />
             <div className="stats" aria-label="Your jobs">
               <Stat value={cards.length} label="shown" tone="good" />
               <Stat value={data.stats.postings} label="jobs in your list" />
@@ -625,6 +627,53 @@ export function FeedView({
         )}
       </div>
     </div>
+  );
+}
+
+/** Today's date over the masthead. Client-only (after mount) so it's the reader's own day. */
+function Dateline() {
+  const [today, setToday] = useState("");
+  useEffect(() => setToday(new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })), []);
+  return (
+    <p className="feed-dateline" aria-hidden={!today || undefined}>
+      {today || " "}
+    </p>
+  );
+}
+
+/**
+ * The masthead's one-sentence lede: what's new since yesterday (posted in the last day, by the
+ * source's own date) and the strongest match. Plain counts only — unscored lists never claim a
+ * "best match".
+ */
+function TodayLede({ cards, scored }: { cards: FeedCard[]; scored: boolean }) {
+  const live = cards.filter((c) => !c.archived && !c.invalidated);
+  if (live.length === 0) return null;
+  const fresh = live.filter((c) => c.ageDays <= 1).length;
+  const noun = scored ? (fresh === 1 ? "match" : "matches") : fresh === 1 ? "job" : "jobs";
+  const top = scored ? live.reduce((a, b) => (b.score > a.score ? b : a)) : null;
+  return (
+    <p className="feed-lede">
+      {fresh > 0 ? (
+        <>
+          <b>
+            {fresh} new {noun}
+          </b>{" "}
+          since yesterday.
+        </>
+      ) : (
+        <>Nothing new since yesterday.</>
+      )}{" "}
+      {top && (
+        <>
+          The strongest of {live.length}:{" "}
+          <a href={`/jobs/${top.id}`}>
+            {top.title}
+          </a>{" "}
+          at {top.company}, <span className="feed-lede__score">{top.score}</span>.
+        </>
+      )}
+    </p>
   );
 }
 
