@@ -198,7 +198,12 @@ export class InMemoryRepository implements Repository {
         ...p,
         // keep the ORIGINAL publish date: a repost re-stamps the source's date (§3)
         postedAt: earlierDate(existing.postedAt, p.postedAt),
+        // identity stays with the first write, like PgRepository's upsert; content (the
+        // dedup key and company spelling included) is refreshed by the spread above
         id: existing.id,
+        companyId: existing.companyId,
+        source: existing.source,
+        tier: existing.tier,
         firstSeen: existing.firstSeen,
         lastSeen: now,
         isActive: true,
@@ -243,7 +248,7 @@ export class InMemoryRepository implements Repository {
     );
   }
 
-  async setCanonical(postingId: string, canonicalId: string): Promise<void> {
+  async setCanonical(postingId: string, canonicalId: string | null): Promise<void> {
     const p = this.postings.get(postingId);
     if (p) p.canonicalId = canonicalId;
   }

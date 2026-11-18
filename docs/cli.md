@@ -257,8 +257,9 @@ agent in your own browser session, never by `sync`.
 ### `jobflow sync` / `jobflow rank`
 
 ```bash
-pnpm jobflow sync           # bounded sweep (≈1–2 minutes), then rank
-pnpm jobflow sync --full    # every due board and slow feed — takes a while
+pnpm jobflow sync           # every due board within ~5 minutes (the first sync: 25 boards), then rank
+pnpm jobflow sync --max-boards 40   # cap this run (or JOBFLOW_SYNC_MAX_BOARDS)
+pnpm jobflow sync --full    # every due board and slow feed, no time limit — takes a while
 pnpm jobflow rank           # re-score only (after a profile change)
 ```
 
@@ -272,8 +273,14 @@ pnpm jobflow feed                          # top 20
 pnpm jobflow feed -n 50 --min-score 70 --format table
 pnpm jobflow feed --search go-remote       # through a saved search (hidden counts shown)
 pnpm jobflow feed --preset india           # only #india roles
+pnpm jobflow feed --no-diversify           # strictly by score (see below)
 pnpm jobflow show 3 [--jd]                 # details, fit, tracker status, drafts, "ready?" + next commands
 ```
+
+By default no single company fills the page: at most 3 of its jobs in any 20 cards, the rest
+following further down. That only changes the order; every card keeps its real score and
+nothing is hidden. `--no-diversify` lists strictly by score (the web app's **score order
+only** chip under Filters → order; MCP `list_jobs` takes `diversify: false`).
 
 ![jobflow feed](screenshots/cli-feed.png)
 

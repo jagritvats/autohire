@@ -95,8 +95,10 @@ Work through these:
 5. **Try a live search instead.** `pnpm jobflow search "backend engineer" --remote` asks a
    different set of boards.
 
-A plain `sync` is deliberately bounded (about 25 boards, 50 postings each, slow feeds skipped,
-1–2 minutes). `pnpm jobflow sync --full` polls every due board and slow feed, and takes longer.
+A plain `sync` polls every due board but is bounded in time (about 5 minutes of board
+fetches, 50 postings per board, slow feeds skipped), and the very first one stops at 25
+boards. If it says some due boards wait for the next sync, run it again, or
+`pnpm jobflow sync --full` to poll every due board and slow feed with no time limit.
 
 Some boards need keys and stay silent without them: Adzuna and Careerjet need free keys, and
 JSearch is paid. See [configuration](../configuration.md).

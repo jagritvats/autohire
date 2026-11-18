@@ -4,12 +4,16 @@ import {
   isOnboarded,
   presetsForPosting,
   pollAll,
+  pollBacklog,
   rebuildMatches,
   recheckPostings,
+  syncLimitsFromEnv,
+  type PollOptions,
+  type PollStats,
   type RecheckStats,
 } from "@jobflow/pipeline";
 import type { Match, Posting, SearchQueryInput, ViewHiddenReason } from "@jobflow/core";
-import { applyView, formatSalary, isIndiaWorkable, postingAgeDays, scoreSourceTrust } from "@jobflow/core";
+import { applyView, diversifyByCompany, diversifyKey, formatSalary, isIndiaWorkable, postingAgeDays, scoreSourceTrust } from "@jobflow/core";
 import { ensureTenant } from "./tenant.js";
 import { corpusEmbedder } from "./embedder.js";
 
@@ -106,6 +110,12 @@ export interface FeedOptions {
   view?: string | SearchQueryInput | null;
   limit?: number;
   /**
+   * spread the page across employers (default true): at most 3 cards per company in any 20,
+   * the rest following later (`diversifyByCompany`). Order only — no score changes, nothing
+   * hidden (invariant #4). false = pure score order (`--no-diversify`, "score order only").
+   */
+  diversify?: boolean;
+  /**
    * when the shared corpus is empty, start ONE background sync (deduped across requests)
    * and return immediately instead of polling inside the request. Default true; multi-user
    * deployments leave syncing to the worker and pass false.
@@ -151,16 +161,61 @@ export function startCorpusSync(repo: Repository, after?: () => Promise<void>, s
   return corpusSync;
 }
 
+/** What one sync polls: `full` (every due board and slow feed, no time box) or the default sweep. */
+export interface SyncOptions {
+  full?: boolean;
+  /** a fixed board cap for this sync (the CLI's `--max-boards`); else `JOBFLOW_SYNC_MAX_BOARDS`, else every due board */
+  maxBoards?: number;
+  /** a tighter board-fetch time budget (a request-bound refresh); else `JOBFLOW_SYNC_MINUTES`, else 5 min */
+  timeBudgetMs?: number;
+  log?: (m: string) => void;
+}
+
+/**
+ * Board-fetch time budget of the default sweep (`JOBFLOW_SYNC_MINUTES` overrides). Every DUE
+ * board is polled — the budget scales with the registry and its cadences — but a run stops
+ * starting new boards after this long, so a backlog (a fresh 240-board registry, a weekly
+ * cohort coming due together) spreads over the next runs instead of one long sync.
+ */
+export const SYNC_TIME_BUDGET_MS = 5 * 60_000;
+
+/**
+ * The pollAll options of one sync — shared by the web's background sync, `jobflow sync` and
+ * the MCP `sync` tool so they can't drift. The default sweep caps postings per board
+ * (embedding cost) and skips slow feeds; boards: every due one, most overdue first, inside
+ * the time budget, except a fresh registry's first sync, which stops at 25 boards / 90 s so
+ * the first feed comes fast (`pollAll`'s "auto"). `full` drops every bound.
+ */
+export function syncPollOptions(opts: SyncOptions = {}): PollOptions {
+  const log = opts.log ? { log: opts.log } : {};
+  if (opts.full) return { embedder: corpusEmbedder(), maxBoards: opts.maxBoards ?? Infinity, timeBudgetMs: Infinity, ...log };
+  const env = syncLimitsFromEnv();
+  return {
+    embedder: corpusEmbedder(),
+    limitPerCompany: 50,
+    maxBoards: opts.maxBoards ?? env.maxBoards ?? "auto",
+    timeBudgetMs: opts.timeBudgetMs ?? env.timeBudgetMs ?? SYNC_TIME_BUDGET_MS,
+    skipSlowFeeds: true,
+    telegramChannels: [],
+    ...log,
+  };
+}
+
 /** discover seeds + poll boards/feeds — bounded, the same routine the worker runs. */
-export async function syncCorpus(repo: Repository, opts: { full?: boolean } = {}): Promise<Awaited<ReturnType<typeof pollAll>>> {
+export async function syncCorpus(repo: Repository, opts: SyncOptions = {}): Promise<PollStats> {
   // the discovery plan (each tenant's preset + custom sources + saved searches) decides
-  // WHAT is polled; a first/background sync stays small, `full` is the worker-sized sweep
-  return pollAll(
-    repo,
-    opts.full
-      ? { embedder: corpusEmbedder() }
-      : { embedder: corpusEmbedder(), limitPerCompany: 50, maxBoards: 25, skipSlowFeeds: true, telegramChannels: [] },
-  );
+  // WHAT is polled; `syncPollOptions` decides how much of it this run takes
+  return pollAll(repo, syncPollOptions(opts));
+}
+
+/**
+ * Does the local schedule owe the registry a catch-up sync? True while boards have never
+ * been polled — the first sync is capped and a time-boxed one can stop short — so the web
+ * app keeps syncing every quarter-hour until the whole registry has had its first poll,
+ * instead of leaving most of it for the next 6-hour run.
+ */
+export async function needsCatchUpSync(repo: Repository): Promise<boolean> {
+  return (await pollBacklog(repo)).neverPolled > 0;
 }
 
 /**
@@ -183,10 +238,11 @@ export async function getFeed(repo: Repository, tenantId: string, opts: FeedOpti
   const limit = opts.limit ?? 80;
   const profile = await repo.getProfile(tenantId);
   const onboarded = isOnboarded(profile);
+  const spread = opts.diversify !== false;
   if (!onboarded) {
     const browse = await browsePostings(repo, limit);
     if (browse.length === 0 && opts.bootstrap !== false) void startCorpusSync(repo);
-    return shapeBrowse(repo, tenantId, browse);
+    return shapeBrowse(repo, tenantId, spread ? diversifyByCompany(browse, (p) => diversifyKey(p.companyName)) : browse);
   }
   let matches = await repo.listMatches(tenantId, limit);
   if (matches.length === 0 && opts.bootstrap !== false) {
@@ -198,15 +254,17 @@ export async function getFeed(repo: Repository, tenantId: string, opts: FeedOpti
     }
   }
   if (opts.indiaOnly) matches = matches.filter((m) => isIndiaWorkable(m.posting.location));
+  // the spread runs on what is SHOWN (after the view), so its windows are the page's
+  const order = (ms: typeof matches) => (spread ? diversifyByCompany(ms, (m) => diversifyKey(m.posting.companyName)) : ms);
   if (opts.view) {
     const query = typeof opts.view === "string" ? (await repo.getSavedSearch(tenantId, opts.view))?.query : opts.view;
     if (query) {
       const v = applyView(matches, query, { presetsOf: presetsForPosting });
-      const data = await shape(repo, tenantId, v.shown);
+      const data = await shape(repo, tenantId, order(v.shown));
       return { ...data, stats: { ...data.stats, hidden: v.hidden, hiddenTotal: v.hiddenTotal } };
     }
   }
-  return shape(repo, tenantId, matches);
+  return shape(repo, tenantId, order(matches));
 }
 
 /** Cards for arbitrary postings (+ optional scores) — e.g. ad-hoc search results. */
@@ -222,7 +280,8 @@ export async function toCards(
 /** Force a fresh poll of the live Tier 1-2 sources + re-rank, then return the feed. */
 export async function refreshFeed(repo: Repository, tenantId: string): Promise<FeedData> {
   await ensureTenant(repo, tenantId);
-  await syncCorpus(repo);
+  // request-bound (the route allows 120 s): boards it doesn't reach lead the next sync
+  await syncCorpus(repo, { timeBudgetMs: 60_000 });
   await rankTenant(repo, tenantId);
   return getFeed(repo, tenantId, { bootstrap: false });
 }

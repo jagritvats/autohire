@@ -19,13 +19,23 @@ Fetch new postings from your presets, your own sources and your saved searches, 
 
 | CLI | Web app |
 |---|---|
-| `pnpm jobflow sync` (bounded, about 1–2 minutes) · `pnpm jobflow sync --full` (every due board and slow feed) | **Sync now** on Jobs or on Sources. While `jobflow serve` is open it also syncs on its own every 6 hours. |
+| `pnpm jobflow sync` (every due board, up to about 5 minutes) · `pnpm jobflow sync --full` (every due board and slow feed, no time limit) | **Sync now** on Jobs or on Sources. While `jobflow serve` is open it also syncs on its own every 6 hours. |
 
 ```
 ✓ Polled 25 board(s) + 9 feed(s): 812 postings fetched, 14 gone, 3 expired (74s)
+  207 of 232 due boards wait for the next sync (run `jobflow sync` again, or `--full` for all of them now).
 Your corpus: 1461 active postings · 1461 ranked for you.
 next: jobflow feed
 ```
+
+Each sync polls every board that is **due**: boards marked daily about once a day, the rest
+once a week, new ones straight away, the most overdue first. It stops starting new boards
+after about 5 minutes (`JOBFLOW_SYNC_MINUTES`), and whatever it didn't reach goes first next
+time. The very first sync on a new install polls only 25 boards so you see jobs within a
+couple of minutes; the next sync (or, in the web app, the next quarter-hour) picks up the
+rest. On the India preset (~240 boards) the second sync reached all of them in under 5
+minutes; after that a sync re-polls only what has come due. `--max-boards N` (or
+`JOBFLOW_SYNC_MAX_BOARDS`) caps a run if you want it shorter.
 
 "gone" are postings their board no longer lists, now retired. "expired" are feed postings
 nobody re-confirmed within 14 days. If nothing comes back, see
@@ -53,6 +63,11 @@ Read each card for:
 
 In the web app, filters only hide, and the page tells you how many they hid and why. Hidden
 jobs stay under **Hidden** if you change your mind.
+
+The list is spread across employers: one company never has more than 3 cards in any 20, and
+its other good matches follow further down. Scores don't change and nothing is hidden by
+this; it just stops one big board with many similar roles from filling the first page. For
+a strict score order use **score order only** (Filters → order) or `jobflow feed --no-diversify`.
 
 ![A saved-search tab with a filter on](../screenshots/jobs-saved-search.png)
 

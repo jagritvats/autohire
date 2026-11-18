@@ -55,7 +55,11 @@ export interface Repository {
   getPosting(id: string): Promise<Posting | null>;
   listActivePostings(): Promise<Posting[]>;
   listPostingsByCompany(companyId: string): Promise<Posting[]>;
-  setCanonical(postingId: string, canonicalId: string): Promise<void>;
+  /**
+   * Point a duplicate at its cluster's canonical posting, or clear the pointer with null
+   * (the posting is its own canonical again: its cluster split, or the winner went stale).
+   */
+  setCanonical(postingId: string, canonicalId: string | null): Promise<void>;
   /**
    * Rewrite a posting's STATED salary (a re-parse after an extractor fix, §11.4). Estimates
    * never go here — they're `saveSalaryEstimates`.

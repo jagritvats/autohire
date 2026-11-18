@@ -37,6 +37,23 @@ All notable changes to JobFlow are documented here. The format follows
 - Postings from staffing agencies are recognised by more names ("… Consultancy", hiring
   brands) and JD wording ("on behalf of our client", C2C, third-party payroll), and lose
   trust accordingly.
+- **Sync polls every board that is due**, most overdue first (daily boards about once a
+  day, weekly ones once a week), within a time budget (`JOBFLOW_SYNC_MINUTES`; 5 min, 10 in
+  the worker). Before, a fixed 25 boards per sync left a 240-board registry re-polled only
+  every 5–10 days. A new install's first sync still stops at 25 boards and the web app
+  catches up every quarter-hour. `JOBFLOW_SYNC_MAX_BOARDS` / `jobflow sync --max-boards N`
+  cap a run; `--full` now really polls every due board.
+- **No single company fills the feed**: at most 3 of its jobs in any 20 cards, the rest
+  further down. Scores are unchanged and nothing is hidden. Turn it off with
+  `jobflow feed --no-diversify`, the web "score order only" chip, or MCP
+  `list_jobs diversify:false`.
+- **Salary confidence** is calibrated per market *and* role family, so higher confidence
+  again means smaller error (backtest median error by band 39/20/15/10%, was 40/19/21/10%).
+- **Match quality**: duplicate detection no longer merges different roles at the same
+  company (hidden as duplicates 43–45% → 5–9%); skills match whole words; experience
+  requirements ignore employer-age sentences; better title, location (+35 countries) and
+  monthly salary parsing; a role's stack note says "direct match" only when you own its
+  primary language. See `docs/internal/DISCOVERY_AUDIT.md`.
 - **New design system** ("calm ledger"): neutral Radix-based palette with one action colour
   and fixed semantic colours, Inter type, light/dark/system themes at WCAG AA, a shared
   navigation shell, responsive down to 375px with a filter drawer, and accessibility passes
@@ -66,6 +83,9 @@ All notable changes to JobFlow are documented here. The format follows
 - **HN "Who is hiring"**: job seekers' self-posts are no longer ingested as jobs.
 - **Web**: the onboarding wizard and the Search preset chips list every preset (they showed
   only the original four), and a Canadian home country no longer defaults to `us`.
+- Re-polling a posting refreshes its duplicate key; a duplicate pointer can be cleared.
+- Worker one-shot commands (`salary`, `salary-backtest`, …) exit when done instead of
+  hanging.
 - Finishing onboarding during the first background sync no longer leaves the feed unranked.
 - Search before onboarding no longer makes fit claims about an empty profile.
 

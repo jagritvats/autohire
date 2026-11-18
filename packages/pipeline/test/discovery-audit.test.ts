@@ -55,7 +55,7 @@ describe("poll scheduling reaches every board (168 of 247 boards unpolled after 
     const lastDaily = new Map<string, number>();
     let firstRunAts = new Set<string>();
     for (let run = 1; run <= 14; run++) {
-      const picked = orderBoardsForPoll(boards.filter((b) => due(b, now)), cap);
+      const picked = orderBoardsForPoll(boards.filter((b) => due(b, now)), cap, now);
       expect(picked.length).toBeLessThanOrEqual(cap);
       if (run === 1) firstRunAts = new Set(picked.map((b) => b.atsType));
       for (const b of picked) {
@@ -83,7 +83,7 @@ describe("poll scheduling reaches every board (168 of 247 boards unpolled after 
     const old = { ...board("old", "lever"), lastPolled: new Date(now - 9 * DAY) };
     const recent = { ...board("recent", "greenhouse", "daily"), lastPolled: new Date(now - 30 * HOUR) };
     const fresh = [board("n1", "workday"), board("n2", "workday"), board("n3", "ashby"), board("nd", "workday", "daily")];
-    const order = orderBoardsForPoll([recent, ...fresh, old], 6).map((b) => b.id);
+    const order = orderBoardsForPoll([recent, ...fresh, old], 6, now).map((b) => b.id);
     expect(order).toEqual(["nd", "n1", "n3", "n2", "old", "recent"]);
   });
 });

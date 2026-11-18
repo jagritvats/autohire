@@ -49,11 +49,21 @@ export interface PollOptions {
   /** poll every active company, not just those due by cadence. */
   allCompanies?: boolean;
   /**
-   * max boards per run, least-recently-polled first (default 80). The registry holds
-   * hundreds of boards; bounding each run spreads the first sweep (and any backlog)
-   * over several runs instead of one hour-long burst against the same hosts.
+   * max boards this run, most overdue first. Default `JOBFLOW_SYNC_MAX_BOARDS`, else
+   * "auto": every DUE board (daily boards every ~day, weekly ones once a week, never-polled
+   * ones now), so the per-run budget scales with the registry and its cadences instead of a
+   * fixed count that left a 240-board registry re-polled only every 5–10 days (audit
+   * 2026-11). "auto" keeps a fresh registry's very FIRST sync quick (`FIRST_SYNC_MAX_BOARDS`
+   * boards, `FIRST_SYNC_TIME_MS`); the rest follows on the next runs. `Infinity` = no cap.
    */
-  maxBoards?: number;
+  maxBoards?: number | "auto";
+  /**
+   * stop STARTING board fetches after this long (in-flight ones finish). Boards it didn't
+   * reach stay due and lead the next run, so an oversized backlog spreads over runs instead
+   * of one long burst. Default `JOBFLOW_SYNC_MINUTES`, else `DEFAULT_SYNC_TIME_BUDGET_MS`;
+   * `Infinity` = none.
+   */
+  timeBudgetMs?: number;
   /** discovery feeds to run. Default: the plan's (the tenants' presets — `india` by default). */
   feeds?: DiscoveryFeed[];
   /** max discovered company shells to resolve to ATS boards this run. */
@@ -95,6 +105,10 @@ export interface PollStats {
   searches?: Record<string, number>;
   /** postings (re)priced by the offline salary estimator after the poll (§11.4) */
   salaryEstimated?: number;
+  /** cloud-pollable boards due at the start of this run */
+  boardsDue?: number;
+  /** due boards this run left for the next one (board cap or time budget reached) */
+  boardsDeferred?: number;
   errors: string[];
 }
 
@@ -158,20 +172,35 @@ async function pollSources(repo: Repository, opts: PollOptions): Promise<PollSta
   }
 
   // 1. registered ATS boards (the rich, ghost-free spine) — pooled across hosts
-  const companies = opts.companyId
-    ? (await repo.listCompanies()).filter((c) => c.id === opts.companyId)
-    : orderBoardsForPoll(
-        (await repo.listCompanies({ status: "active", dueForPoll: !opts.allCompanies }))
-          // boards with no CLOUD adapter (Darwinbox & co. are local-agent only, invariant #1)
-          // are polled by the agent; here they'd only burn the per-run board budget
-          .filter((c) => c.atsType !== "unknown" && c.atsSlug && atsAdapter(c.atsType)),
-        opts.maxBoards ?? DEFAULT_MAX_BOARDS,
-      );
+  let companies: Company[];
+  let deadline = Infinity;
+  if (opts.companyId) {
+    companies = (await repo.listCompanies()).filter((c) => c.id === opts.companyId);
+  } else {
+    const env = syncLimitsFromEnv();
+    const pollable = (await repo.listCompanies({ status: "active" })).filter(isCloudPollable);
+    const due = opts.allCompanies ? pollable : (await repo.listCompanies({ status: "active", dueForPoll: true })).filter(isCloudPollable);
+    const limits = boardLimitsForSync({
+      maxBoards: opts.maxBoards ?? env.maxBoards ?? "auto",
+      timeBudgetMs: opts.timeBudgetMs ?? env.timeBudgetMs ?? DEFAULT_SYNC_TIME_BUDGET_MS,
+      firstSync: !pollable.some((c) => c.lastPolled),
+    });
+    companies = orderBoardsForPoll(due, limits.maxBoards);
+    deadline = Date.now() + limits.timeBudgetMs;
+    stats.boardsDue = due.length;
+    stats.boardsDeferred = due.length - companies.length;
+    if (stats.boardsDeferred) log(`  boards: ${companies.length} of ${due.length} due this run${limits.first ? " (first sync — the rest follow)" : ""}`);
+  }
   await mapPoolKeyed(
     companies,
     { concurrency: opts.concurrency ?? DEFAULT_CONCURRENCY, perKey: 2, key: boardHostKey },
     async (c) => {
       if (c.atsType === "unknown" || !c.atsSlug) return;
+      // past the time budget: leave it due (untouched), so it leads the next run
+      if (Date.now() > deadline) {
+        stats.boardsDeferred = (stats.boardsDeferred ?? 0) + 1;
+        return;
+      }
       try {
         const r = await ingestCompany(repo, c, {
           embedder,
@@ -190,7 +219,7 @@ async function pollSources(repo: Repository, opts: PollOptions): Promise<PollSta
       }
     },
   );
-  log(`poll: ${stats.companiesPolled} boards, ${stats.fetched} postings, ${stats.staled} staled`);
+  log(`poll: ${stats.companiesPolled} boards, ${stats.fetched} postings, ${stats.staled} staled${stats.boardsDeferred ? ` · ${stats.boardsDeferred} due boards left for the next run` : ""}`);
   if (opts.companyId) return stats;
 
   // 2. discovery feeds (tier 1-2 only)
@@ -258,8 +287,8 @@ async function pollSources(repo: Repository, opts: PollOptions): Promise<PollSta
  * Board postings unseen for BOARD_TTL_DAYS — but only where the board was FETCHED since
  * the posting was last seen (it came back empty, partial, or for another market set, so
  * markStale couldn't diff it). A board the per-run cap simply hasn't reached yet proves
- * nothing about its postings (invariant #5): with hundreds of boards and the default
- * 25-board sync, a full rotation can outlast the TTL, and the old blanket sweep retired
+ * nothing about its postings (invariant #5): with hundreds of boards and a capped or
+ * time-boxed sync, a full rotation can outlast the TTL, and the old blanket sweep retired
  * live roles nobody had re-fetched. Boards that are paused, removed or not cloud-pollable
  * (local-agent boards) keep the plain TTL — nothing here will re-check them.
  */
@@ -285,30 +314,92 @@ function time(d: string | Date | null | undefined): number {
 
 /**
  * Which due boards this run polls, in order (§3 freshness): never-polled boards first, then
- * the least recently polled. Among the never-polled, daily-cadence boards come first and
- * each group is taken round-robin across ATS types. Before, the never-polled went in
- * registry order, so a fresh install's first sweeps spent the run on one ATS family (113 of
- * 247 live boards are Workday, ~12 s a fetch) and the daily (high-value) seed boards were
- * reached last — at sync 10 of 10 with the default 25-board cap (audit 2026-11; now sync 1–2).
+ * the most OVERDUE relative to their cadence. Among the never-polled, daily-cadence boards
+ * come first and each group is taken round-robin across ATS types. Before, the never-polled
+ * went in registry order, so a fresh install's first sweeps spent the run on one ATS family
+ * (113 of 247 live boards are Workday, ~12 s a fetch) and the daily (high-value) seed boards
+ * were reached last — at sync 10 of 10 with the old 25-board cap (audit 2026-11; now 1–2).
  *
- * Deliberately NOT weighted by cadence beyond that: the repo's `dueForPoll` already makes a
- * daily board due ~7× as often, and when the cap is below what the due boards need (243
- * boards, 41 daily, 25 a sync), favouring daily boards further starved the weekly ones and
- * slowed reaching new boards (simulated: 14 syncs instead of 10 to reach every board,
- * weekly re-polls 20 days apart). Oldest-first is the fair order under overload: every due
- * board is reached within ceil(due / max) runs.
+ * Polled boards go by lateness = time since the last poll ÷ cadence period (a day, or a
+ * week), not by plain age. Plain oldest-first starved the daily boards whenever the weekly
+ * ones came due together (a week after the first sweep, ~200 boards all older than every
+ * daily one), and under a cap it gave every board the same absolute gap, daily or not.
+ * Lateness is the fair order either way: when every due board fits it changes nothing;
+ * under a cap each board's gap stretches by the same factor of its own cadence. It never
+ * outranks a never-polled board, so new boards are reached as fast as before.
  */
 export function orderBoardsForPoll<C extends Pick<Company, "atsType" | "lastPolled" | "pollCadence">>(
   boards: readonly C[],
   max: number,
+  now: number = Date.now(),
 ): C[] {
   const never = boards.filter((c) => !c.lastPolled);
   const fresh = [
     ...roundRobinByAts(never.filter((c) => c.pollCadence === "daily")),
     ...roundRobinByAts(never.filter((c) => c.pollCadence !== "daily")),
   ];
-  const seen = boards.filter((c) => c.lastPolled).sort((a, b) => time(a.lastPolled) - time(b.lastPolled));
+  const lateness = (c: C) => (now - time(c.lastPolled)) / cadenceMs(c.pollCadence);
+  const seen = boards
+    .filter((c) => c.lastPolled)
+    .sort((a, b) => lateness(b) - lateness(a) || time(a.lastPolled) - time(b.lastPolled));
   return [...fresh, ...seen].slice(0, max);
+}
+
+/** a board's poll period (`dueForPoll` waits 20 h / 6 d, plus the spacing between runs). */
+function cadenceMs(c: Company["pollCadence"]): number {
+  return c === "daily" ? DAY_MS : 7 * DAY_MS;
+}
+
+/** A registry's very first sync (no board ever polled) stops here: it should answer fast. */
+export const FIRST_SYNC_MAX_BOARDS = 25;
+export const FIRST_SYNC_TIME_MS = 90_000;
+/** The board-fetch time budget when the caller and the env set none (the worker, the cron). */
+export const DEFAULT_SYNC_TIME_BUDGET_MS = 10 * 60_000;
+
+/**
+ * Resolve a run's board limits. "auto" = every due board, bounded by the time budget: the
+ * due list is already the cadence-aware budget (daily boards come due daily, weekly ones
+ * weekly, new ones at once), so it scales with the registry. A registry's first sync is
+ * capped so the first results come fast; the next runs pick up the rest.
+ */
+export function boardLimitsForSync(o: { maxBoards: number | "auto"; timeBudgetMs: number; firstSync: boolean }): {
+  maxBoards: number;
+  timeBudgetMs: number;
+  first: boolean;
+} {
+  if (o.maxBoards !== "auto") return { maxBoards: o.maxBoards, timeBudgetMs: o.timeBudgetMs, first: false };
+  if (o.firstSync) return { maxBoards: FIRST_SYNC_MAX_BOARDS, timeBudgetMs: Math.min(o.timeBudgetMs, FIRST_SYNC_TIME_MS), first: true };
+  return { maxBoards: Infinity, timeBudgetMs: o.timeBudgetMs, first: false };
+}
+
+/**
+ * `JOBFLOW_SYNC_MAX_BOARDS` (a fixed per-sync board cap; unset or "auto" = every due board)
+ * and `JOBFLOW_SYNC_MINUTES` (the board-fetch time budget). Invalid values are ignored
+ * rather than turning syncing off.
+ */
+export function syncLimitsFromEnv(env: Record<string, string | undefined> = process.env): { maxBoards?: number; timeBudgetMs?: number } {
+  const out: { maxBoards?: number; timeBudgetMs?: number } = {};
+  const max = env.JOBFLOW_SYNC_MAX_BOARDS?.trim();
+  if (max && max !== "auto" && Number.isInteger(Number(max)) && Number(max) > 0) out.maxBoards = Number(max);
+  const mins = Number(env.JOBFLOW_SYNC_MINUTES?.trim() || NaN);
+  if (mins > 0) out.timeBudgetMs = mins * 60_000;
+  return out;
+}
+
+/** a registered board the cloud poll can fetch (local-agent-only ATSes are the agent's, invariant #1). */
+function isCloudPollable(c: Company): boolean {
+  return c.atsType !== "unknown" && !!c.atsSlug && !!atsAdapter(c.atsType);
+}
+
+/**
+ * How far behind the board registry is: cloud-pollable active boards, how many were never
+ * polled, how many are due. The web app's local schedule syncs again soon while any board
+ * has never been polled (the first sync is capped) instead of waiting hours for its next run.
+ */
+export async function pollBacklog(repo: Repository): Promise<{ boards: number; neverPolled: number; due: number }> {
+  const boards = (await repo.listCompanies({ status: "active" })).filter(isCloudPollable);
+  const due = (await repo.listCompanies({ status: "active", dueForPoll: true })).filter(isCloudPollable);
+  return { boards: boards.length, neverPolled: boards.filter((c) => !c.lastPolled).length, due: due.length };
 }
 
 /** interleave by ATS type, keeping each type's own order. */
@@ -396,7 +487,6 @@ export async function runSearchTargets(
   return perSearch;
 }
 
-const DEFAULT_MAX_BOARDS = 80;
 /** ATS links harvested from one custom feed per run (one detector probe each). */
 const MAX_HARVEST_PER_FEED = 10;
 
