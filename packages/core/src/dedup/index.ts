@@ -1,7 +1,7 @@
 import type { Posting } from "../schema/entities.js";
 import type { SourceKind } from "../schema/enums.js";
 import { cosine } from "../util/vector.js";
-import { cityKey, postingDedupKey } from "../normalize/index.js";
+import { EUROPE_CODES, cityKey, locationCountryCodes, postingDedupKey } from "../normalize/index.js";
 import { dedupTitleKey, normCompany } from "../normalize/titles.js";
 
 /**
@@ -181,7 +181,19 @@ function compatibleLocation(a: Posting["location"], b: Posting["location"]): boo
   if (a.mode === "remote" && b.mode === "remote") {
     return a.remoteGeo === b.remoteGeo || a.remoteGeo === "unknown" || b.remoteGeo === "unknown";
   }
-  if (a.country && b.country && a.country !== b.country) return false;
+  // every country each one names: an aggregator's "London" copy of a board's "Austin, TX;
+  // London" role is the same req ({US,GB} vs {GB}); {IN} vs {US} never is
+  const ca = locationCountryCodes(a);
+  const cb = locationCountryCodes(b);
+  if (ca.length && cb.length) {
+    if (!ca.some((c) => cb.includes(c))) return false;
+    // a multi-office posting's one stored city is just its first office: the shared country decides
+    if (ca.length > 1 || cb.length > 1) return true;
+  } else if (a.country && b.country && a.country !== b.country) {
+    // an older row's region "Europe" (no country list) is compatible with a European country
+    const europeVs = (x: Posting["location"], codes: string[]) => x.country === "Europe" && codes.every((c) => EUROPE_CODES.has(c));
+    if (!europeVs(a, cb) && !europeVs(b, ca)) return false;
+  }
   if (a.city && b.city) return cityKey(a.city) === cityKey(b.city);
   return true;
 }

@@ -226,7 +226,7 @@ describe("location: places the parser didn't know, and boilerplate 'worldwide'",
     expect(parseLocation("JP-Tokyo")).toMatchObject({ city: "Tokyo", country: "Japan" });
     expect(parseLocation("Sao Paulo, Brazil").country).toBe("Brazil");
     expect(parseLocation("Bellevue, Washington").country).toBe("United States");
-    expect(parseLocation("Belgrade, Serbia").country).toBe("Europe");
+    expect(parseLocation("Belgrade, Serbia").country).toBe("Serbia");
     expect(parsedCountryMatches("Japan", "JP")).toBe(true);
     expect(parsedCountryMatches("Japan", "IN")).toBe(false);
     expect(parsedCountryMatches("Japan", "DE")).toBe(false);
