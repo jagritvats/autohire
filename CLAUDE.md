@@ -4,7 +4,7 @@ Guidance for Claude Code (and humans) working here. Read the **invariants** firs
 
 ## What this is
 
-A full-TypeScript pnpm monorepo: a **local-first** job discovery → prep → assisted-apply platform (CLI + web), with an optional multi-user hosting mode. Three priorities, in order: **job finding**, **honest recommendations**, **autofill up to a review gate**. Architecture: `docs/architecture.md`; user docs: `docs/`; the original design rationale (cited as `(§N)` in comments) is in `docs/internal/`.
+A full-TypeScript pnpm monorepo: a **local-first** job discovery → prep → assisted-apply platform (CLI + web), with an optional multi-user hosting mode. Three priorities, in order: **job finding**, **honest recommendations**, **autofill up to a review gate**. Architecture: `docs/architecture.md`; user docs: `docs/`; contributor guides: `CONTRIBUTING.md` + `docs/contributing/`; the original design rationale (cited as `(§N)` in comments) is in `docs/internal/`.
 
 ## Invariants (do not break these)
 
@@ -19,10 +19,11 @@ A full-TypeScript pnpm monorepo: a **local-first** job discovery → prep → as
 ## Layout & dependency direction
 
 ```
-core  ←  adapters  ←  pipeline  →  apps
-  ↑         ↑           ↑   ↘
-  └── db ───┘           │    llm (←core)
-                  autofill (←core)
+core                                       depends on nothing
+adapters · db · llm · autofill · resume-io → core
+pipeline                                   → core, adapters, db
+service                                    → pipeline, llm, resume-io, autofill
+apps/*                                     → service + packages (agent: no service)
 ```
 
 - `packages/core` depends on nothing (pure logic + Zod). Put domain logic here; keep it pure and unit-testable.
@@ -64,7 +65,7 @@ After editing `core`/`adapters`/`pipeline`, run `pnpm demo` — it hits live fre
 
 ## Gotchas
 
-- The in-memory repo doesn't persist across processes; the CLI defaults to PGlite (`~/.jobflow`). PGlite is single-writer (a lockfile guards the data dir) — use Postgres for concurrent processes.
+- The in-memory repo doesn't persist across processes; the CLI and web app default to PGlite (`~/.jobflow`, or `JOBFLOW_DATA_DIR` — use a scratch dir while developing). PGlite is single-writer (a lockfile guards the data dir) — use Postgres for concurrent processes.
 - The web app never polls inside a request: an empty corpus starts one deduped background sync (`startCorpusSync`); a not-yet-onboarded user gets an unscored browse feed.
 - Offline embeddings (`localEmbed`) are a *dev fallback* — semantic discrimination is weak; archetype/stack/location signals carry ranking until a real embedding model is set via `LLM_PROVIDER`.
 - LaTeX tailoring rewrites only the document **body**; the preamble is spliced back byte-for-byte (`splitLatexDocument`) and the body must pass `latexBodyIssues` — a cut-off reply throws rather than becoming a draft. PDF compile needs a local engine (tectonic recommended); tectonic's first compile downloads its package bundle and takes minutes.
