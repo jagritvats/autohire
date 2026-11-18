@@ -6,6 +6,7 @@ import { EightfoldAdapter } from "../src/ats/eightfold.js";
 import { HimalayasAdapter, resetHimalayasPause } from "../src/aggregators/himalayas.js";
 import { JobicyAdapter, JOBICY_MIN_INTERVAL_MS, resetJobicyPacing } from "../src/aggregators/jobicy.js";
 import { httpJsonPolite } from "../src/types.js";
+import { HnWhoIsHiringAdapter, isSeekerPost } from "../src/hn/whoishiring.js";
 
 /** Regression tests for the follow-ups to the 2026-11 source and preset audits. */
 
@@ -13,6 +14,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 type Route = (url: string, init?: RequestInit) => Response | Promise<Response>;
@@ -67,6 +69,49 @@ describe("Workday: redacted rows (no title / externalPath) are skipped, not fata
     const raws = await new WorkdayAdapter().fetch({ slug: SLUG, location: "IN", limit: 0 });
     expect(raws).toHaveLength(20);
     expect(isPartialFetch(raws)).toBe(true);
+  });
+});
+
+describe("Workday: total — a malformed answer costs one poll, never a throw", () => {
+  const SLUG = "acme.wd1.myworkdayjobs.com/acme/External";
+
+  it("non-array / null rows and a broken detail answer return what they can, or []", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    stub((url) => (url.endsWith("/jobs") ? json({ total: 2, jobPostings: [null, { title: "SDE", externalPath: "/job/Pune/SDE_R1" }] }) : json({ jobPostingInfo: { additionalLocations: "Pune" } })));
+    expect((await new WorkdayAdapter().fetch({ slug: SLUG, limit: 1 })).map((r) => r.atsJobId)).toEqual(["R1"]);
+    stub((url) => (url.endsWith("/jobs") ? json({ total: 3, jobPostings: { oops: true } }) : json({})));
+    expect(await new WorkdayAdapter().fetch({ slug: SLUG })).toEqual([]);
+    stub(() => json({ total: 1, facets: { not: "an array" }, jobPostings: [] }));
+    expect(await new WorkdayAdapter().fetch({ slug: SLUG, location: "IN" })).toEqual([]);
+  });
+});
+
+describe("HN who's hiring: job seekers' self-posts are dropped", () => {
+  const seekers = [
+    "Sam Example | Software Engineer / Backend Engineer | India (REMOTE / ONSITE)\nI'm a software engineer focused on backend development, primarily Java and Python.\nTechnical Skills:\n- Java, Spring Boot",
+    "SEEKING FREELANCE - Egypt (UTC+2) - Remote\nSenior Full-Stack Engineer (4+ yrs). I architect Next.js systems.\nPortfolio: example.com",
+    "Looking for work | Remote | Go, Rust\nI am a backend developer with 6 years of experience. Résumé: https://example.com/cv.pdf",
+  ];
+  const hiring = [
+    "SEEKING FREELANCER | Devops Engineer | Remote - UK or EU\nExample Co is a better way to do event registration.\nWe're looking for an experienced devops freelancer.",
+    "Example AI | REMOTE (Worldwide) | Full-time | https://example.ai\nI'm a Canadian repeat founder working on agents.\nLooking for a founding software engineer.",
+    "Example Labs | Senior Backend Engineer | Berlin | ONSITE\nI'm an engineering manager at Example Labs and we are hiring two engineers.",
+    "Example Corp | Staff Engineer | NYC | $200k\nExample Corp builds payments infrastructure. Apply: https://example.com/jobs",
+  ];
+
+  it("isSeekerPost tells them apart", () => {
+    for (const t of seekers) expect(isSeekerPost(t), t.slice(0, 40)).toBe(true);
+    for (const t of hiring) expect(isSeekerPost(t), t.slice(0, 40)).toBe(false);
+  });
+
+  it("the adapter skips seekers and keeps hiring posts", async () => {
+    stub((url) =>
+      url.includes("search_by_date")
+        ? json({ hits: [{ objectID: "1", title: "Ask HN: Who is hiring? (November 2026)", created_at: "2026-11-02T00:00:00Z" }] })
+        : json({ children: [...seekers, ...hiring].map((text, i) => ({ id: 100 + i, text: text.replace(/\n/g, "<p>"), author: `user${i}`, created_at: "2026-11-02T00:00:00Z" })) }),
+    );
+    const raws = await new HnWhoIsHiringAdapter().fetch({});
+    expect(raws.map((r) => r.atsJobId)).toEqual(["103", "104", "105", "106"]);
   });
 });
 

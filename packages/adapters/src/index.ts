@@ -61,7 +61,7 @@ export { ArbeitnowAdapter } from "./aggregators/arbeitnow.js";
 export { AdzunaSearchAdapter, parseAdzunaResults } from "./aggregators/adzuna.js";
 export { CareerjetAdapter, hasCareerjetKey, parseCareerjetResponse, CAREERJET_LOCALES } from "./aggregators/careerjet.js";
 export { JSearchAdapter, hasJSearchKey, parseJSearchResponse } from "./aggregators/jsearch.js";
-export { HnWhoIsHiringAdapter } from "./hn/whoishiring.js";
+export { HnWhoIsHiringAdapter, isSeekerPost } from "./hn/whoishiring.js";
 // Tier-1 enrichment (§11.4) — comp cascade, cloud-safe.
 export {
   fetchLevelsComp,

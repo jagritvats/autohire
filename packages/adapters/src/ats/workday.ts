@@ -1,5 +1,5 @@
 import { countryCodeFromText, type RawPosting } from "@jobflow/core";
-import { markPartial, COUNTRY_NAMES, DETAIL_CAP, pickForDetail, htmlToText, httpJson, mapPool, httpStatus, liveFromStatus, type FetchTarget, type SourceAdapter, type LivenessTarget } from "../types.js";
+import { adapterNotice, markPartial, COUNTRY_NAMES, DETAIL_CAP, pickForDetail, htmlToText, httpJson, mapPool, httpStatus, liveFromStatus, type FetchTarget, type SourceAdapter, type LivenessTarget } from "../types.js";
 
 /**
  * Workday CXS (Tier 2: the public JSON the careers site itself calls, no auth). The
@@ -71,7 +71,21 @@ export class WorkdayAdapter implements SourceAdapter {
     return liveFromStatus(await httpStatus(`https://${t.host}/wday/cxs/${t.tenant}/${t.site}${path}`));
   }
 
+  /**
+   * Total: a tenant's malformed answer (a redacted row, a non-array field) must cost that
+   * one board's poll, never throw into the pipeline. A throw is "unknown" ([]), so ingest
+   * never diffs against it (invariant #5).
+   */
   async fetch(target: FetchTarget): Promise<RawPosting[]> {
+    try {
+      return await this.fetchBoard(target);
+    } catch (e) {
+      adapterNotice("workday", `${target.slug ?? "?"}: unexpected answer (${(e as Error)?.message ?? e}); skipped this poll`);
+      return [];
+    }
+  }
+
+  private async fetchBoard(target: FetchTarget): Promise<RawPosting[]> {
     const t = target.slug ? parseWorkdaySlug(target.slug) : null;
     if (!t) return [];
     const api = `https://${t.host}/wday/cxs/${t.tenant}/${t.site}`;
@@ -107,7 +121,7 @@ export class WorkdayAdapter implements SourceAdapter {
       const page = await post({ appliedFacets, offset });
       // a failed page mid-list would make the tail look closed to markStale — all or nothing
       if (!page) return [];
-      const batch = page?.jobPostings ?? [];
+      const batch = Array.isArray(page.jobPostings) ? page.jobPostings.filter((j): j is WdJob => !!j && typeof j === "object") : [];
       if (offset === 0) total = page?.total ?? 0;
       jobs.push(...batch);
       if (batch.length < PAGE) break;
@@ -125,7 +139,8 @@ export class WorkdayAdapter implements SourceAdapter {
 
     const out = kept.map((j) => {
       const info = details.get(j.externalPath)?.jobPostingInfo;
-      const locs = [info?.location ?? j.locationsText, ...(info?.additionalLocations ?? [])].filter(Boolean);
+      const extra = Array.isArray(info?.additionalLocations) ? info.additionalLocations : [];
+      const locs = [info?.location ?? j.locationsText, ...extra].filter((x): x is string => typeof x === "string" && !!x);
       const remote = /remote/i.test(info?.remoteType ?? "") || /\bremote\b/i.test(locs.join(" "));
       return {
         source: "workday",
