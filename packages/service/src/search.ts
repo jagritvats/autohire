@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { NewPosting, Repository } from "@jobflow/db";
 import { SearchQuery, effectiveMarkets, normCompany, scorePosting, type Match, type Posting, type SavedSearch, type SearchQueryInput, type SourceKind } from "@jobflow/core";
+import type { SourceAdapter } from "@jobflow/adapters";
 import { adhocSearch, isOnboarded, loadProfile, runSavedSearch, type AdhocSearchResult } from "@jobflow/pipeline";
 import { corpusEmbedder } from "./embedder.js";
 import { rankTenant, toCards, type FeedCard } from "./feed.js";
@@ -27,7 +28,15 @@ export async function searchJobs(
   repo: Repository,
   tenantId: string,
   query: SearchQueryInput,
-  opts: { ingest?: boolean; limit?: number; sources?: SourceKind[]; sort?: "score" | "relevance"; withPostings?: boolean } = {},
+  opts: {
+    ingest?: boolean;
+    limit?: number;
+    sources?: SourceKind[];
+    sort?: "score" | "relevance";
+    withPostings?: boolean;
+    /** ask these adapters instead of the registry's (tests, offline clients) — the pipeline still keeps only Tier 1–2 */
+    adapters?: SourceAdapter[];
+  } = {},
 ): Promise<SearchOutput> {
   await ensureTenant(repo, tenantId);
   const profile = await loadProfile(repo, tenantId);
@@ -40,6 +49,7 @@ export async function searchJobs(
     limit: opts.limit ?? 30,
     sources: opts.sources,
     sort: opts.sort,
+    adapters: opts.adapters,
   });
   // ingested results join the feed: re-rank so they show up there with stored matches
   if (opts.ingest && r.results.length) await rankTenant(repo, tenantId);
