@@ -17,6 +17,7 @@ import type { Match, Posting, SearchQueryInput, ViewHiddenReason } from "@jobflo
 import { alsoPostedText, applyView, companyDisplayName, describeLocation, describePay, diversifyByCompany, diversifyKey, foldSiblings, payDisplayOptions, postingAgeDays, scoreSourceTrust, siblingPlace, workableFor, type FormatPayOptions, type ProfilePrefs } from "@jobflow/core";
 import { ensureTenant } from "./tenant.js";
 import { corpusEmbedder } from "./embedder.js";
+import { demoMode, demoSync } from "./demo-corpus.js";
 import { corpusSyncing, startCorpusSync } from "./sync.js";
 
 /** Serializable match-card DTO for the client UI (§11.6). */
@@ -221,6 +222,8 @@ export function syncPollOptions(opts: SyncOptions = {}): PollOptions {
 
 /** discover seeds + poll boards/feeds — bounded, the same routine the worker runs. */
 export async function syncCorpus(repo: Repository, opts: SyncOptions = {}): Promise<PollStats> {
+  // demo mode (JOBFLOW_DEMO_DATA=1) "fetches" the offline fictional corpus — never the network
+  if (demoMode()) return demoSync(repo, { onProgress: opts.onProgress, signal: opts.signal });
   // the discovery plan (each tenant's preset + custom sources + saved searches) decides
   // WHAT is polled; `syncPollOptions` decides how much of it this run takes
   return pollAll(repo, syncPollOptions(opts));

@@ -1,0 +1,61 @@
+{
+  "id": "guide-mcp",
+  "title": "Use JobFlow from Claude Code (MCP)",
+  "voice": "JBFqnCBsd6RMkjVDRZzb",
+  "music": "calm",
+  "scenes": [
+    {
+      "id": "title",
+      "chapter": "Why MCP",
+      "lines": [
+        "JobFlow includes an MCP server, so an AI assistant like Claude Code can work with your job search, on your own data.",
+        "The assistant queries JobFlow's own job data, straight from employers' boards, instead of scraping job sites."
+      ]
+    },
+    {
+      "id": "add",
+      "chapter": "Add the server",
+      "lines": [
+        "Add it with one command. Claude Code's options go before the name. Everything after the two dashes starts the server: node, the path to jobflow in your checkout, and mcp.",
+        "claude mcp list checks that it's connected."
+      ]
+    },
+    {
+      "id": "search",
+      "chapter": "search_jobs",
+      "lines": [
+        "Now ask in plain words. The assistant calls search_jobs, which scores results against your profile. In this demo, the jobs are fictional.",
+        "It also reports what the query hid, so nothing disappears silently."
+      ]
+    },
+    {
+      "id": "getjob",
+      "chapter": "get_job",
+      "lines": [
+        "get_job reads one role in full: the fit, the gaps, any red flags, and pay, stated or estimated. The assistant explains it from that card, not from guesswork."
+      ]
+    },
+    {
+      "id": "prepare",
+      "chapter": "prepare_application (dry run)",
+      "lines": [
+        "prepare_application is a dry run. It shows which of your details would go into which field, and what's missing. Nothing is opened, filled or sent."
+      ]
+    },
+    {
+      "id": "fill",
+      "chapter": "You run the form-filler",
+      "lines": [
+        { "text": "When you're ready, you run jobflow apply --fill yourself.", "say": "When you're ready, you run jobflow apply, dash dash fill, yourself." },
+        "It pre-fills the form in a browser on your machine, and stops at the review screen. You press submit."
+      ]
+    },
+    {
+      "id": "safety",
+      "chapter": "What stays true",
+      "lines": [
+        "The server reads your local data, reaches only public job boards, and never fills or submits a form. The full tool list is in the AI agents guide."
+      ]
+    }
+  ]
+}

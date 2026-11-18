@@ -45,17 +45,27 @@ function boardFraction(s: SyncProgress): number {
   return b.total ? (b.done + b.failed + b.skipped) / b.total : 0;
 }
 
+/** the spinner, the bar and their spaces: the columns before the status text */
+const HEAD_PREFIX = 23;
+
+/**
+ * Cut a line to fit `width` columns. The live display redraws two lines by moving the cursor
+ * up two rows, so a line that wraps leaves a copy of itself behind on every redraw.
+ */
+export function clipTo(t: string, width: number): string {
+  return t.length > width ? `${t.slice(0, Math.max(1, width - 1))}…` : t;
+}
+
 function liveDisplay(out: Out): SyncProgressView {
   let last: SyncProgress | null = null;
   let lines = 0;
   let i = 0;
   const width = () => Math.max(40, Math.min(120, (process.stderr.columns ?? 100) - 1));
-  const clip = (t: string) => (t.length > width() ? `${t.slice(0, width() - 1)}…` : t);
   const draw = () => {
     if (!last) return;
     const s = last;
-    const head = `${out.cyan(FRAMES[i++ % FRAMES.length]!)} ${bar(boardFraction(s))} ${clip(statusLine(s))}`;
-    const flight = s.boards.inFlight.length ? out.dim(clip(`  fetching ${s.boards.inFlight.slice(0, 4).join(", ")}${s.boards.inFlight.length > 4 ? `, +${s.boards.inFlight.length - 4}` : ""}`)) : "";
+    const head = `${out.cyan(FRAMES[i++ % FRAMES.length]!)} ${bar(boardFraction(s))} ${clipTo(statusLine(s), width() - HEAD_PREFIX)}`;
+    const flight = s.boards.inFlight.length ? out.dim(clipTo(`  fetching ${s.boards.inFlight.slice(0, 4).join(", ")}${s.boards.inFlight.length > 4 ? `, +${s.boards.inFlight.length - 4}` : ""}`, width())) : "";
     let frame = lines ? `\x1b[${lines}F` : "\r";
     frame += `\x1b[2K${head}\n\x1b[2K${flight}\n`;
     out.io.err(frame);

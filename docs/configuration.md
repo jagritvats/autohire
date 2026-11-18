@@ -14,7 +14,8 @@ not keep in a file (your LLM key, preferences, sources) are set with `jobflow co
 | `JOBFLOW_STORE` | `pglite` | `pglite` (durable, zero-setup Postgres-in-WASM under the data dir — the CLI and web app share it; one process writes at a time, so the web app runs the sync schedule and the queued maintenance jobs itself instead of a separate worker) · `memory` (nothing persists — demos and tests) · `postgres` (use `DATABASE_URL`; needed to run the worker alongside the web app). |
 | `DATABASE_URL` | _(blank)_ | Your own Postgres. Wins over `JOBFLOW_STORE`. For hosted Postgres append `?sslmode=require`. |
 | `JOBFLOW_SAMPLE_PROFILE` | _(off)_ | `1` starts new profiles as the fictional sample candidate instead of blank. |
-| `JOBFLOW_DEMO_DATA` | _(off)_ | `1` seeds an offline, fully fictional corpus (screenshots, UI work). |
+| `JOBFLOW_DEMO_DATA` | _(off)_ | `1` seeds an offline, fully fictional corpus (screenshots, videos, UI work). A sync then "fetches" that corpus with paced, fictional progress, and a search asks it instead of the live boards: nothing reaches the network. |
+| `JOBFLOW_DEMO_SYNC_PACE` | `1` | Demo mode only: scales the demo sync's pauses (`0` = instant, `2` = twice as slow). |
 | `JOBFLOW_AUTH` | `none` | `none`: single-user, answers only on localhost. `password`: accounts for a shared/hosted instance — see [guides/self-hosting.md](guides/self-hosting.md). |
 | `JOBFLOW_SECRET_KEY` | _(blank)_ | 32-byte base64 key; when set, stored LLM keys are encrypted at rest. Required for hosting. |
 | `JOBFLOW_SIGNUP` | `closed` | Hosted mode: `open` lets anyone create an account (the first account is always allowed and becomes admin). |
