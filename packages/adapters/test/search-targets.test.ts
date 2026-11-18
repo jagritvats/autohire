@@ -15,7 +15,7 @@ describe("search-capable adapters (toTargets)", () => {
   it("every search-capable adapter is a cloud (tier 1-2) adapter with caps, ≤3 targets per query", () => {
     const capable = searchCapableAdapters();
     expect(capable.map((a) => a.source).sort()).toEqual(
-      ["adzuna", "arbeitnow", "careerjet", "cutshort", "hirist", "himalayas", "hn_whoishiring", "instahyre", "jsearch", "remotive", "timesjobs", "wellfound"].sort(),
+      ["adzuna", "arbeitnow", "careerjet", "cutshort", "hirist", "himalayas", "hn_whoishiring", "instahyre", "jobicy", "jsearch", "remoteok", "remotive", "timesjobs", "wellfound"].sort(),
     );
     const big = q({ titles: ["a", "b", "c", "d"], keywords: ["e", "f"], locations: [{ city: null, country: "IN" }, { city: null, country: "US" }, { city: null, country: "DE" }], sources: ["jsearch"] });
     for (const a of capable) {
@@ -44,6 +44,21 @@ describe("search-capable adapters (toTargets)", () => {
       { query: "go", limit: 50 },
     ]);
     expect(targets("hn_whoishiring", { keywords: ["rust"] }, US)).toEqual([{ query: "rust", limit: 60 }]);
+  });
+
+  it("remoteok: one target per term, remote-only", () => {
+    expect(targets("remoteok", { keywords: ["python", "go"] }, IN)).toEqual([
+      { query: "python", limit: 60 },
+      { query: "go", limit: 60 },
+    ]);
+    expect(targets("remoteok", { keywords: ["python"], remote: "exclude" }, US)).toEqual([]);
+  });
+
+  it("jobicy: term × geo slug (India → worldwide roles), remote-only", () => {
+    expect(targets("jobicy", { keywords: ["backend"] }, US)).toEqual([{ query: "backend", limit: 50, params: { geo: "usa" } }]);
+    expect(targets("jobicy", { keywords: ["backend"] }, IN)).toEqual([{ query: "backend", limit: 50, params: { geo: "anywhere" } }]);
+    expect(targets("jobicy", { keywords: ["backend"] }, { markets: [], yoe: 2 })).toEqual([{ query: "backend", limit: 50 }]);
+    expect(targets("jobicy", { keywords: ["backend"], remote: "exclude" }, US)).toEqual([]);
   });
 
   it("arbeitnow only for European markets", () => {

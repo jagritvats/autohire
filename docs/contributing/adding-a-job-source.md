@@ -57,7 +57,13 @@ export interface SourceAdapter {
 - If you return only part of a board (you stopped at a page cap, or fell back to an
   unfiltered list), wrap the array in `markPartial(...)`. Ingest then skips `markStale` for
   that poll, because a missing posting may still be live (invariant #5). `ats/workday.ts`
-  shows the pattern.
+  shows the pattern. A "most recent N" window is a page cap too: compare what you listed
+  with the board's own total (`ats/amazon.ts`, `ats/eightfold.ts`).
+- Paged lists sorted by date or relevance shift while you page (a new posting pushes a row
+  onto the next page), so the same id can arrive twice. Dedupe by id before returning.
+- If the source rate-limits bursts (429/503), fetch with `httpJsonPolite`: it backs off
+  (honouring `Retry-After`) and retries, and gives up at once on any other error.
+  `ats/eightfold.ts` uses it for Microsoft's tenant.
 - Fill `RawPosting` (`packages/core/src/schema/entities.ts`) with what the source **states**.
   Put the raw salary text in `salaryRaw` and let `normalize/salary.ts` parse it. Don't
   invent a `postedAt`; leave it `null` when the source has none.
@@ -82,7 +88,10 @@ Never insert postings yourself. Return raws; the pipeline upserts them.
 Add it only if the source has a per-job endpoint that says definitively that a job is gone.
 Return `false` only for a per-job 404/410 or the board's own closed flag, `true` when it is
 listed, and `null` when you can't tell (network error, 403, 429, 5xx). `httpStatus` and
-`liveFromStatus` in `types.ts` implement exactly that rule. `checkLiveness`
+`liveFromStatus` in `types.ts` implement exactly that rule. `httpStatus` doesn't follow
+redirects and returns the `location` header, for sources whose "gone" answer is a redirect
+(`ats/breezy.ts`: a removed position redirects to the portal root). Pass
+`redirect: "follow"` when a redirect only moves the page (`ats/teamtailor.ts`). `checkLiveness`
 (`packages/pipeline/src/liveness.ts`) retires a posting only on `false`.
 
 ### `toTargets` and `searchCaps` (optional)
