@@ -231,9 +231,9 @@ export function plainError(raw: string): string {
   if (/abort|timed? ?out|timeout|etimedout/.test(low)) return "didn't answer in time (timed out)";
   if (/\b404\b|not found/.test(low)) return "not found (404) — the board may have moved or closed";
   if (/\b410\b/.test(low)) return "gone (410) — the board was removed";
-  if (/\b429\b|rate.?limit|too many requests/.test(low)) return "asked us to slow down (rate limited) — it's retried next sync";
+  if (/\b429\b|rate.?limit|too many requests/.test(low)) return "asked us to slow down (rate limited)";
   if (/\b40[13]\b|forbidden|unauthori[sz]ed/.test(low)) return "refused the request (blocked or needs a login)";
-  if (/\b5\d\d\b|bad gateway|service unavailable/.test(low)) return "had a server error on its side — it's retried next sync";
+  if (/\b5\d\d\b|bad gateway|service unavailable/.test(low)) return "had a server error on its side";
   if (/enotfound|eai_again|getaddrinfo|dns/.test(low)) return "couldn't be reached (no network, or the name doesn't resolve)";
   if (/econnrefused|econnreset|socket hang up|network|fetch failed/.test(low)) return "couldn't be reached (connection failed — offline or a proxy blocking it)";
   if (/certificate|tls|ssl/.test(low)) return "couldn't be reached securely (a certificate problem, often a proxy)";
@@ -248,4 +248,30 @@ function dropInFlight(s: SyncProgress, name: string): void {
 
 function pushError(s: SyncProgress, e: SyncProgress["errors"][number]): void {
   if (s.errors.length < MAX_ERRORS) s.errors.push(e);
+}
+
+/** "~3 min left" — compact time left for terminals and assistants */
+export function etaWords(ms: number | null): string | null {
+  if (ms == null) return null;
+  if (ms < 15_000) return "almost done";
+  if (ms < 60_000) return "<1 min left";
+  return `~${Math.round(ms / 60_000)} min left`;
+}
+
+/**
+ * One line for a run in progress (the CLI and the MCP progress notifications):
+ * "Check job boards · boards 38/232 (2 failed) · 412 fetched, 37 new · ~3 min left".
+ */
+export function syncStatusLine(s: SyncProgress): string {
+  const b = s.boards;
+  const parts: string[] = [];
+  const phase = s.phase ? SYNC_PHASE_LABEL[s.phase] : s.status === "running" ? "Starting" : "Finished";
+  parts.push(s.cancelRequested && s.status === "running" ? "Stopping after the boards in flight" : phase);
+  if (b.total) parts.push(`boards ${b.done + b.failed}/${b.total}${b.failed ? ` (${b.failed} failed)` : ""}`);
+  const feeds = s.phases.find((p) => p.id === "feeds")?.status;
+  if (s.feeds.total && (s.phase === "feeds" || feeds === "done")) parts.push(`feeds ${s.feeds.done + s.feeds.failed}/${s.feeds.total}`);
+  parts.push(`${s.postings.fetched} fetched, ${s.postings.new} new`);
+  const eta = etaWords(s.timing.etaMs);
+  if (eta && s.status === "running") parts.push(eta);
+  return parts.join(" · ");
 }

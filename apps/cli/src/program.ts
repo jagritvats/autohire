@@ -2,7 +2,7 @@ import { Command, CommanderError } from "commander";
 import { ZodError } from "zod";
 import type { Repository } from "@jobflow/db";
 import { ProviderError } from "@jobflow/llm";
-import { ApplyError, ImportError } from "@jobflow/service";
+import { ApplyError, ImportError, type SyncRunner } from "@jobflow/service";
 import { Ctx } from "./context.js";
 import { CliError, EXIT, type ExitCode } from "./errors.js";
 import { processIO, type CliIO } from "./output.js";
@@ -30,6 +30,8 @@ export interface BuildOptions {
   io?: CliIO;
   /** tests: one repository shared across invocations */
   repo?: Repository;
+  /** tests: the poll `jobflow sync` runs (no network) */
+  sync?: SyncRunner;
 }
 
 /**
@@ -40,7 +42,7 @@ export interface BuildOptions {
  */
 export function buildProgram(opts: BuildOptions = {}): { program: Command; ctx: Ctx } {
   const io = opts.io ?? processIO();
-  const ctx = new Ctx({ io, repo: opts.repo });
+  const ctx = new Ctx({ io, repo: opts.repo, sync: opts.sync });
   const program = new Command("jobflow");
   program
     .description("JobFlow on your machine — find jobs, get honest matches, tailor, and fill applications up to the review screen.")

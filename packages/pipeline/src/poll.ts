@@ -199,13 +199,13 @@ async function pollSources(repo: Repository, opts: PollOptions, emit: PollListen
   } else skip("discover");
 
   // 1. registered ATS boards (the rich, ghost-free spine) — pooled across hosts
-  emit({ type: "phase", phase: "boards", state: "start" });
   let companies: Company[];
   let deadline = Infinity;
   const concurrency = opts.concurrency ?? DEFAULT_CONCURRENCY;
   if (opts.companyId) {
     companies = (await repo.listCompanies()).filter((c) => c.id === opts.companyId);
     emit({ type: "plan", boards: companies.length, deferred: 0, notDue: 0, budgetMs: null, concurrency });
+    emit({ type: "phase", phase: "boards", state: "start" });
   } else {
     const env = syncLimitsFromEnv();
     const pollable = (await repo.listCompanies({ status: "active" })).filter(isCloudPollable);
@@ -227,6 +227,7 @@ async function pollSources(repo: Repository, opts: PollOptions, emit: PollListen
       budgetMs: Number.isFinite(limits.timeBudgetMs) ? limits.timeBudgetMs : null,
       concurrency,
     });
+    emit({ type: "phase", phase: "boards", state: "start" });
     if (stats.boardsDeferred) log(`  boards: ${companies.length} of ${due.length} due this run${limits.first ? " (first sync — the rest follow)" : ""}`);
   }
   // a cancelled run never diffs a board (no markStale) — even one whose fetch was in flight
@@ -293,13 +294,13 @@ async function pollSources(repo: Repository, opts: PollOptions, emit: PollListen
   }
 
   // 2. discovery feeds (tier 1-2 only), custom sources, saved searches, community channels
-  emit({ type: "phase", phase: "feeds", state: "start" });
   const feeds = (opts.feeds ?? plan?.feeds ?? []).filter((f) => !(opts.skipSlowFeeds && f.slow));
   const customTargets = plan && opts.customSources !== false ? [...plan.rssTargets, ...plan.jsonTargets, ...plan.threads] : [];
   const searchTargets = plan && opts.searches !== false ? plan.searchTargets : [];
   const envChannels = process.env.JOBFLOW_TELEGRAM_CHANNELS;
   const channels = opts.telegramChannels ?? (envChannels != null ? csv(envChannels) : (plan?.telegramChannels ?? []));
   emit({ type: "feeds", total: feeds.length + customTargets.length + searchTargets.length + channels.length });
+  emit({ type: "phase", phase: "feeds", state: "start" });
 
   for (const feed of feeds) {
     if (signal?.aborted) break;
