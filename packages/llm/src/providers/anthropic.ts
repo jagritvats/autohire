@@ -10,8 +10,9 @@ import {
   withRetry,
 } from "../http.js";
 
-export const ANTHROPIC_DEFAULT_CHEAP = "claude-haiku-5-5";
-export const ANTHROPIC_DEFAULT_STRONG = "claude-opus-5-5";
+import { ANTHROPIC_DEFAULT_CHEAP, ANTHROPIC_DEFAULT_STRONG } from "../models.js";
+
+export { ANTHROPIC_DEFAULT_CHEAP, ANTHROPIC_DEFAULT_STRONG };
 const ANTHROPIC_API = "https://api.anthropic.com/v1";
 
 /**

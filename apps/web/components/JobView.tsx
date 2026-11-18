@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { JobDetail } from "@jobflow/service";
 import { ageText, experienceText, locationText, payText, roleText, sourceText, STATUS_LABEL } from "@/lib/cardText";
+import { LOCAL_AGENT_GUIDE } from "@/lib/docs";
 import { Badge, Banner, Button, Icon, btn } from "./ui";
 
 const TIER3 = new Set(["naukri", "ambitionbox", "glassdoor", "linkedin"]);
@@ -368,7 +369,12 @@ export function JobView({ initial }: { initial: JobDetail }) {
                     </div>
                     <p className="hint">
                       If you opened this page with <code>jobflow serve</code>, stop it first — the local database takes one writer at a time.
-                      Or start the local agent and this becomes a button (Settings → Applying).
+                      Want a button here instead? Run the local agent; it needs a database it can share with this app (Postgres via{" "}
+                      <code>DATABASE_URL</code>, e.g. the Docker stack's on <code>localhost:5433</code>) —{" "}
+                      <a href={LOCAL_AGENT_GUIDE} target="_blank" rel="noreferrer">
+                        local agent guide
+                      </a>
+                      .
                     </p>
                   </>
                 )}

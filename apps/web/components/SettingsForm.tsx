@@ -3,15 +3,18 @@
 import { useState, useTransition } from "react";
 import { TokensPanel } from "./TokensPanel";
 import type { TenantConfig } from "@jobflow/core";
+import { DEFAULT_MODELS } from "@jobflow/llm/models";
+import { LOCAL_AGENT_GUIDE, docUrl } from "@/lib/docs";
 
 const TIER3 = ["naukri", "linkedin", "wellfound", "peerlist", "darwinbox", "ambitionbox", "glassdoor"];
 /** job sites the local agent can browse on demand (the rest are enrichment / boards) */
 const BROWSABLE = new Set(["naukri", "linkedin", "wellfound", "peerlist"]);
+// placeholders are the providers' real defaults (the same constants the factory uses)
 const LLM_PROVIDERS: { value: string; label: string; model: string; key: string }[] = [
   { value: "echo", label: "None — offline (echo)", model: "—", key: "" },
-  { value: "anthropic", label: "Claude (Anthropic)", model: "claude-opus-4-8", key: "ANTHROPIC_API_KEY" },
-  { value: "openai", label: "OpenAI", model: "gpt-4o", key: "OPENAI_API_KEY" },
-  { value: "grok", label: "Grok (xAI)", model: "grok-4", key: "XAI_API_KEY" },
+  { value: "anthropic", label: "Claude (Anthropic)", model: DEFAULT_MODELS.anthropic.strong, key: "ANTHROPIC_API_KEY" },
+  { value: "openai", label: "OpenAI", model: DEFAULT_MODELS.openai.strong, key: "OPENAI_API_KEY" },
+  { value: "grok", label: "Grok (xAI)", model: DEFAULT_MODELS.grok.strong, key: "XAI_API_KEY" },
 ];
 
 
@@ -132,7 +135,7 @@ export function SettingsForm({ initialConfig, tenantId, effectiveModel }: { init
               </label>
               <label>
                 model <span className="hint">(optional)</span>
-                <input value={config.llmModel} placeholder={provider.model} onChange={(e) => setConfig({ ...config, llmModel: e.target.value })} />
+                <input value={config.llmModel} placeholder={provider.model === "—" ? "" : `default: ${provider.model}`} onChange={(e) => setConfig({ ...config, llmModel: e.target.value })} />
               </label>
               <label>
                 base URL <span className="hint">(optional)</span>
@@ -172,7 +175,13 @@ export function SettingsForm({ initialConfig, tenantId, effectiveModel }: { init
           </li>
           <li>
             From this page: run the local agent (<code>pnpm --filter @jobflow/agent start</code>) and switch on the option below; each job's Apply
-            panel then gets a “Pre-fill” button.
+            panel then gets a “Pre-fill” button. The agent runs beside this app, so both need a database they can share — Postgres via{" "}
+            <code>DATABASE_URL</code> (the Docker stack's, on <code>localhost:5433</code>). The default local store takes one process at a
+            time. See the{" "}
+            <a href={LOCAL_AGENT_GUIDE} target="_blank" rel="noreferrer">
+              local agent guide
+            </a>
+            .
           </li>
         </ul>
         <div className="field-row" style={{ alignItems: "center" }}>
@@ -191,7 +200,15 @@ export function SettingsForm({ initialConfig, tenantId, effectiveModel }: { init
           <p className="hint" style={{ marginTop: 8 }}>
             Sites you log into (LinkedIn, Naukri, Glassdoor…) are only ever read by the local agent, in your own browser session, at human pace —
             never by a server. Their terms of use are yours to accept. Also needs <code>JOBFLOW_BROWSER=on</code> in the agent's environment; see
-            docs/guides/apply.md.
+            the{" "}
+            <a href={LOCAL_AGENT_GUIDE} target="_blank" rel="noreferrer">
+              local agent guide
+            </a>{" "}
+            and{" "}
+            <a href={docUrl("guides/apply.md")} target="_blank" rel="noreferrer">
+              Applying
+            </a>
+            .
           </p>
           <div className="chip-row">
             {TIER3.map((s) => (
@@ -246,7 +263,10 @@ export function SettingsForm({ initialConfig, tenantId, effectiveModel }: { init
 
       <section className="card-block" id="tokens">
         <h2>API tokens</h2>
-        <p className="hint">Only needed for the browser extension, the local agent, or the CLI talking to a JobFlow server.</p>
+        <p className="hint">
+          Only needed when this server has sign-in on (a hosted instance): for the browser extension (paste it into its options page), the local
+          agent (<code>JOBFLOW_AGENT_TOKEN</code>), or a script calling this server's API. Without sign-in nothing needs a token.
+        </p>
         <TokensPanel />
       </section>
     </div>

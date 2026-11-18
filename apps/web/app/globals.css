@@ -3286,6 +3286,11 @@ input[type="range"] {
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
+/* a plain sentence (the saved-search line): as a flex row with space-between, each text
+   run became its own item and the sentence was spread across the full width */
+.ux-hidden-report--sentence {
+  display: block;
+}
 .ux-kbd {
   margin: 0;
   font-size: var(--fs-xs);

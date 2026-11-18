@@ -498,7 +498,7 @@ export function FeedView({
         </div>
 
         {tab.kind === "view" && viewHidden && (
-          <p className="ux-hidden-report">
+          <p className="ux-hidden-report ux-hidden-report--sentence">
             Through your saved search <b>{views.find((v) => v.id === tab.id)?.name}</b>
             {viewHidden.total > 0
               ? ` — it hides ${viewHidden.total} (${Object.entries(viewHidden.by)
