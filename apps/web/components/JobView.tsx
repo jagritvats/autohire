@@ -223,7 +223,7 @@ export function JobView({ initial }: { initial: JobDetail }) {
       </section>
 
       {/* ── fit ── */}
-      <section className="card-block">
+      <section className="card-block ux-fit">
         <h2>How you fit</h2>
         {!job.scored ? (
           <p className="empty-note">
@@ -288,7 +288,7 @@ export function JobView({ initial }: { initial: JobDetail }) {
       </section>
 
       {/* ── apply ── */}
-      <section className="card-block" id="apply">
+      <section className="card-block ux-apply" id="apply">
         <h2>Apply</h2>
         {status && !BEFORE_APPLY.has(status) ? (
           <>
@@ -407,7 +407,7 @@ export function JobView({ initial }: { initial: JobDetail }) {
       </section>
 
       {/* ── drafts ── */}
-      <section className="card-block">
+      <section className="card-block ux-drafts">
         <h2>Your drafts for this job</h2>
         {job.drafts.length === 0 ? (
           <p className="empty-note">
@@ -431,7 +431,7 @@ export function JobView({ initial }: { initial: JobDetail }) {
       </section>
 
       {/* ── description ── */}
-      <section className="card-block">
+      <section className="card-block ux-desc">
         <h2>Job description</h2>
         {(job.requirements.must.length > 0 || c.skills.length > 0) && (
           <div className="match__skills">
@@ -452,7 +452,7 @@ export function JobView({ initial }: { initial: JobDetail }) {
         )}
       </section>
 
-      <section className="card-block">
+      <section className="card-block ux-dismiss">
         <h2>Not for you?</h2>
         <div className="ux-actions">
           <Button icon={hidden ? "unarchive" : "archive"} onClick={toggleHide}>
