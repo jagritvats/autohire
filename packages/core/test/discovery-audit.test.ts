@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  AtsType,
   dedup,
   dedupTitleKey,
   extractSkills,
@@ -109,6 +110,17 @@ describe("dedup keeps distinct roles apart (43% of a live corpus was hidden)", (
     const r = dedup([agg, board]);
     expect(r.canonicalIds).toEqual([board.id]);
     expect(r.canonicalByPostingId.get(agg.id)).toBe(board.id);
+  });
+
+  it("every employer ATS board wins canonical selection over every aggregator", () => {
+    const aggregators = ["remoteok", "jobicy", "himalayas", "remotive", "hirist", "hn_whoishiring", "jsearch"] as const;
+    for (const ats of AtsType.options.filter((a) => a !== "unknown")) {
+      for (const agg of aggregators) {
+        const viaAgg = posting({ source: agg, tier: "tier2", atsType: "unknown", title: "Platform Engineer", locationRaw: "Remote - Worldwide" });
+        const viaBoard = posting({ source: ats, atsType: ats, title: "Platform Engineer", locationRaw: "Remote - Worldwide" });
+        expect(dedup([viaAgg, viaBoard]).canonicalIds, `${ats} vs ${agg}`).toEqual([viaBoard.id]);
+      }
+    }
   });
 
   it("merges developer/engineer phrasings across sources, not across levels", () => {
