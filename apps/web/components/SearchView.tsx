@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { FeedCard } from "@/lib/feed";
 import { MatchCard } from "./MatchCard";
+import { formatAmount, type SalaryPeriod } from "@jobflow/core";
 import { Banner, Button, ButtonLink, Chip, EmptyState, Skeleton } from "./ui";
 
 /** click-to-run examples — the query syntax is the CLI's, so they double as a tutorial */
@@ -38,7 +39,7 @@ interface SavedSearchDTO {
     postedWithinDays: number | null;
     mustSkills: string[];
     presets: string[];
-    minSalary: { amount: number; currency: string } | null;
+    minSalary: { amount: number; currency: string; period?: SalaryPeriod } | null;
   };
   asSource: boolean;
   cadence: string;
@@ -67,7 +68,7 @@ function describe(q: SavedSearchDTO["query"]): string {
   if (q.remote === "exclude") parts.push("on-site");
   if (q.locations.length) parts.push(q.locations.map((l) => [l.city, l.country].filter(Boolean).join(", ")).join(" | "));
   if (q.seniority.length) parts.push(q.seniority.join("/"));
-  if (q.minSalary) parts.push(`≥ ${q.minSalary.amount.toLocaleString("en")} ${q.minSalary.currency}`);
+  if (q.minSalary) parts.push(`≥ ${formatAmount(q.minSalary.amount, q.minSalary.currency, q.minSalary.period)}`);
   if (q.postedWithinDays) parts.push(`last ${q.postedWithinDays} days`);
   if (q.mustSkills.length) parts.push(`must: ${q.mustSkills.join(", ")}`);
   if (q.presets.length) parts.push(q.presets.map((p) => `#${p}`).join(" "));

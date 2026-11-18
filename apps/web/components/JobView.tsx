@@ -164,9 +164,8 @@ export function JobView({ initial }: { initial: JobDetail }) {
             )}
             {pay && c.comp && (
               <Badge estimate={pay.estimate} className="tag comp" data-estimate={pay.estimate || undefined} title={pay.title}>
-                {pay.estimate ? "~" : ""}
                 {c.comp.label}{" "}
-                <span className="conf">· {pay.estimate ? `est ${Math.round((c.comp.confidenceScore ?? 0) * 100)}%` : c.comp.confidence}</span>
+                <span className="conf">· {pay.estimate ? `${Math.round((c.comp.confidenceScore ?? 0) * 100)}%` : c.comp.confidence}</span>
               </Badge>
             )}
             {exp && (

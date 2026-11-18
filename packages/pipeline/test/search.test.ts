@@ -187,7 +187,7 @@ describe("makeSearchQuery (CLI-style input)", () => {
     );
     expect(q.keywords).toEqual(["platform engineer"]);
     expect(q.locations).toEqual([{ city: "Bengaluru", country: "IN" }, { city: null, country: "US" }]);
-    expect(q.minSalary).toEqual({ amount: 4_000_000, currency: "INR" });
+    expect(q.minSalary).toEqual({ amount: 4_000_000, currency: "INR", period: "year" });
     expect(q.postedWithinDays).toBe(14);
     expect(q.sources).toEqual(["himalayas", "naukri"]); // a SourceKind — the plan/adapters drop non-cloud ones
     expect(q.mustSkills).toEqual(["go", "kafka"]);
@@ -202,10 +202,14 @@ describe("makeSearchQuery (CLI-style input)", () => {
     const q = makeSearchQuery("sre", { loc: "Remote", minSalary: "$150k", posted: 7 });
     expect(q.remote).toBe("only");
     expect(q.locations).toEqual([]);
-    expect(q.minSalary).toEqual({ amount: 150_000, currency: "USD" });
+    expect(q.minSalary).toEqual({ amount: 150_000, currency: "USD", period: "year" });
     expect(q.postedWithinDays).toBe(7);
     expect(makeSearchQuery("").keywords).toEqual([]);
-    expect(makeSearchQuery("x --min-salary 40LPA --currency INR").minSalary).toEqual({ amount: 4_000_000, currency: "INR" });
-    expect(makeSearchQuery("x --min-salary €90k").minSalary).toEqual({ amount: 90_000, currency: "EUR" });
+    expect(makeSearchQuery("x --min-salary 40LPA --currency INR").minSalary).toEqual({ amount: 4_000_000, currency: "INR", period: "year" });
+    expect(makeSearchQuery("x --min-salary €90k").minSalary).toEqual({ amount: 90_000, currency: "EUR", period: "year" });
+    // the same grammar as postings: a period is annualised, and remembered for the echo
+    expect(makeSearchQuery('x --min-salary "5000 EUR/mo"').minSalary).toEqual({ amount: 60_000, currency: "EUR", period: "month" });
+    expect(makeSearchQuery("x --min-salary 5000 EUR/mo").minSalary).toEqual({ amount: 60_000, currency: "EUR", period: "month" });
+    expect(makeSearchQuery("x", { minSalary: "40L INR" }).minSalary).toEqual({ amount: 4_000_000, currency: "INR", period: "year" });
   });
 });

@@ -1,6 +1,7 @@
-import type { PayDisplay, ProfilePrefs } from "../schema/entities.js";
+import type { PayDisplay, Posting, ProfilePrefs } from "../schema/entities.js";
 import type { SalaryBasis, SalaryPeriod } from "../schema/enums.js";
 import { effectiveHomeCountry } from "../match/region.js";
+import { countryDisplayName, locationCountryCodes } from "../normalize/location.js";
 import { convertWithInfo, currencyForCountry, currencySymbol, knownCurrency, type FxTable } from "./fx.js";
 import { PERIOD_FACTOR, PERIOD_SHORT, PERIOD_WORD, isAnnualisedRate } from "./period.js";
 
@@ -26,6 +27,8 @@ export interface PayLike {
   period?: SalaryPeriod | null;
   basis?: SalaryBasis | null;
   equity?: boolean | null;
+  /** an estimate's median (the rough figure); else the band's geometric midpoint */
+  median?: number | null;
 }
 
 export interface FormatPayOptions {
@@ -35,6 +38,8 @@ export interface FormatPayOptions {
   period?: "year" | "month";
   /** a model's estimate: prefixed "est." */
   estimate?: boolean;
+  /** a LOW-confidence estimate: one rounded midpoint, "rough est. ~₹19L / yr" */
+  rough?: boolean;
   fx?: FxTable;
   now?: Date;
 }
@@ -52,8 +57,14 @@ export interface FormattedPay {
   rateDate: string | null;
 }
 
-export function formatPay(pay: PayLike, opts: FormatPayOptions = {}): FormattedPay | null {
-  if (pay.min == null && pay.max == null) return null;
+export function formatPay(input: PayLike, opts: FormatPayOptions = {}): FormattedPay | null {
+  if (input.min == null && input.max == null) return null;
+  let pay = input;
+  if (opts.rough) {
+    // one rounded midpoint — a weak guess must not look like a precise band
+    const mid = roundSig(input.median ?? (input.min != null && input.max != null ? Math.sqrt(input.min * input.max) : (input.min ?? input.max)!), 2);
+    pay = { ...input, min: mid, max: mid };
+  }
   const cur = pay.currency.toUpperCase();
   const stated: SalaryPeriod = pay.period ?? "year";
   const f = PERIOD_FACTOR[stated];
@@ -62,7 +73,7 @@ export function formatPay(pay: PayLike, opts: FormatPayOptions = {}): FormattedP
     .filter(Boolean)
     .join(" ");
   const primary =
-    `${opts.estimate ? "est. " : ""}${shape(pay.min != null ? pay.min / f : null, pay.max != null ? pay.max / f : null, cur, stated)} / ${PERIOD_SHORT[stated]}` +
+    `${opts.rough ? "rough est. ~" : opts.estimate ? "est. " : ""}${shape(pay.min != null ? pay.min / f : null, pay.max != null ? pay.max / f : null, cur, stated)} / ${PERIOD_SHORT[stated]}` +
     (tags ? ` ${tags}` : "");
 
   // ── the "≈" part: display currency × display period ──
@@ -93,6 +104,14 @@ export function formatPay(pay: PayLike, opts: FormatPayOptions = {}): FormattedP
 }
 
 /**
+ * One typed amount (a floor, a min-salary filter) as the formatter writes pay: "₹40L / yr",
+ * "€5,000 / mo". `annual` is the stored annual figure; `period` how it was written.
+ */
+export function formatAmount(annual: number, currency: string, period: SalaryPeriod = "year"): string {
+  return formatPay({ min: annual, max: annual, currency, period })!.primary;
+}
+
+/**
  * The display currency a reader asked for: an ISO code, "none" (original only → null), or
  * "auto" (default) = the home country's currency, else the salary-floor currency.
  */
@@ -117,6 +136,88 @@ export function payDisplayOptions(
 ): Pick<FormatPayOptions, "currency" | "period"> {
   if (!prefs) return {};
   return { currency: resolveDisplayCurrency(prefs), period: prefs.display?.period ?? "year" };
+}
+
+// ── a posting's pay, ready for a card ──
+
+/**
+ * An estimate below this confidence (or wider than ×`ROUGH_SPREAD` top ÷ bottom) is shown as
+ * ONE rounded figure, "rough est. ~₹19L / yr" — never as a precise-looking band. Feed review
+ * 2026-11: 45 of the India persona's top 50 cards showed "~₹10.9L–₹27.4L est 33%".
+ */
+export const ROUGH_ESTIMATE_BELOW = 0.4;
+export const ROUGH_SPREAD = 2.2;
+
+export interface PayView {
+  /** the formatted line (formatPay) */
+  label: string;
+  /** what the posting states (false) or our model's estimate (true) */
+  estimate: boolean;
+  /** a low-confidence estimate collapsed to one rough figure */
+  rough: boolean;
+  /** stated: the parse confidence; estimate: its bucket */
+  confidence: string;
+  /** 0..1, estimates only */
+  confidenceScore: number | null;
+  source: string;
+  /** estimates only: what it rests on */
+  basis: string | null;
+  /** "annualised from hourly" */
+  note: string | null;
+  /** the stated currency disagrees with where the role is ("₹ for a US-only role") */
+  warning: string | null;
+  /** FX rate date when a figure was converted */
+  rateDate: string | null;
+}
+
+type PostingPay = Pick<Posting, "salary" | "salaryEstimate" | "location">;
+
+/** Stated pay, else the estimate — formatted for one reader. null = neither. */
+export function describePay(p: PostingPay, opts: Pick<FormatPayOptions, "currency" | "period" | "fx" | "now"> = {}): PayView | null {
+  const s = p.salary;
+  if (s.source !== "none" && (s.min != null || s.max != null)) {
+    const f = formatPay(s, opts)!;
+    return {
+      label: f.text, estimate: false, rough: false, confidence: s.confidence, confidenceScore: null, source: s.source,
+      basis: null, note: f.note, warning: currencyMismatch(p), rateDate: f.rateDate,
+    };
+  }
+  const e = p.salaryEstimate;
+  if (!e) return null;
+  const rough = e.confidenceScore < ROUGH_ESTIMATE_BELOW || (e.min > 0 && e.max / e.min > ROUGH_SPREAD);
+  const f = formatPay({ min: e.min, max: e.max, median: e.median, currency: e.currency }, { ...opts, estimate: true, rough })!;
+  return {
+    label: f.text, estimate: true, rough, confidence: e.confidence, confidenceScore: e.confidenceScore,
+    source: e.sources.map((x) => x.source).join(" + "), basis: e.basis, note: null, warning: null, rateDate: f.rateDate,
+  };
+}
+
+/**
+ * Does the STATED currency disagree with where the role is? A ₹ band on a US-only remote role
+ * ("Golang Developer · Remote · US only · ₹6L–₹15L") is kept — it's what the posting says —
+ * but flagged. USD is paid across borders, so a $ band anywhere is not a disagreement; nor is
+ * anything on a role with no known place.
+ */
+export function currencyMismatch(p: Pick<Posting, "salary" | "location">): string | null {
+  const s = p.salary;
+  if (s.source === "none" || (s.min == null && s.max == null)) return null;
+  const cur = s.currency.toUpperCase();
+  if (cur === "USD") return null;
+  const codes = locationCountryCodes(p.location);
+  const geo = p.location.mode === "remote" ? REMOTE_GEO_COUNTRY[p.location.remoteGeo] : undefined;
+  if (geo) codes.push(geo);
+  const expected = new Set(codes.map((c) => currencyForCountry(c)).filter((c): c is string => !!c));
+  if (!expected.size || expected.has(cur)) return null;
+  const where = p.location.mode === "remote" && geo ? (geo === "US" ? "a US-only remote role" : `a remote role for ${countryDisplayName(geo)}`) : `a role in ${codes.map(countryDisplayName).slice(0, 2).join(" / ")}`;
+  return `Pay is stated in ${cur} for ${where} — check the posting`;
+}
+
+const REMOTE_GEO_COUNTRY: Partial<Record<Posting["location"]["remoteGeo"], string>> = { us_only: "US", india_ok: "IN" };
+
+function roundSig(n: number, digits: number): number {
+  if (!(n > 0)) return n;
+  const p = Math.pow(10, Math.floor(Math.log10(n)) - digits + 1);
+  return Math.round(n / p) * p;
 }
 
 // ── amounts ──

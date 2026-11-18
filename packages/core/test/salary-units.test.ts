@@ -6,7 +6,10 @@ import {
   comparablePay,
   convertCurrency,
   convertWithInfo,
+  currencyMismatch,
+  describePay,
   extractSalaryFromText,
+  formatAmount,
   formatPay,
   fxUncertainty,
   installFxRates,
@@ -318,5 +321,48 @@ describe("the hard floor across currencies (invariant #4)", () => {
     expect(low.rulePass).toBe(false); // ₹8.4L/yr < 0.7 × ₹20L
     const ok = scorePosting(posting(band({ min: 1_800_000, max: 2_400_000, currency: "INR", period: "month" })), profile(2_000_000, "INR"));
     expect(ok.rulePass).toBe(true);
+  });
+});
+
+describe("describePay — what a card shows (feed review 2026-11)", () => {
+  const now = new Date(`${FX_AS_OF}T12:00:00Z`);
+  const loc = (raw: string, jd = "") => parseLocation(raw, jd);
+  const est = (min: number, max: number, confidenceScore: number, currency = "INR") => ({
+    min, median: Math.sqrt(min * max), max, currency, confidence: "low" as const, confidenceScore, sampleCount: 4,
+    sources: [{ source: "corpus", median: 1, weight: 1, detail: "" }], basis: "4 similar", computedAt: "",
+  });
+  const none = band({ source: "none" });
+
+  it("a low-confidence estimate is one rough figure, never a wide precise-looking band", () => {
+    const v = describePay({ salary: none, salaryEstimate: est(1_090_000, 2_740_000, 0.33), location: loc("Bengaluru, India") }, { now })!;
+    expect(v).toMatchObject({ estimate: true, rough: true });
+    expect(v.label).toBe("rough est. ~₹17L / yr");
+    // wide even at higher confidence → rough too
+    expect(describePay({ salary: none, salaryEstimate: est(42_000, 137_000, 0.6, "USD"), location: loc("Remote") })!.rough).toBe(true);
+    // a confident, tight estimate keeps its band, still marked "est."
+    expect(describePay({ salary: none, salaryEstimate: est(150_000, 190_000, 0.7, "USD"), location: loc("Austin, TX") })!.label).toBe("est. $150k–190k / yr");
+  });
+
+  it("min = max prints one value", () => {
+    expect(describePay({ salary: band({ min: 4_410_000, max: 4_410_000, currency: "INR" }), salaryEstimate: null, location: loc("Pune, India") })!.label).toBe("₹44.1L / yr");
+    expect(describePay({ salary: band({ min: 220_000, max: 220_000 }), salaryEstimate: null, location: loc("Austin, TX") })!.label).toBe("$220k / yr");
+  });
+
+  it("keeps a stated band whose currency disagrees with the location, and flags it", () => {
+    const v = describePay({ salary: band({ min: 600_000, max: 1_500_000, currency: "INR" }), salaryEstimate: null, location: loc("Remote", "Remote — US only") })!;
+    expect(v.label).toBe("₹6L–15L / yr");
+    expect(v.warning).toBe("Pay is stated in INR for a US-only remote role — check the posting");
+    // USD travels: never a disagreement; nor a matching currency
+    expect(currencyMismatch({ salary: band({ min: 50_000, max: 60_000 }), location: loc("Bengaluru, India") })).toBeNull();
+    expect(currencyMismatch({ salary: band({ min: 50_000, max: 60_000, currency: "EUR" }), location: loc("Berlin, Germany") })).toBeNull();
+    expect(currencyMismatch({ salary: band({ min: 50_000, max: 60_000, currency: "GBP" }), location: loc("Berlin, Germany") })).toMatch(/GBP for a role in Germany/);
+  });
+
+  it("formats in the reader's display currency and period", () => {
+    const v = describePay({ salary: band({ min: 66_000, max: 78_000, currency: "EUR", period: "month" }), salaryEstimate: null, location: loc("Berlin, Germany") }, { currency: "USD", now })!;
+    expect(v.label).toBe("€5,500–6,500 / mo (≈ $72k–86k / yr)");
+    expect(v.rateDate).toBe(FX_AS_OF);
+    expect(formatAmount(4_000_000, "INR")).toBe("₹40L / yr");
+    expect(formatAmount(60_000, "EUR", "month")).toBe("€5,000 / mo");
   });
 });
