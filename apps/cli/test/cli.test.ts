@@ -332,6 +332,21 @@ describe("feed, posting refs, search, apply, tailor", () => {
   });
 });
 
+describe("renormalize", () => {
+  it("re-parses stored locations with a summary line, and a second run changes nothing", async () => {
+    await cli(["init", "--yes", "--sample"]);
+    const p = await seedPosting(repo, 7, "Backend Engineer");
+    // as an older parser stored it: "Remote" with a stray country
+    await repo.updatePostingNormalized(p.id, { location: { ...p.location, country: "Europe" }, postedByAgency: false });
+    const first = await cli(["renormalize"]);
+    expect(first.code, first.err).toBe(0);
+    expect(first.out).toMatch(/Re-normalized: 1 scanned → 1 changed/);
+    expect((await repo.getPosting(p.id))?.location.country).toBeNull();
+    const second = await cli(["--json", "renormalize"]);
+    expect(second.json()).toMatchObject({ scanned: 1, changed: 0, ranked: false });
+  });
+});
+
 describe("discovery presets: multi-select, and usable as tags", () => {
   it("discovery use a,b switches on exactly those; preset-on/off toggles one", async () => {
     const use = await cli(["discovery", "use", "india,global-remote"]);

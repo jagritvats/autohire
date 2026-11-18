@@ -128,6 +128,10 @@ export interface Repository {
   /** matches for a specific posting set (enriches archived/bookmark views with score). */
   listMatchesForPostings(tenantId: string, postingIds: string[]): Promise<Match[]>;
 
+  // ── store metadata (shared global key → value, e.g. `normalize_version`; no TTL) ──
+  getStoreMeta(key: string): Promise<string | null>;
+  setStoreMeta(key: string, value: string): Promise<void>;
+
   // ── salary cache (memoize role+location lookups with TTL, §11.4) ──
   getSalaryCache(key: string): Promise<SalaryCacheEntry | null>;
   putSalaryCache(entry: SalaryCacheEntry): Promise<void>;

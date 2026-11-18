@@ -55,6 +55,8 @@ const ARCHETYPE_PATTERNS: Array<[RegExp, RoleArchetype]> = [
   // Amazon's "Software Development Engineer" / "Software Dev Engineer" carry none of the
   // words below — 500-role boards read as non-engineering without this (audit, 2026-11)
   [/\b(software (development |dev |engineering )?engineer|sde|swe|developer|programmer)\b/i, "backend"],
+  // "SW Engineer II", "Software Engineering Intern / Senior Associate" (audit 2026-11, 4th pass)
+  [/\b(sw engineer|software engineering (intern|associate|senior associate|graduate|apprentice))\b/i, "backend"],
 ];
 
 /**
@@ -91,7 +93,7 @@ const NOISE = [
 ];
 
 const CANONICAL_MAP: Array<[RegExp, string]> = [
-  [/\b(sde|swe|software (development )?engineer|software developer|developer|programmer)\b/i, "software-engineer"],
+  [/\b(sde|swe|sw engineer|software (development )?engineer|software developer|developer|programmer)\b/i, "software-engineer"],
   [/\bsite reliability\b/i, "site-reliability-engineer"],
   [/\b(devops|platform engineer)\b/i, "platform-engineer"],
   [/\bdata engineer\b/i, "data-engineer"],

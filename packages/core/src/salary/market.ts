@@ -1,5 +1,6 @@
 import type { ExperienceRange, ParsedLocation } from "../schema/entities.js";
 import { LevelBandOrder, type LevelBand } from "../schema/enums.js";
+import { EUROPE_CODES, locationCountryCodes } from "../normalize/location.js";
 
 /**
  * The pay market a posting is priced in (§11.4). Salaries are only comparable inside one
@@ -35,39 +36,67 @@ const UK_CITY = /\b(london|manchester|edinburgh|glasgow|bristol|cambridge|oxford
 const SG_CITY = /\bsingapore\b/i;
 const AU_CITY = /\b(sydney|melbourne|brisbane|perth|adelaide|canberra|australia)\b/i;
 
-/** Market from the parsed location; null when we can't tell (no estimate beats a wrong one). */
-export function salaryMarketOf(loc: ParsedLocation): SalaryMarket | null {
-  const city = loc.city ?? "";
-  if (loc.mode === "remote") {
-    switch (loc.remoteGeo) {
-      case "india_ok":
-        return "IN";
-      case "us_only":
-      case "us_eu":
-        return "US";
-      case "eu_only":
-        return UK_CITY.test(city) ? "GB" : "EU";
-      default:
-        // an explicit single-country remote ("Remote - India") is priced in that country
-        if (loc.country === "India") return "IN";
-        if (loc.country === "United States") return "US";
-        return "REMOTE";
+/** the pay market of one country (ISO-2); null for a country with no market of its own. */
+export function salaryMarketOfCountry(code: string): SalaryMarket | null {
+  switch (code) {
+    case "IN":
+    case "US":
+    case "CA":
+    case "GB":
+    case "SG":
+    case "AU":
+      return code;
+  }
+  return EUROPE_CODES.has(code) ? "EU" : null;
+}
+
+/**
+ * Market from the parsed location; null when we can't tell (no estimate beats a wrong one).
+ *
+ * A posting naming several countries ("Austin, TX; London") is priced in ONE market. The
+ * estimate is per posting in a shared corpus, not per viewer, so "the viewer's country" is
+ * no answer: the PRIMARY country (`locationCountryCodes(loc)[0]`) decides. The one exception
+ * is a posting that STATES its pay currency (`statedCurrency`): the band is evidence of where
+ * it is paid, so the first named country whose market is priced in that currency wins — a
+ * GBP band on "New York; London" is a London comparable, not a dropped US one.
+ */
+export function salaryMarketOf(loc: ParsedLocation, statedCurrency?: string | null): SalaryMarket | null {
+  const codes = locationCountryCodes(loc);
+  const remote = loc.mode === "remote" ? remoteMarketFor(loc, codes) : null;
+  // a remote role open beyond its named countries stays in the pooled REMOTE market
+  if (statedCurrency && codes.length > 1 && remote !== "REMOTE") {
+    for (const c of codes) {
+      const m = salaryMarketOfCountry(c);
+      if (m && MARKET_CURRENCY[m] === statedCurrency) return m;
     }
   }
-  switch (loc.country) {
-    case "India":
-      return "IN";
-    case "United States":
-      return "US";
-    case "Canada":
-      return "CA";
-    case "Europe":
-      return UK_CITY.test(city) ? "GB" : "EU";
-  }
+  if (remote) return remote;
+  const city = loc.city ?? "";
+  // legacy rows: the region "Europe" with no country list
+  if (loc.country === "Europe") return UK_CITY.test(city) ? "GB" : "EU";
+  const primary = codes[0] ? salaryMarketOfCountry(codes[0]) : null;
+  if (primary) return primary;
   if (UK_CITY.test(city)) return "GB";
   if (SG_CITY.test(city)) return "SG";
   if (AU_CITY.test(city)) return "AU";
   return null;
+}
+
+function remoteMarketFor(loc: ParsedLocation, codes: readonly string[]): SalaryMarket {
+  switch (loc.remoteGeo) {
+    case "india_ok":
+      return "IN";
+    case "us_only":
+    case "us_eu":
+      return "US";
+    case "eu_only":
+      return codes[0] === "GB" || UK_CITY.test(loc.city ?? "") ? "GB" : "EU";
+    default:
+      // an explicit single-country remote ("Remote - India") is priced in that country
+      if (codes[0] === "IN" || loc.country === "India") return "IN";
+      if (codes[0] === "US" || loc.country === "United States") return "US";
+      return "REMOTE";
+  }
 }
 
 /** Currency a posting's location implies — resolves a bare "$" and unlabeled structured pay. */

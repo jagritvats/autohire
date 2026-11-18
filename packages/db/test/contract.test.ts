@@ -595,6 +595,15 @@ describe.each(stores)("Repository contract — %s", (name, open) => {
     expect((await repo.getPosting(p.id))?.location.countries).toBeUndefined();
   });
 
+  it("store meta: absent → null, set, overwrite (no TTL)", async () => {
+    const key = `test_${randomUUID()}`;
+    expect(await repo.getStoreMeta(key)).toBeNull();
+    await repo.setStoreMeta(key, "1");
+    expect(await repo.getStoreMeta(key)).toBe("1");
+    await repo.setStoreMeta(key, "2");
+    expect(await repo.getStoreMeta(key)).toBe("2");
+  });
+
   if (name === "pglite") {
     it("encrypts the LLM key at rest when JOBFLOW_SECRET_KEY is set (callers see plaintext)", async () => {
       const pg = repo as PgRepository;
