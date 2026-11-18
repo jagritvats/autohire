@@ -28,7 +28,7 @@ reasonably be considered inappropriate in a professional setting.
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the
 maintainers privately through a
-[GitHub security advisory](https://github.com/jagritvats/autohire/security/advisories/new)
+[GitHub security advisory](https://github.com/jagritvats/jobflow/security/advisories/new)
 (choose "report a conduct issue" in the description) or GitHub's built-in reporting tools.
 All complaints will be reviewed and investigated promptly and fairly, and the privacy of the
 reporter will be respected. Maintainers may remove, edit, or reject contributions that are not

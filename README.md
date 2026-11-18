@@ -4,7 +4,7 @@
 boards, ranks them against *your* résumé with honest match cards, tailors your documents from
 your own material, and pre-fills applications. Then it stops, so you can review and submit.**
 
-[![CI](https://github.com/jagritvats/autohire/actions/workflows/ci.yml/badge.svg)](https://github.com/jagritvats/autohire/actions/workflows/ci.yml)
+[![CI](https://github.com/jagritvats/jobflow/actions/workflows/ci.yml/badge.svg)](https://github.com/jagritvats/jobflow/actions/workflows/ci.yml)
 [![License: AGPL-3.0-only](https://img.shields.io/badge/license-AGPL--3.0--only-blue.svg)](LICENSE)
 ![Node 20+](https://img.shields.io/badge/node-%E2%89%A520-brightgreen)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)
@@ -15,7 +15,7 @@ your own material, and pre-fills applications. Then it stops, so you can review 
 ## Quick start
 
 ```bash
-git clone https://github.com/jagritvats/autohire.git jobflow && cd jobflow
+git clone https://github.com/jagritvats/jobflow.git && cd jobflow
 pnpm install && pnpm -r build
 pnpm jobflow init && pnpm jobflow sync    # your résumé, reviewed by you; then fetch and rank jobs
 pnpm jobflow serve                        # the web app at http://localhost:3000 (or stay in the terminal)

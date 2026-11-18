@@ -47,7 +47,7 @@ export const viewport: Viewport = {
  * AGPL-3.0 §13: users interacting with JobFlow over a network must be offered its source.
  * Upstream by default; a deployment of a MODIFIED version sets JOBFLOW_SOURCE_URL to its own.
  */
-const SOURCE_URL = process.env.JOBFLOW_SOURCE_URL || "https://github.com/jagritvats/autohire";
+const SOURCE_URL = process.env.JOBFLOW_SOURCE_URL || "https://github.com/jagritvats/jobflow";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const fonts = [display, grotesk, inter, jakarta, mono].map((f) => f.variable).join(" ");
