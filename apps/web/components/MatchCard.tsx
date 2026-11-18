@@ -1,41 +1,55 @@
 import type { FeedCard } from "@/lib/feed";
+import { ageText, experienceText, locationText, payText, roleText } from "@/lib/cardText";
 
 const TIER3 = new Set(["naukri", "ambitionbox", "glassdoor", "linkedin"]);
 
+/**
+ * One job in a list (Jobs, Search). The title opens the Job page — the hub for deciding and
+ * acting; the card's own buttons are the quick actions: Save, Tailor, Apply (→ the Job
+ * page's apply checklist), Hide. Unscored cards (before onboarding) show no score at all.
+ */
 export function MatchCard({
   card,
   index,
-  onTrack,
-  onBookmark,
-  onArchive,
+  scored = true,
+  selected = false,
+  onSave,
+  onHide,
   onInvalidate,
 }: {
-  card: FeedCard;
+  card: FeedCard & { inFeed?: boolean };
   index: number;
-  onTrack?: (card: FeedCard) => void;
-  onBookmark?: (card: FeedCard) => void;
-  onArchive?: (card: FeedCard) => void;
+  /** false before onboarding: no score, no fit judgement */
+  scored?: boolean;
+  /** keyboard focus on the Jobs page */
+  selected?: boolean;
+  onSave?: (card: FeedCard) => void;
+  onHide?: (card: FeedCard) => void;
+  /** only in the "Reported" collection: restore a listing marked invalid */
   onInvalidate?: (card: FeedCard) => void;
 }) {
-  const band = card.score >= 78 ? "s-hi" : card.score >= 60 ? "s-mid" : "s-lo";
+  const band = !scored ? "s-lo" : card.score >= 78 ? "s-hi" : card.score >= 60 ? "s-mid" : "s-lo";
   const geoBad = card.location.remoteGeo === "us_only" || card.location.remoteGeo === "eu_only";
   const locUncertain = card.location.confidence < 0.5;
-  const locText =
-    card.location.mode === "remote"
-      ? `Remote · ${card.location.remoteGeo.replace("_", "-")}`
-      : `${cap(card.location.mode)}${card.location.label ? ` · ${card.location.label}` : ""}`;
-  const exp = expLabel(card.experience);
+  const locText = locationText(card);
+  const exp = experienceText(card.experience);
+  const pay = payText(card);
+  const jobHref = `/jobs/${card.id}`;
 
   return (
-    <article className="card" style={{ animationDelay: `${Math.min(index * 28, 600)}ms` }}>
+    <article className="card" data-selected={selected || undefined} data-card-id={card.id} style={{ animationDelay: `${Math.min(index * 28, 600)}ms` }}>
       <div className="gutter">
         <span className={`bar ${band}`} />
-        <span className={`score ${band}`}>{card.score}</span>
+        <span className={`score ${band}`} title={scored ? "How well this matches your profile (0–100)" : "Not scored — add your résumé to rank jobs for you"}>
+          {scored ? card.score : "—"}
+        </span>
       </div>
 
       <div className="body">
         <div className="row1">
-          <span className="title">{card.title}</span>
+          <a className="title ux-card-title" href={jobHref}>
+            {card.title}
+          </a>
           <a className="company" href={`/company/${card.companyId}`}>
             {card.company}
           </a>
@@ -43,51 +57,43 @@ export function MatchCard({
           <span className="loc">
             {geoBad ? <span className="geo-bad">{locText}</span> : locText}
             {locUncertain && (
-              <span className="loc-uncertain" title="Parsed location is low-confidence — verify before applying">
-                {" "}· verify?
+              <span className="loc-uncertain" title="We couldn't read the location confidently — check it before applying">
+                {" "}· check location
               </span>
             )}
           </span>
-          {card.applied && <span className="applied-badge">✓ in CRM</span>}
+          {card.applied && <span className="applied-badge" title="This role is in your Applications">✓ in Applications</span>}
         </div>
 
         <div className="meta">
           <span className="tag fresh">
             <span className="pulse" />
-            {card.ageDays <= 0 ? "today" : `${card.ageDays}d`}
+            {ageText(card.ageDays)}
           </span>
           {card.atsDirect ? (
-            <span className="tag ats">{card.ats} · ATS-direct</span>
+            <span className="tag ats" title="Straight from the employer's job board — complete and current">
+              employer board
+            </span>
           ) : (
-            <span className="tag">{card.source}</span>
+            <span className="tag" title="Found on a job aggregator — check the original listing">
+              via {card.source.replace(/_/g, " ")}
+            </span>
           )}
-          {TIER3.has(card.source) && <span className="tag tier3">tier-3 · local</span>}
+          {TIER3.has(card.source) && <span className="tag tier3">found by your local agent</span>}
           {card.services && <span className="tag" title="IT-services / outsourcing employer">IT services</span>}
           {card.trust < 0.4 && (
-            <span className="tag" title="Source trust: source prior × listing signals (agency, gig, re-dated, thin JD…)">
-              low trust {Math.round(card.trust * 100)}%
+            <span className="tag" title="This listing has signs of being stale, re-posted, or from an agency">
+              low trust
             </span>
           )}
           {exp && (
-            <span className="tag exp" data-fit={card.experience.fit ?? undefined} title="Years of experience the JD asks for (parsed) vs yours">
-              {exp}
+            <span className="tag exp" data-fit={card.experience.fit ?? undefined} title="Years of experience the posting asks for">
+              asks {exp}
             </span>
           )}
-          {card.comp && (
-            <span
-              className="tag comp"
-              data-estimate={card.comp.estimate || undefined}
-              title={
-                card.comp.estimate
-                  ? `Estimated — the posting states no pay. ${card.comp.basis ?? ""}`
-                  : `Stated in the posting (parse confidence: ${card.comp.confidence})`
-              }
-            >
-              {card.comp.estimate ? "~" : ""}
-              {card.comp.label}{" "}
-              <span className="conf">
-                · {card.comp.estimate ? `est ${Math.round((card.comp.confidenceScore ?? 0) * 100)}%` : card.comp.confidence}
-              </span>
+          {pay && (
+            <span className="tag comp" data-estimate={pay.estimate || undefined} title={pay.title}>
+              {pay.text}
             </span>
           )}
         </div>
@@ -96,7 +102,7 @@ export function MatchCard({
           {card.stackNote && (
             <div className="note">
               <span className="k">stack</span>
-              <span className={isLangNote(card.stackNote) ? "stack-lang" : ""}>{card.stackNote}</span>
+              <span className={/primary language/i.test(card.stackNote) ? "stack-lang" : ""}>{card.stackNote}</span>
             </div>
           )}
           {card.levelNote && (
@@ -129,15 +135,15 @@ export function MatchCard({
 
         {card.invalidated && card.invalidReason && (
           <div className="flags">
-            <span className="flag invalid">invalidated · {card.invalidReason}</span>
+            <span className="flag invalid">reported · {card.invalidReason}</span>
           </div>
         )}
       </div>
 
       <div className="actions">
-        <span className="arch">{card.archetype.replace(/_/g, "/")}</span>
+        <span className="arch">{roleText(card.archetype)}</span>
         {(card.presets ?? []).length > 0 && (
-          <span className="preset-tags" title="discovery presets this posting belongs to">
+          <span className="preset-tags" title="The discovery presets this job belongs to">
             {card.presets.map((p) => (
               <span key={p} className="preset-tag">
                 #{p}
@@ -146,57 +152,29 @@ export function MatchCard({
           </span>
         )}
         <div className="action-btns">
-          {onBookmark && (
-            <button className="mini" data-on={card.bookmarked} onClick={() => onBookmark(card)} title={card.bookmarked ? "Remove bookmark" : "Bookmark"}>
+          {onSave && (
+            <button className="mini" data-on={card.bookmarked} onClick={() => onSave(card)} title={card.bookmarked ? "Remove from Saved" : "Save for later — it's added to Applications as Saved"}>
               {card.bookmarked ? "★ saved" : "☆ save"}
             </button>
           )}
-          {onArchive && (
-            <button className="mini" onClick={() => onArchive(card)} title={card.archived ? "Unarchive" : "Archive (hide from feed)"}>
-              {card.archived ? "⤴ unarchive" : "⤓ archive"}
+          {onHide && (
+            <button className="mini" onClick={() => onHide(card)} title={card.archived ? "Show it in your Jobs again" : "Not for me — hide it (find it under Hidden)"}>
+              {card.archived ? "↺ unhide" : "hide"}
             </button>
           )}
-          {onInvalidate && (
-            <button className="mini danger" data-on={card.invalidated} onClick={() => onInvalidate(card)} title={card.invalidated ? "Restore" : "Mark invalid (spam/dupe/fake)"}>
-              {card.invalidated ? "↺ restore" : "⊘ invalid"}
+          {onInvalidate && card.invalidated && (
+            <button className="mini danger" onClick={() => onInvalidate(card)} title="Restore this listing">
+              ↺ restore
             </button>
           )}
-          <a className="tailor-link" href={`/tailor/${card.id}`} title="Tailor resume + answers for this role">
+          <a className="tailor-link" href={`/tailor/${card.id}`} title="Draft a résumé, cover letter or answers for this job — from your own material">
             ✎ tailor
           </a>
-          {onTrack &&
-            (card.applied ? (
-              <span className="track tracked">✓ tracked</span>
-            ) : (
-              <button className="track" onClick={() => onTrack(card)}>
-                + track
-              </button>
-            ))}
-          {card.applyUrl ? (
-            <a className="apply" href={card.applyUrl} target="_blank" rel="noreferrer">
-              Apply →
-            </a>
-          ) : (
-            <span className="apply disabled">no link</span>
-          )}
+          <a className="apply" href={`${jobHref}#apply`} title="See what's ready, open or pre-fill the form — you always submit">
+            Apply →
+          </a>
         </div>
       </div>
     </article>
   );
-}
-
-function cap(s: string) {
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-/** "~2–3 yrs" style label for the parsed YoE band (§11.2); null when unstated. */
-function expLabel(e: { min: number | null; max: number | null }): string | null {
-  const { min, max } = e;
-  if (min == null && max == null) return null;
-  if (min != null && max != null)
-    return min === max ? `~${min} yr${min === 1 ? "" : "s"}` : `~${min}–${max} yrs`;
-  if (min != null) return `~${min}+ yrs`;
-  return `≤${max} yrs`;
-}
-function isLangNote(note: string) {
-  return /primary language/i.test(note);
 }
