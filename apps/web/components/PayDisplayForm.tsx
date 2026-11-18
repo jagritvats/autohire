@@ -67,7 +67,11 @@ export function PayDisplayForm({ initial, homeCurrency, rateDate }: { initial: P
         <button className="save" onClick={save} disabled={pending}>
           {pending ? "saving…" : "Save"}
         </button>
-        {msg && <p className={msg.bad ? "hint bad" : "hint"}>{msg.text}</p>}
+        {msg && (
+          <p className={msg.bad ? "auth-error" : "notice"} role={msg.bad ? "alert" : "status"}>
+            {msg.text}
+          </p>
+        )}
       </div>
     </section>
   );

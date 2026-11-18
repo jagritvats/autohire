@@ -284,7 +284,7 @@ export function JobView({ initial }: { initial: JobDetail }) {
             )}
           </dl>
         )}
-        {pay?.estimate && <p className="hint">Pay: {pay.title}</p>}
+        {pay && (pay.estimate || c.comp?.rateDate || c.comp?.warning) && <p className="hint">Pay: {pay.title}</p>}
       </section>
 
       {/* ── apply ── */}

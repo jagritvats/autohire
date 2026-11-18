@@ -44,7 +44,7 @@ export default async function SettingsPage() {
     >
       <div className="settings-layout">
         <SectionNav items={SETTINGS_SECTIONS} />
-        <div>
+        <div className="settings">
           <PayDisplayForm initial={PayDisplay.parse(prefs?.display ?? {})} homeCurrency={homeCurrency} rateDate={activeFx().asOf} />
           <SettingsForm initialConfig={config} tenantId={auth.tenantId} effectiveModel={effective.name} />
         </div>
