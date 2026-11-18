@@ -4047,6 +4047,9 @@ section[id] {
     max-width: 150px;
     padding: 0 var(--s-2);
   }
+  .sync-ind__phase {
+    display: none;
+  }
   .sync-counts {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

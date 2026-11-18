@@ -122,6 +122,8 @@ describe("sync progress model", () => {
     const every = 6 * 3_600_000;
     const look = T0 + 5 * 60_000;
     expect(nextSyncAt(null, T0, T0)).toBeNull();
+    // never synced: nothing is scheduled until the first sync
+    expect(nextSyncAt({ everyMs: every, nextCheckAt: look, catchUp: true }, null, T0)).toBeNull();
     expect(nextSyncAt({ everyMs: every, nextCheckAt: look, catchUp: true }, T0, T0)).toBe(look);
     const n = nextSyncAt({ everyMs: every, nextCheckAt: look, catchUp: false }, T0, T0)!;
     expect(n).toBeGreaterThanOrEqual(T0 + every);

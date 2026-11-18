@@ -264,6 +264,22 @@ pnpm jobflow rank           # re-score only (after a profile change)
 pnpm jobflow renormalize    # re-parse stored postings' locations + agency flags (no polling), then rank
 ```
 
+Progress goes to stderr, so stdout stays data:
+
+- **In a terminal**: a live two-line display (step, bar, boards `n/N`, failures, jobs fetched
+  and new, time left; then the boards being fetched).
+- **Not a terminal** (CI, a pipe, a log file): plain lines, one when each step starts and
+  ends, plus the board count every 10%.
+- **`--json`**: one JSON object per line on stderr (`{"type":"sync.progress","phase":…,
+  "boards":{…},"postings":{…},"etaMs":…}`), at each step change and at most twice a second.
+  stdout is still one summary document: the poll stats plus `status`, `newPostings`,
+  `newMatches` (score 60+), `strongMatches` and the whole `run` (steps, counts, errors).
+
+The summary says how many new matches score 60 or more for you. Ctrl-C cancels cleanly: no
+new boards start, everything fetched is kept and ranked, nothing is retired from the partial
+run, and the exit code is 130. A second Ctrl-C quits at once. The run is recorded in your
+data, so the web app's **Sources → Recent syncs** shows terminal syncs too.
+
 Re-polling is idempotent; postings that disappeared from their board are retired, and
 aggregator postings expire when nobody re-confirms them. After an upgrade that improves the
 location parser, the next `sync` re-parses the postings you already hold once (from their

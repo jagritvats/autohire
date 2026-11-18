@@ -195,8 +195,10 @@ export function setSyncSchedule(s: SyncSchedule | null): void {
 /** When the schedule will next sync: the first look at or after `lastSyncAt + everyMs`. */
 export function nextSyncAt(schedule: SyncSchedule | null, lastSyncAt: number | null, now: number = Date.now()): number | null {
   if (!schedule || !(schedule.everyMs > 0)) return null;
+  // never synced: the schedule waits for the first sync (the first visit, or Sync now)
+  if (lastSyncAt == null) return null;
   const look = Math.max(schedule.nextCheckAt, now);
-  if (schedule.catchUp || lastSyncAt == null) return look;
+  if (schedule.catchUp) return look;
   const due = lastSyncAt + schedule.everyMs;
   if (due <= look) return look;
   const period = 15 * 60_000;

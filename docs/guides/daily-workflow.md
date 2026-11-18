@@ -19,14 +19,23 @@ Fetch new postings from your presets, your own sources and your saved searches, 
 
 | CLI | Web app |
 |---|---|
-| `pnpm jobflow sync` (every due board, up to about 5 minutes) · `pnpm jobflow sync --full` (every due board and slow feed, no time limit) | **Sync now** on Jobs or on Sources. While `jobflow serve` is open it also syncs on its own every 6 hours. |
+| `pnpm jobflow sync` (every due board, up to about 5 minutes) · `pnpm jobflow sync --full` (every due board and slow feed, no time limit) | **Sync now** on Jobs, on Sources, or in the sync panel (click the sync status in the header). While `jobflow serve` is open it also syncs on its own every 6 hours. |
+
+While it runs, the terminal shows the step, a bar, boards checked out of the total, what's
+being fetched and roughly how long is left; the web app shows the same in the header and the
+sync panel. Press Ctrl-C (or **Cancel sync**) to stop early: what was fetched is kept and
+ranked, and nothing is marked closed from a partial sync.
 
 ```
-✓ Polled 25 board(s) + 9 feed(s): 812 postings fetched, 14 gone, 3 expired (74s)
-  207 of 232 due boards wait for the next sync (run `jobflow sync` again, or `--full` for all of them now).
-Your corpus: 1461 active postings · 1461 ranked for you.
+✓ Checked 25 boards and 11 feeds: 4977 jobs fetched, 1645 new. 207 boards wait for the next sync. (234s)
+398 new matches for you (score 60+, 164 strong) · 1645 ranked in all
+  feeds: remotive 120 · arbeitnow 96 · …
+Your corpus: 1645 active postings · 1645 ranked for you.
 next: jobflow feed
 ```
+
+When a sync finishes while Jobs is open, the list doesn't jump: a banner offers
+"N new matches · show". **Sources → Sync** lists how each source did and the recent syncs.
 
 Each sync polls every board that is **due**: boards marked daily about once a day, the rest
 once a week, new ones straight away, the most overdue first. It stops starting new boards

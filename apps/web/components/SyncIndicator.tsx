@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { SYNC_PHASE_LABEL } from "@jobflow/core";
+import { createPortal } from "react-dom";
+import { SYNC_PHASE_LABEL, type SyncProgress } from "@jobflow/core";
 import { cancelSync, relTime, startSync, untilTime, useSyncStatus, TRIGGER_LABEL } from "@/lib/syncClient";
 import { Banner, Button, ButtonLink, Icon } from "./ui";
 import { PhaseStepper, ProgressBar, ProgressRing, RunBody, RunCounts, RunErrors, runFraction, runHeadline } from "./SyncDetails";
@@ -37,7 +38,7 @@ export function SyncIndicator() {
     label = (
       <>
         <ProgressRing value={f} />
-        <span className="sync-ind__text">{runHeadline(run)}</span>
+        <IndicatorText run={run} />
       </>
     );
     title = `Syncing — ${Math.round(f * 100)}% · open the sync panel`;
@@ -71,15 +72,32 @@ export function SyncIndicator() {
       <span className="sr-only" aria-live="polite">
         {announce}
       </span>
-      {open && (
-        <SyncPanelDialog
-          onClose={() => {
-            setOpen(false);
-            button.current?.focus();
-          }}
-        />
-      )}
+      {/* portalled to <body>: the sticky header's backdrop-filter would otherwise be the
+          containing block of the fixed sheet and clip it to the header's height */}
+      {open &&
+        createPortal(
+          <SyncPanelDialog
+            onClose={() => {
+              setOpen(false);
+              button.current?.focus();
+            }}
+          />,
+          document.body,
+        )}
     </>
+  );
+}
+
+/** "Check job boards · 38/232"; on a phone just "38/232" beside the ring */
+function IndicatorText({ run }: { run: SyncProgress }) {
+  const head = runHeadline(run);
+  const m = / · (\d+\/\d+)$/.exec(head);
+  if (!m) return <span className="sync-ind__text">{head}</span>;
+  return (
+    <span className="sync-ind__text">
+      <span className="sync-ind__phase">{head.slice(0, m.index)} · </span>
+      <span className="num">{m[1]}</span>
+    </span>
   );
 }
 
