@@ -202,7 +202,7 @@ const ARCHETYPE_ADJACENCY: Readonly<Partial<Record<RoleArchetype, Partial<Record
   frontend: { fullstack: 0.8, mobile: 0.4, backend: 0.35, platform: 0.25, data_ml: 0.2, infra_devops: 0.2, sre: 0.2, data_analytics: 0.1 },
   mobile: { frontend: 0.6, fullstack: 0.55, backend: 0.35, platform: 0.25, data_ml: 0.2, infra_devops: 0.2, sre: 0.2, data_analytics: 0.1 },
   data_ml: { data_analytics: 0.75, backend: 0.45, platform: 0.4, infra_devops: 0.35, fullstack: 0.3, sre: 0.3, frontend: 0.15, mobile: 0.15 },
-  data_analytics: { data_ml: 0.6, backend: 0.25, fullstack: 0.2, platform: 0.2, infra_devops: 0.15, sre: 0.15, frontend: 0.15, mobile: 0.1 },
+  data_analytics: { data_ml: 0.5, backend: 0.25, fullstack: 0.2, platform: 0.2, infra_devops: 0.15, sre: 0.15, frontend: 0.15, mobile: 0.1 },
 };
 
 /**

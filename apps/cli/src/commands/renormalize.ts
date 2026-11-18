@@ -4,15 +4,16 @@ import { rankTenant } from "@jobflow/service";
 import type { Ctx } from "../context.js";
 
 /**
- * `jobflow renormalize` — re-derive stored postings' location + agency flag from their own
- * location text and JD (no polling), then re-rank. `jobflow sync` already does this once
+ * `jobflow renormalize` — re-derive stored postings' location, agency flag, cleaned JD / title
+ * and what they derive (role type, level, skills, years asked) from their own text (no
+ * polling), then re-rank. `jobflow sync` already does this once
  * whenever the code's NORMALIZE_VERSION is newer than the store's; this is the manual run
  * (after a parser change during development, or to check what it changes). Idempotent.
  */
 export function register(program: Command, ctx: Ctx): void {
   program
     .command("renormalize")
-    .description("re-parse stored postings' locations + agency flags with the current parser (no polling), then re-rank")
+    .description("re-parse stored postings (location, agency flag, JD / title cleanup, role type, level, skills) with the current parser (no polling), then re-rank")
     .action(async () => {
       const repo = await ctx.repo();
       const spin = ctx.out.spinner("Re-normalizing stored postings");

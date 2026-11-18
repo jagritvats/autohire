@@ -13,7 +13,7 @@ import type { LevelBand, RoleArchetype } from "../schema/enums.js";
  * senior; "Engineer I/II/III/IV" reads the same way, and so does any role noun with a
  * rung ("Data Scientist II", "Analyst 3").
  *
- * Company ladders (docs/matching.md, "Level bands"): numbered rungs mean different things
+ * Company ladders (docs/architecture.md, "Level bands"): numbered rungs mean different things
  * at different employers, so each mapping is the COMMON reading and carries a lower
  * `levelConfidence` — a source's own level bucket wins over it (`normalizePosting`):
  *   rung I/1 junior · II/2 mid · III/3 senior · IV/4 and V/5 staff
@@ -98,7 +98,7 @@ export function isDataAnalyticsTitle(title: string): boolean {
  * "Developer Success Engineer" are assistant / admin / support / success roles, not
  * platform or backend engineering (2026-11 feed review).
  */
-const NON_ENG_TITLE = /\b(market\w*|relations|advocat\w*|evangelis\w*|recruit\w*|talent|sales|account (executive|manager)|accounts? (payable|receivable)|accountant|(customer|developer|partner|client) success|success (engineer|manager|lead|specialist)|support|assistant|administrator|coordinator|receptionist|solutions? (engineer|architect|consultant)|pre[- ]?sales|partnerships?|community|content|copy ?writer|designer|writer|art director|finance|financial|legal|counsel|people|hr\b|operations? (manager|lead|associate|specialist)|business (operations|development|analyst)|(product|program|project) (manager|owner|lead)|specialist|investigator|analyst)\b/i;
+const NON_ENG_TITLE = /\b(market\w*|relations|advocat\w*|evangelis\w*|recruit\w*|talent|sales|account (executive|manager)|accounts? (payable|receivable)|accountant|(customer|developer|partner|client) success|success (engineer|manager|lead|specialist)|support|assistant|administrator|coordinator|receptionist|solutions? (engineer|architect|consultant)|pre[- ]?sales|partnerships?|community|content|copy ?writer|designer|writer|art director|finance|financial|legal|counsel|people|hr\b|operations? (manager|lead|associate|specialist)|business (operations|development|developer|analyst)|(product|program|project) (manager|owner|lead)|specialist|investigator|analyst)\b/i;
 /** systems administration IS infrastructure work: that "administrator" is not a non-eng noun */
 const SYSADMIN_RE = /\b((cloud|kubernetes|k8s|linux|unix|systems?|database|devops|infrastructure) administrator|sysadmin|dba)\b/i;
 

@@ -1,6 +1,6 @@
 import type { Posting } from "../schema/entities.js";
 import { describeLocation } from "../match/display.js";
-import { canonicalKey } from "../normalize/index.js";
+import { canonicalKey, countryCodeFromText } from "../normalize/index.js";
 import { dedupTitleKey, normCompany } from "../normalize/titles.js";
 
 /**
@@ -23,9 +23,35 @@ export const SIBLING_JD_SIMILARITY = 0.7;
 
 type SiblingLike = Pick<Posting, "id" | "companyName" | "title" | "location"> & Partial<Pick<Posting, "jdText">>;
 
+/** title segments that only say where / how: "Spain", "Remote", "EST Canada", "East Coast", "USA" */
+const PLACE_TAG = /^(remote|hybrid|on-?site|onsite|in-office|wfh|anywhere|worldwide|global|emea|apac|amer|americas|latam|meta|dach|nordics|benelux|norben|central|east coast|west coast|(est|cst|pst|cet|ist)( .+)?)$/i;
+function isPlaceSegment(seg: string): boolean {
+  const t = seg.replace(/[()]/g, " ").replace(/\s+/g, " ").trim();
+  if (!t) return true;
+  if (t.split(" ").length > 4) return false;
+  const parts = t.split(/\s*[,/]\s*/).filter(Boolean);
+  return parts.every((x) => PLACE_TAG.test(x) || countryCodeFromText(x) != null);
+}
+
+/**
+ * The title with its place / work-mode segments dropped — per-country reqs often name their
+ * country in the title ("Principal Technical Marketing Engineer | Spain | Remote", "Engineering
+ * Manager (Remote, Canada)").
+ */
+export function titleWithoutPlaces(title: string): string {
+  const kept = title
+    .replace(/\(([^)]*)\)/g, (m, inner: string) => (isPlaceSegment(inner) ? " " : m))
+    .split(/\s*(?:\||\s[-–—]\s)\s*/)
+    .filter((seg) => !isPlaceSegment(seg));
+  // a trailing ", US" / ", Germany" comma segment too
+  const out = kept.join(" - ").split(/\s*,\s*/);
+  while (out.length > 1 && isPlaceSegment(out[out.length - 1]!)) out.pop();
+  return out.join(", ").trim() || title;
+}
+
 /** the company + title part of a sibling key (no location): "acme|senior~engineer-site-reliability" */
 export function siblingTitleKey(p: Pick<Posting, "companyName" | "title">): string {
-  return `${normCompany(p.companyName)}|${dedupTitleKey(p.title)}`;
+  return `${normCompany(p.companyName)}|${dedupTitleKey(titleWithoutPlaces(p.title))}`;
 }
 
 function locKey(p: SiblingLike): string {
@@ -87,13 +113,19 @@ export function siblingGroups(postings: readonly SiblingLike[]): Map<string, str
   return out;
 }
 
-/** a sibling's place in a few words: "UK", "Germany", "Remote · worldwide" */
+const SHORT: Readonly<Record<string, string>> = { US: "US", GB: "UK", AE: "UAE" };
+const REMOTE_REGION: Readonly<Record<string, string>> = { us_only: "US", eu_only: "Europe", us_eu: "US / Europe", india_ok: "India", apac_ok: "APAC", worldwide: "anywhere" };
+
+/** a sibling's place in a few words: "UK", "Germany", "Canada (remote)", "anywhere (remote)" */
 export function siblingPlace(loc: Posting["location"]): string {
   const d = describeLocation(loc);
-  if (loc.mode === "remote") return d.label;
-  const short: Record<string, string> = { US: "US", GB: "UK", AE: "UAE" };
-  const first = d.countries[0];
-  return first ? (short[first] ?? d.country ?? first) : d.place || d.label;
+  const names = d.countries.map((c, i) => SHORT[c] ?? (i === 0 ? d.country : null) ?? c);
+  if (loc.mode === "remote") {
+    // the countries it names when it names any ("Spain (remote)"), else its region
+    const where = names.length ? names.slice(0, 2).join(" / ") : REMOTE_REGION[loc.remoteGeo];
+    return where ? `${where} (remote)` : "remote";
+  }
+  return names[0] ?? (d.place || d.label);
 }
 
 export interface SiblingFold<T> {

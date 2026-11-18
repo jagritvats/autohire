@@ -541,7 +541,8 @@ export function createJobflowMcpServer(ctx: JobflowMcpContext, opts: JobflowMcpO
           const h = hiddenText(data.stats.hidden, data.stats.hiddenTotal, args.savedSearch ? `Saved search "${args.savedSearch}"` : "The preset filter");
           if (h) lines.push("", h);
           if (appliedHidden) lines.push(`${appliedHidden} role(s) already applied to are left out (includeApplied: true shows them).`);
-          if (data.stats.siblingsFolded) lines.push(`${data.stats.siblingsFolded} posting(s) of the same role for other countries are folded under their role ("also posted for" — get_job reads each).`);
+          const siblingsFolded = jobs.reduce((n, j) => n + j.alsoPostedFor.length, 0);
+          if (siblingsFolded) lines.push(`${siblingsFolded} posting(s) of the same role for other countries are folded under their role ("also posted for" — get_job reads each).`);
           return ok(lines.join("\n"), {
             mode: scored ? "ranked" : "browse",
             jobs,
@@ -550,7 +551,7 @@ export function createJobflowMcpServer(ctx: JobflowMcpContext, opts: JobflowMcpO
             hidden: data.stats.hidden ?? {},
             hiddenTotal: data.stats.hiddenTotal ?? 0,
             appliedHidden,
-            siblingsFolded: data.stats.siblingsFolded ?? 0,
+            siblingsFolded,
           });
         }),
       ),

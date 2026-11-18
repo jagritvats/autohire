@@ -540,13 +540,14 @@ export class PgRepository implements Repository {
     }
   }
   async listMatches(tenantId: string, limit = 50): Promise<Array<Match & { posting: Posting }>> {
-    // feed = rule-passing + active + non-invalidated/stale + not archived by this tenant
+    // feed = rule-passing + active + non-invalidated/stale + not archived by this tenant +
+    // a canonical posting (a match scored before its posting became a duplicate is stale)
     const { rows } = await this.q(
       `select m.*, row_to_json(p.*) as posting from match m
        join posting p on p.id = m.posting_id
        left join posting_user_state s on s.posting_id = p.id and s.tenant_id = m.tenant_id
        where m.tenant_id = $1 and m.rule_pass = true and p.is_active = true and p.status = 'active'
-         and coalesce(s.archived, false) = false
+         and p.canonical_id is null and coalesce(s.archived, false) = false
        order by m.score desc limit $2`,
       [tenantId, limit],
     );

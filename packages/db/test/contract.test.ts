@@ -511,6 +511,13 @@ describe.each(stores)("Repository contract — %s", (name, open) => {
     await repo.saveMatches([m]);
     expect((await repo.listMatches(t)).map((x) => x.postingId)).toEqual([p.id]);
     expect(await repo.listMatches(await newTenant())).toEqual([]);
+    // a posting that became a duplicate keeps its old match row, but the feed doesn't list it
+    const co2 = await repo.upsertCompany({ name: "Acme Two", nameNorm: `acme2-${randomUUID()}`, atsType: "greenhouse", atsSlug: "acme2" });
+    const other = await repo.upsertPosting({ ...np, companyId: co2.id, atsJobId: `${np.atsJobId}-canon` });
+    await repo.setCanonical(p.id, other.id);
+    expect(await repo.listMatches(t)).toEqual([]);
+    await repo.setCanonical(p.id, null);
+    expect((await repo.listMatches(t)).map((x) => x.postingId)).toEqual([p.id]);
 
     await repo.invalidatePosting(p.id, "spam");
     expect((await repo.getPosting(p.id))?.status).toBe("invalidated");

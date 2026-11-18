@@ -456,8 +456,9 @@ export class InMemoryRepository implements Repository {
     return list
       .map((m) => {
         const posting = this.postings.get(m.postingId);
-        // feed = active + non-invalidated + non-stale + not archived by this tenant
-        if (!posting || !posting.isActive || posting.status !== "active" || archived.has(posting.id)) return null;
+        // feed = active + non-invalidated + non-stale + not archived by this tenant + canonical
+        // (a match scored before its posting became a duplicate is stale)
+        if (!posting || !posting.isActive || posting.status !== "active" || posting.canonicalId || archived.has(posting.id)) return null;
         return { ...m, posting };
       })
       .filter((x): x is Match & { posting: Posting } => x !== null)

@@ -65,7 +65,8 @@ export function register(program: Command, ctx: Ctx): void {
           const what = [o.search ? `"${o.search}"` : null, presets.length ? presets.map((p) => `#${p}`).join(" ") : null].filter(Boolean).join(" + ");
           out.hint(`${what} hid ${data.stats.hiddenTotal}: ${h.map(([k, n]) => `${k} ${n}`).join(", ")}`);
         }
-        if (data.stats.siblingsFolded) out.hint(`${data.stats.siblingsFolded} more posted for other countries are folded under their role's card ("Also posted for …") — jobflow show <id>`);
+        const folded = cards.reduce((n, c) => n + (c.siblings?.length ?? 0), 0);
+        if (folded) out.hint(`${folded} more posted for other countries are folded under their role's card ("Also posted for …") — jobflow show <id>`);
         if (spreadMoved) out.hint("spread across companies (at most 3 per 20, scores unchanged) — --no-diversify for pure score order");
         out.hint("next: jobflow show 1 · jobflow tailor 1 · jobflow apply 1");
       });

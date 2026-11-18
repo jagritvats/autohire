@@ -9,6 +9,9 @@ import {
   parseTitle,
   scorePosting,
   siblingGroups,
+  siblingPlace,
+  siblingTitleKey,
+  titleWithoutPlaces,
   stackAdjacency,
   type Posting,
   type Profile,
@@ -266,5 +269,18 @@ describe("sibling groups: the same role posted per country", () => {
     expect(f.folded).toBe(1);
     expect(alsoPostedText(["US", "UK", "Germany"])).toBe("Also posted for US, UK and Germany");
     expect(alsoPostedText(["US", "UK", "Germany", "Canada", "Spain"])).toBe("Also posted for US, UK, Germany + 2 more");
+  });
+});
+
+describe("sibling titles that name their country", () => {
+  it("drops place / work-mode segments from the sibling key, keeps the role and team", () => {
+    expect(titleWithoutPlaces("Principal Technical Marketing Engineer | Spain | Remote")).toBe("Principal Technical Marketing Engineer");
+    expect(titleWithoutPlaces("Engineering Manager - Example Productivity (Remote, Canada)")).toBe("Engineering Manager - Example Productivity");
+    expect(titleWithoutPlaces("Account Executive, US")).toBe("Account Executive");
+    expect(titleWithoutPlaces("Senior Software Engineer, Storage")).toBe("Senior Software Engineer, Storage");
+    expect(siblingTitleKey({ companyName: "Example Labs", title: "Staff Engineer | Germany | Remote" })).toBe(siblingTitleKey({ companyName: "Example Labs", title: "Staff Engineer | UK | Remote" }));
+    expect(siblingPlace(parseLocation("Spain (Remote)"))).toBe("Spain (remote)");
+    expect(siblingPlace(parseLocation("Remote (Worldwide)"))).toBe("anywhere (remote)");
+    expect(siblingPlace(parseLocation("Berlin, Germany"))).toBe("Germany");
   });
 });

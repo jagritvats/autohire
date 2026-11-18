@@ -374,6 +374,7 @@ export function stackAdjacency(
   const haveLang = jdLangs.some((l) => owned.has(l));
   const languageStretch = jdLangs.length > 0 && !haveLang && langScore >= 0.5;
   const have = jdNonLangs.filter((s) => owned.has(s));
+  const domains = jdSkills.filter((s) => isDomainSkill(s) && !owned.has(s));
   const missing = jdNonLangs.filter((s) => !owned.has(s));
   const tools =
     jdNonLangs.length === 0
@@ -386,7 +387,7 @@ export function stackAdjacency(
   if (jdLangs.length === 0) {
     note = jdNonLangs.length
       ? `No specific language asked.${tools}`
-      : "The posting names no languages or tools we recognise — judge the fit from the description.";
+      : `The posting names no languages or tools we recognise${domains.length ? ` (a ${list(domains)} role)` : ""} — judge the fit from the description.`;
   } else if (jdPrimaryLanguage && owned.has(jdPrimaryLanguage)) {
     note = `Main language ${langText(jdPrimaryLanguage)} — you have it.${tools}`;
   } else if (haveLang && jdPrimaryLanguage) {
