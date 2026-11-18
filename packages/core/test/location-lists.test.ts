@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { dedup } from "../src/dedup/index.js";
-import { normalizePosting } from "../src/normalize/index.js";
-import { NORMALIZE_VERSION, isWorkableIn, locationInCountry, parseLocation, parsedCountryMatches } from "../src/normalize/index.js";
+import {
+  NORMALIZE_VERSION,
+  isWorkableIn,
+  locationInCountry,
+  normalizePosting,
+  parseLocation,
+  parsedCountryMatches,
+  parseTitle,
+} from "../src/normalize/index.js";
 import { scorePosting } from "../src/match/index.js";
 import { compSampleOf, estimateTargetOf, salaryMarketOf } from "../src/salary/index.js";
 import { RawPosting, type Posting, type Profile } from "../src/schema/index.js";
@@ -232,5 +239,16 @@ describe("salary market of a multi-country posting", () => {
 describe("NORMALIZE_VERSION", () => {
   it("is a positive integer (bump it whenever normalize logic changes)", () => {
     expect(Number.isInteger(NORMALIZE_VERSION) && NORMALIZE_VERSION > 0).toBe(true);
+  });
+});
+
+describe("titles the archetype map missed (fourth pass)", () => {
+  it.each(["SW Engineer II", "Sr. SW Engineer", "Software Engineering Intern", "Software Engineering Senior Associate"])("%s is an engineering role", (t) => {
+    expect(parseTitle(t).roleArchetype).toBe("backend");
+  });
+
+  it("leaves solutions / design / sales engineers out", () => {
+    expect(parseTitle("Senior Solutions Engineer").roleArchetype).toBe("other");
+    expect(parseTitle("Principal Design Engineer").roleArchetype).toBe("other");
   });
 });
