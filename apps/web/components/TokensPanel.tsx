@@ -60,13 +60,13 @@ export function TokensPanel() {
         a hash — revoke one if a machine is lost.
       </p>
       <div className="tokens-new">
-        <input placeholder="name (e.g. laptop)" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
+        <input aria-label="Token name" placeholder="name (e.g. laptop)" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
         {SCOPES.map((s) => (
           <button
             key={s.id}
             type="button"
             className="chip"
-            data-on={scopes.includes(s.id)}
+            data-on={scopes.includes(s.id)} aria-pressed={scopes.includes(s.id)}
             title={s.hint}
             onClick={() => setScopes(scopes.includes(s.id) ? scopes.filter((x) => x !== s.id) : [...scopes, s.id])}
           >
@@ -77,7 +77,7 @@ export function TokensPanel() {
           + create
         </button>
       </div>
-      {error && <p className="auth-error">{error}</p>}
+      {error && <p className="auth-error" role="alert">{error}</p>}
       {fresh && (
         <div className="token-fresh">
           <code>{fresh}</code>
