@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>JobFlow poster: Open source. Runs on your machine.</title>
+<link rel="stylesheet" href="brand.css">
+<!-- Poster (c), local-first + AGPL, on night paper. Formats: body[data-format] = a3 (303 x 426
+     mm with 3 mm bleed) | social (1080 x 1350). The terminal is the real `jobflow feed`
+     output against the fictional demo corpus (scripts/capture.mjs). -->
+<style>
+  body { position: relative; overflow: hidden; background: var(--night); color: var(--night-ink); }
+  body[data-format="a3"] { width: 303mm; height: 426mm; --pad: 18mm; }
+  body[data-format="social"] { width: 1080px; height: 1350px; --pad: 64px; }
+  .page { position: absolute; inset: var(--pad); display: flex; flex-direction: column; }
+  .mast { display: flex; align-items: flex-end; justify-content: space-between; padding-bottom: 14px; border-bottom: 2px solid var(--night-ink); }
+  .mast .logo { height: 46px; }
+  .mast .kicker { font-size: 13px; color: var(--night-ink-3); }
+  .kicker { color: var(--ember-text); }
+  .kick { margin-top: 44px; font-size: 15px; }
+  h1.display { margin-top: 18px; font-size: 116px; color: var(--night-ink); }
+  h1.display em { color: var(--ember); }
+  h1 .l { display: block; }
+
+  .term { margin-top: 52px; font-size: 14.5px; background: #0d0b09; border: 1px solid var(--night-hair); box-shadow: none; }
+  .term .t-body { line-height: 1.5; }
+
+  .facts { margin-top: 44px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 28px; border-top: 1px solid var(--night-hair); padding-top: 22px; }
+  .facts b { display: block; font-family: var(--serif); font-weight: 400; font-variation-settings: "SOFT" 50, "opsz" 72; font-size: 27px; line-height: 1.1; margin-bottom: 8px; color: var(--night-ink); }
+  .facts p { margin: 0; font-size: 15.5px; line-height: 1.45; color: var(--night-ink-2); }
+  .facts code { font-size: 0.92em; color: var(--night-ink); }
+
+  .start { margin-top: 40px; display: grid; grid-template-columns: 210px 1fr; gap: 28px; align-items: start; }
+  .start .kicker { font-size: 13px; padding-top: 4px; }
+  .start pre { margin: 0; font-family: var(--mono); font-size: 15px; line-height: 1.75; color: var(--night-ink); }
+  .start pre .c { color: var(--night-ink-3); }
+  .start pre .p { color: var(--ember); }
+
+  .foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 24px; border-top: 2px solid var(--night-ink); padding-top: 16px; font-size: 15px; color: var(--night-ink-2); }
+  .foot .url { font-weight: 700; color: var(--night-ink); }
+  .foot .mark { height: 40px; width: 40px; }
+
+  body[data-format="social"] .mast .logo { height: 38px; }
+  body[data-format="social"] .kick { margin-top: 34px; font-size: 14px; }
+  body[data-format="social"] h1.display { font-size: 90px; margin-top: 14px; }
+  .t-social, .strip { display: none; }
+  body[data-format="social"] .t-a3 { display: none; }
+  body[data-format="social"] .t-social { display: block; }
+  body[data-format="social"] .strip { display: flex; justify-content: space-between; margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--night-hair); font-size: 15px; color: var(--night-ink-2); }
+  body[data-format="social"] .term { margin-top: 44px; font-size: 17px; margin-right: calc(-1 * var(--pad) - 12px); border-right: 0; border-radius: 10px 0 0 10px; }
+  body[data-format="social"] .facts, body[data-format="social"] .start, body[data-format="social"] .foot .meta { display: none; }
+</style>
+</head>
+<body data-format="a3">
+  <div class="page">
+    <header class="mast">
+      <img class="logo" src="../logo/jobflow-horizontal-dark.svg" alt="JobFlow">
+      <span class="kicker">Local-first · AGPL-3.0</span>
+    </header>
+
+    <div class="kicker kick">Yours to run</div>
+    <h1 class="display"><span class="l">Open source.</span> <span class="l">Runs on your machine.</span> <span class="l">Your data stays <em>yours</em>.</span></h1>
+
+    <div class="term t-a3"><div class="t-bar"><i></i><i></i><i></i><span>~/jobflow</span></div><div class="t-body" data-ansi="cli-feed.ansi" data-lines="1-20"></div></div>
+    <div class="term t-social"><div class="t-bar"><i></i><i></i><i></i><span>~/jobflow</span></div><div class="t-body" data-ansi="cli-feed.ansi" data-lines="1-14"></div></div>
+    <div class="strip caps"><span>No account</span><span>Data in <code style="text-transform:none;letter-spacing:0">~/.jobflow</code></span><span>AGPL-3.0</span><span>MCP for agents</span></div>
+
+    <div class="facts">
+      <div><b>No account</b><p>No sign-up, no server, no API key. A web app and a CLI on your own computer.</p></div>
+      <div><b>On your disk</b><p>Your résumé, matches and drafts live in <code>~/.jobflow</code>. They reach an AI model only if you connect one.</p></div>
+      <div><b>Free software</b><p>AGPL-3.0. Read it, change it, run your own copy. Serve a changed copy to others and you share the source.</p></div>
+      <div><b>Agent-ready</b><p><code>jobflow mcp</code> lets an AI agent search your jobs and draft documents. Nothing it exposes fills or submits a form.</p></div>
+    </div>
+
+    <div class="start">
+      <div class="kicker">Quick start</div>
+<pre><span class="p">$</span> git clone https://github.com/jagritvats/jobflow.git &amp;&amp; cd jobflow
+<span class="p">$</span> pnpm install &amp;&amp; pnpm -r build
+<span class="p">$</span> pnpm jobflow init &amp;&amp; pnpm jobflow sync   <span class="c"># your résumé, then fetch and rank</span>
+<span class="p">$</span> pnpm jobflow serve                       <span class="c"># the web app on localhost:3000</span></pre>
+    </div>
+
+    <footer class="foot">
+      <span class="url">github.com/jagritvats/jobflow</span>
+      <span class="meta">CLI + web app · works with AI agents over MCP</span>
+      <img class="mark" src="../logo/jobflow-mark-dark.svg" alt="">
+    </footer>
+  </div>
+</body>
+</html>

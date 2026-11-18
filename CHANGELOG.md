@@ -7,6 +7,11 @@ All notable changes to JobFlow are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **A logo and app icons**: the mark (a J and a full stop on a tile: JobFlow stops, you act)
+  in the header of every style, a favicon (`/favicon.ico` no longer 404s), an SVG icon that
+  follows light/dark, an Apple touch icon, a web manifest with PWA icons, extension icons, and
+  an Open Graph image. The logo files, posters, share images and a brand sheet live in
+  [`brand/`](brand/README.md) (artwork CC BY 4.0), built from scripts with fictional data only.
 - **"Also posted for …"**: a role a company posts once per country (same title, level and
   JD, separate reqs) is one card — the sibling that scores best for you — listing where else
   it is posted, each one a click (or `jobflow show <id>`) away. Scores are unchanged and the

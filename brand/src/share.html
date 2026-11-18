@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>JobFlow share image</title>
+<link rel="stylesheet" href="brand.css">
+<!-- The share image: GitHub social preview (1280 x 640) and Open Graph (1200 x 630) from one
+     source; it fills whatever viewport it is rendered at. Keep the copy inside the left 58%
+     and 40px from every edge: some sites crop the sides. -->
+<style>
+  html, body { width: 100vw; height: 100vh; overflow: hidden; }
+  .wrap { position: absolute; inset: 0; padding: 52px 0 46px 64px; display: grid; grid-template-columns: 56% 1fr; }
+  .copy { display: flex; flex-direction: column; padding-right: 36px; }
+  .logo { height: 44px; width: auto; align-self: flex-start; }
+  .rule { margin-top: 20px; border-top: 2px solid var(--ink); width: 100%; }
+  h1.display { margin-top: 34px; font-size: 68px; }
+  .lede { margin-top: 22px; font-size: 22px; }
+  .meta { margin-top: auto; display: flex; gap: 18px; align-items: baseline; font-size: 17px; color: var(--ink-2); }
+  .meta .url { font-weight: 700; color: var(--ink); }
+  .shot { position: relative; }
+  /* the card, large, running off the right edge — the product is the picture */
+  .shot .plate { position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 1120px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="copy">
+      <img class="logo" src="../logo/jobflow-horizontal.svg" alt="JobFlow">
+      <div class="rule"></div>
+      <h1 class="display">Every job, ranked by how well it fits <em>you</em>.</h1>
+      <p class="lede">A local-first, open-source job search engine. It pre-fills the application and stops, so you review and submit.</p>
+      <div class="meta"><span class="url">github.com/jagritvats/jobflow</span><span>AGPL-3.0</span></div>
+    </div>
+    <div class="shot"><div class="plate"><img src="../.out/captures/card-flag-light.png" alt=""></div></div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>JobFlow README banner</title>
+<link rel="stylesheet" href="brand.css">
+<!-- README hero, 1280 x 400 (rendered at 2x). body[data-format] = light | dark; README.md
+     picks one with <picture> + prefers-color-scheme. A masthead: the lockup, the promise, a
+     dateline of facts between two rules. -->
+<style>
+  html, body { width: 1280px; height: 400px; overflow: hidden; }
+  body[data-format="dark"] { background: var(--night); color: var(--night-ink); --ink: var(--night-ink); --ink-2: var(--night-ink-2); --ink-3: var(--night-ink-3); --hair-strong: var(--night-hair); --vermilion: var(--ember); --vermilion-text: var(--ember-text); }
+  .wrap { position: absolute; inset: 44px 64px 40px; display: flex; flex-direction: column; }
+  .top { display: grid; grid-template-columns: 450px 1fr; gap: 56px; align-items: center; flex: 1; }
+  .logo { width: 100%; height: auto; }
+  .logo.d { display: none; }
+  body[data-format="dark"] .logo.l { display: none; }
+  body[data-format="dark"] .logo.d { display: block; }
+  .lede { font-size: 32px; line-height: 1.25; color: var(--ink); }
+  .lede em { font-style: italic; color: var(--vermilion); font-variation-settings: "SOFT" 100, "opsz" 36; }
+  .dateline { display: flex; justify-content: space-between; border-top: 2px solid var(--ink); padding-top: 14px; font-size: 16px; }
+  .dateline span { color: var(--ink-3); }
+</style>
+</head>
+<body data-format="light">
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <img class="logo l" src="../logo/jobflow-horizontal.svg" alt="JobFlow">
+        <img class="logo d" src="../logo/jobflow-horizontal-dark.svg" alt="JobFlow">
+      </div>
+      <p class="lede">Every job ranked against <em>your</em> résumé, with an honest match card. It pre-fills the application and stops: you press submit.</p>
+    </div>
+    <div class="dateline caps">
+      <span>Local-first</span><span>Open source · AGPL-3.0</span><span>CLI + web app + MCP</span><span>Never auto-submits</span>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>JobFlow brand sheet</title>
+<link rel="stylesheet" href="brand.css">
+<!-- One page, A3 landscape (420 x 297 mm): the mark and why, lockups, clear space and sizes,
+     colour with measured contrast, type, and do / don't. <svg data-mark> elements are drawn
+     by scripts/render.mjs from logo/geometry.json. -->
+<style>
+  html, body { width: 420mm; height: 297mm; overflow: hidden; }
+  .sheet { position: absolute; inset: 14mm 15mm 12mm; display: grid; grid-template-rows: auto 1fr auto; gap: 18px; }
+  header { display: flex; align-items: flex-end; justify-content: space-between; border-bottom: 2px solid var(--ink); padding-bottom: 12px; }
+  header .logo { height: 40px; }
+  header h1 { margin: 0; font-family: var(--serif); font-weight: 400; font-variation-settings: "SOFT" 50, "opsz" 72; font-size: 30px; letter-spacing: -0.01em; }
+  header .meta { font-size: 12px; color: var(--ink-3); text-align: right; line-height: 1.5; }
+  .cols { display: grid; grid-template-columns: 1.05fr 1.15fr 1.25fr; gap: 34px; min-height: 0; }
+  section { min-width: 0; }
+  h2 { margin: 0 0 10px; padding-top: 8px; border-top: 1px solid var(--hair-strong); font-family: var(--sans); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--vermilion-text); }
+  h2 + * { margin-top: 0; }
+  section + section, .block + .block { margin-top: 18px; }
+  p, li { font-size: 12.5px; line-height: 1.5; color: var(--ink-2); margin: 0; }
+  p + p { margin-top: 6px; }
+  strong { color: var(--ink); }
+  code { font-size: 11.5px; }
+
+  /* 1 · the mark */
+  .hero { display: grid; grid-template-columns: 150px 1fr; gap: 20px; align-items: center; }
+  .hero svg { width: 150px; height: 150px; display: block; }
+  .clear { display: grid; grid-template-columns: auto 1fr; gap: 18px; align-items: center; }
+  .clear .box { position: relative; padding: 22px; outline: 1px dashed var(--vermilion); background: repeating-linear-gradient(45deg, rgba(184, 64, 28, 0.08) 0 6px, transparent 6px 12px); }
+  .clear .box svg { width: 88px; height: 88px; display: block; }
+  .clear .box span { position: absolute; font-size: 10px; font-weight: 700; color: var(--vermilion-text); }
+  .sizes { display: flex; align-items: flex-end; gap: 16px; margin-top: 10px; }
+  .sizes figure { margin: 0; text-align: center; }
+  .sizes figcaption { font-size: 10.5px; color: var(--ink-3); margin-top: 5px; }
+  .sizes svg { display: block; margin: 0 auto; }
+
+  /* 2 · lockups */
+  .lock { display: grid; gap: 10px; }
+  .lock .tile { display: flex; align-items: center; justify-content: center; padding: 18px; border: 1px solid var(--hair); }
+  .lock .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .lock img { display: block; }
+  .on-paper { background: var(--paper); }
+  .on-night { background: var(--night); border-color: var(--night) !important; }
+  .on-white { background: #fff; }
+  .on-verm { background: var(--vermilion); border-color: var(--vermilion) !important; }
+  .cap { font-size: 10.5px; color: var(--ink-3); margin-top: 4px; }
+
+  /* 3 · colour + type */
+  .swatches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .sw { border: 1px solid var(--hair); }
+  .sw .chip { height: 58px; display: flex; align-items: flex-end; padding: 6px 8px; font-family: var(--serif); font-size: 22px; font-variation-settings: "opsz" 36; }
+  .sw .info { padding: 7px 8px 8px; }
+  .sw b { display: block; font-size: 12px; color: var(--ink); }
+  .sw code { display: block; font-size: 11px; color: var(--ink-2); }
+  .sw p { font-size: 10.5px; line-height: 1.4; margin-top: 3px; }
+  .type { display: grid; gap: 10px; }
+  .type .spec { display: grid; grid-template-columns: 1fr 150px; gap: 12px; align-items: baseline; border-bottom: 1px solid var(--hair); padding-bottom: 8px; }
+  .type .spec p { font-size: 11px; }
+  .t-fraunces { font-family: var(--serif); font-size: 38px; line-height: 1; font-variation-settings: "SOFT" 50, "opsz" 144; letter-spacing: -0.02em; color: var(--ink); }
+  .t-fraunces em { color: var(--vermilion); }
+  .t-schibsted { font-family: var(--sans); font-size: 17px; color: var(--ink); }
+  .t-mono { font-family: var(--mono); font-size: 14px; color: var(--ink); }
+
+  /* do / don't */
+  .rules { display: grid; grid-template-columns: repeat(8, 1fr); gap: 12px; border-top: 2px solid var(--ink); padding-top: 12px; }
+  .rule { display: grid; grid-template-rows: 84px auto; gap: 6px; }
+  .rule .pic { display: flex; align-items: center; justify-content: center; border: 1px solid var(--hair); background: var(--paper); overflow: hidden; position: relative; }
+  .rule .pic svg { width: 54px; height: 54px; }
+  .rule p { font-size: 11px; line-height: 1.35; }
+  .rule .tag { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+  .rule.do .tag { color: var(--good); }
+  .rule.dont .tag { color: #a31d3c; }
+  .rule.dont .pic::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to top right, transparent calc(50% - 1px), rgba(163, 29, 60, 0.7) 50%, transparent calc(50% + 1px)); }
+  .busy { background: repeating-linear-gradient(135deg, #2c6a33 0 10px, #e5ab92 10px 20px, #205e86 20px 30px) !important; }
+</style>
+</head>
+<body>
+  <div class="sheet">
+    <header>
+      <div style="display:flex;align-items:flex-end;gap:22px"><img class="logo" src="../logo/jobflow-horizontal.svg" alt="JobFlow"><h1>Brand sheet</h1></div>
+      <div class="meta">Editorial style · v1 · November 2026<br>Sources and files: <strong>brand/</strong> in github.com/jagritvats/jobflow</div>
+    </header>
+
+    <div class="cols">
+      <!-- 1 -->
+      <div>
+        <section>
+          <h2>The mark</h2>
+          <div class="hero">
+            <svg data-mark="display"></svg>
+            <div>
+              <p><strong>A J and a full stop.</strong> JobFlow finds, ranks and fills, then it stops. The next move is yours, so the stop carries the accent, the colour that means “you can act here” everywhere in the product.</p>
+              <p>The J is Fraunces (soft, optical size 72) drawn as outlines; the stop sits on its baseline. One stop per lockup: the wordmark gets it only when it stands alone.</p>
+            </div>
+          </div>
+        </section>
+        <section>
+          <h2>Clear space</h2>
+          <div class="clear">
+            <div class="box"><svg data-mark="display"></svg><span style="top:5px;left:50%;transform:translateX(-50%)">¼</span><span style="left:7px;top:50%;transform:translateY(-50%)">¼</span></div>
+            <p>Keep a quarter of the tile’s height clear on every side, for the tile and for every lockup (measured from the tile). Nothing but the page colour goes there.</p>
+          </div>
+        </section>
+        <section>
+          <h2>Sizes · two optical masters</h2>
+          <div class="sizes">
+            <figure><svg data-mark="text" width="16" height="16"></svg><figcaption>16</figcaption></figure>
+            <figure><svg data-mark="text" width="24" height="24"></svg><figcaption>24</figcaption></figure>
+            <figure><svg data-mark="text" width="32" height="32"></svg><figcaption>32 · text</figcaption></figure>
+            <figure><svg data-mark="display" width="48" height="48"></svg><figcaption>48</figcaption></figure>
+            <figure><svg data-mark="display" width="72" height="72"></svg><figcaption>72 · display</figcaption></figure>
+          </div>
+          <p style="margin-top:8px">The <strong>text</strong> master (heavier J, bigger stop) is for 32 px and below: favicons, the extension, the app header. The <strong>display</strong> master is for 48 px and up. Smallest: mark 16 px / 5 mm; horizontal lockup 20 px / 6 mm tall.</p>
+        </section>
+      </div>
+
+      <!-- 2 -->
+      <div>
+        <section>
+          <h2>Lockups</h2>
+          <div class="lock">
+            <div class="tile on-paper"><img src="../logo/jobflow-horizontal.svg" style="height:58px" alt=""></div>
+            <div class="row">
+              <div class="tile on-paper"><img src="../logo/jobflow-stacked.svg" style="height:118px" alt=""></div>
+              <div class="tile on-night"><img src="../logo/jobflow-stacked-dark.svg" style="height:118px" alt=""></div>
+            </div>
+            <div class="row">
+              <div class="tile on-paper"><img src="../logo/jobflow-wordmark.svg" style="height:34px" alt=""></div>
+              <div class="tile on-night"><img src="../logo/jobflow-horizontal-dark.svg" style="height:40px" alt=""></div>
+            </div>
+            <div class="row">
+              <div class="tile on-white"><img src="../logo/jobflow-horizontal-mono-black.svg" style="height:40px" alt=""></div>
+              <div class="tile on-verm"><img src="../logo/jobflow-horizontal-mono-white.svg" style="height:40px" alt=""></div>
+            </div>
+          </div>
+          <p class="cap" style="margin-top:8px">Horizontal (default) · stacked · wordmark alone · on night · one colour, knocked out. Files: <code>brand/logo/jobflow-{horizontal,stacked,wordmark,mark}[-dark|-mono-black|-mono-white].svg</code></p>
+        </section>
+        <section>
+          <h2>In the product</h2>
+          <p>The app header draws the mark from theme tokens: the tile is the header’s ink, the J is cut out of it, and the stop is the accent. So it fits Editorial, Classic and Spark, light and dark, without its own colours.</p>
+        </section>
+      </div>
+
+      <!-- 3 -->
+      <div>
+        <section>
+          <h2>Colour</h2>
+          <div class="swatches">
+            <div class="sw"><div class="chip" style="background:#f6f1e7;color:#1c1915">Aa</div><div class="info"><b>Paper</b><code>#f6f1e7</code><p>The ground. Ink on paper 15.6&nbsp;:&nbsp;1.</p></div></div>
+            <div class="sw"><div class="chip" style="background:#1c1915;color:#f6f1e7">Aa</div><div class="info"><b>Ink</b><code>#1c1915</code><p>Type, rules, the light tile.</p></div></div>
+            <div class="sw"><div class="chip" style="background:#b8401c;color:#fff">Aa</div><div class="info"><b>Vermilion</b><code>#b8401c</code><p>The accent on paper: 4.9&nbsp;:&nbsp;1 as text; white on it 5.5&nbsp;:&nbsp;1.</p></div></div>
+            <div class="sw"><div class="chip" style="background:#161411;color:#f2ede3">Aa</div><div class="info"><b>Night</b><code>#161411</code><p>The dark ground. Night ink on it 15.8&nbsp;:&nbsp;1.</p></div></div>
+            <div class="sw"><div class="chip" style="background:#f2ede3;color:#161411">Aa</div><div class="info"><b>Night ink</b><code>#f2ede3</code><p>Type on night, the dark tile.</p></div></div>
+            <div class="sw"><div class="chip" style="background:#ef7a4f;color:#1c1915">Aa</div><div class="info"><b>Ember</b><code>#ef7a4f</code><p>The accent on night / ink: 6.6&nbsp;:&nbsp;1. Never text on paper (2.5&nbsp;:&nbsp;1).</p></div></div>
+          </div>
+          <p style="margin-top:8px">The stop always takes the accent of the surface under it: <strong>ember on an ink tile</strong> (6.3&nbsp;:&nbsp;1), <strong>vermilion on a paper tile</strong> (4.8&nbsp;:&nbsp;1). Vermilion on ink is only 3.2&nbsp;:&nbsp;1. One accent per piece; status colours stay in the product.</p>
+        </section>
+        <section>
+          <h2>Type</h2>
+          <div class="type">
+            <div class="spec"><div class="t-fraunces">Ranked for <em>you</em>.</div><p><strong>Fraunces</strong>, display. Headlines, scores, the J. SOFT 50–100, optical size to match.</p></div>
+            <div class="spec"><div class="t-schibsted">Why it fits, the gap, the pay it states.</div><p><strong>Schibsted Grotesk</strong>, text. Everything you read and press; caps +0.1em for kickers.</p></div>
+            <div class="spec"><div class="t-mono">$ jobflow apply 1 --fill</div><p><strong>JetBrains Mono</strong>, code only: commands and real CLI output.</p></div>
+          </div>
+          <p style="margin-top:8px">All three are SIL Open Font License 1.1: outlined in the logo, embedded in PDFs, self-hosted in the app.</p>
+        </section>
+      </div>
+    </div>
+
+    <div class="rules">
+      <div class="rule do"><div class="pic"><svg data-mark="display"></svg></div><div><span class="tag">Do</span><p>Ink tile, ember stop on paper.</p></div></div>
+      <div class="rule do"><div class="pic" style="background:var(--night)"><svg data-mark="display" data-tile="#f2ede3" data-j="#161411" data-dot="#b8401c"></svg></div><div><span class="tag">Do</span><p>Paper tile, vermilion stop on night.</p></div></div>
+      <div class="rule do"><div class="pic" style="background:#fff"><svg data-mark="display" data-tile="#000" data-j="none"></svg></div><div><span class="tag">Do</span><p>One colour: knock the J and stop out.</p></div></div>
+      <div class="rule do"><div class="pic"><img src="../logo/jobflow-wordmark.svg" style="width:82%" alt=""></div><div><span class="tag">Do</span><p>Wordmark alone keeps its stop.</p></div></div>
+      <div class="rule dont"><div class="pic"><svg data-mark="display" data-dot="#b8401c"></svg></div><div><span class="tag">Don’t</span><p>Put paper vermilion on the ink tile (3.2&nbsp;:&nbsp;1).</p></div></div>
+      <div class="rule dont"><div class="pic"><svg data-mark="display" data-j="#ef7a4f" data-dot="#f6f1e7"></svg></div><div><span class="tag">Don’t</span><p>Recolour the J or swap J and stop.</p></div></div>
+      <div class="rule dont"><div class="pic"><svg data-mark="display" style="transform:scaleX(1.35) rotate(-8deg)"></svg></div><div><span class="tag">Don’t</span><p>Stretch, tilt or add effects.</p></div></div>
+      <div class="rule dont"><div class="pic busy"><svg data-mark="display"></svg></div><div><span class="tag">Don’t</span><p>Set it on busy imagery or colour.</p></div></div>
+    </div>
+  </div>
+</body>
+</html>

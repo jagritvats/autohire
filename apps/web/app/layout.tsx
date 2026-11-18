@@ -29,9 +29,28 @@ const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["400", "500", "
 // All: JetBrains Mono, only for code-ish bits (the search DSL, résumé/LaTeX sources).
 const mono = JetBrains_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-jbmono", display: "swap" });
 
+const DESCRIPTION =
+  "A local-first job search engine: jobs from company boards, ranked against your résumé with honest match cards. It pre-fills applications and stops for you to review and submit.";
+
+/** Absolute base for the Open Graph image URL; a hosted deployment sets JOBFLOW_PUBLIC_URL. */
+function metadataBase(): URL {
+  try {
+    return new URL(process.env.JOBFLOW_PUBLIC_URL || "http://localhost:3000");
+  } catch {
+    return new URL("http://localhost:3000");
+  }
+}
+
+// Icons and the share image come from the App Router file conventions in this folder
+// (favicon.ico, icon.svg, apple-icon.png, opengraph-image.png, manifest.ts), built by
+// brand/scripts (see brand/README.md).
 export const metadata: Metadata = {
+  metadataBase: metadataBase(),
   title: "JobFlow — ranked match feed",
-  description: "Job discovery, prep, and assisted-application. The card is the product.",
+  description: DESCRIPTION,
+  applicationName: "JobFlow",
+  openGraph: { type: "website", siteName: "JobFlow", title: "JobFlow — every job, ranked by how well it fits you", description: DESCRIPTION },
+  twitter: { card: "summary_large_image", title: "JobFlow — every job, ranked by how well it fits you", description: DESCRIPTION },
 };
 
 export const viewport: Viewport = {
