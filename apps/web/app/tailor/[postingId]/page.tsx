@@ -12,11 +12,12 @@ import { TailorView, type Draft, type TailorInputs, type TailorPosting } from "@
 
 export const dynamic = "force-dynamic";
 
-export default async function TailorPage({ params }: { params: { postingId: string } }) {
-  const auth = await pageAuth(`/tailor/${params.postingId}`);
+export default async function TailorPage({ params }: { params: Promise<{ postingId: string }> }) {
+  const { postingId } = await params;
+  const auth = await pageAuth(`/tailor/${postingId}`);
   const repo = await getRepo();
   await ensureTenant(repo, auth.tenantId);
-  const posting = await repo.getPosting(params.postingId);
+  const posting = await repo.getPosting(postingId);
   if (!posting) notFound();
 
   const [config, drafts, profile, evidence, texEngine] = await Promise.all([

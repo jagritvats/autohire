@@ -71,7 +71,7 @@ export function withAuth<C = unknown>(handler: Handler<C>, need: Need = {}): (re
 /** Resolve the viewer of a server-rendered page; redirects to /login in password mode. */
 export async function pageAuth(nextPath = "/"): Promise<AuthContext> {
   const repo = await getRepo();
-  const h = headers();
+  const h = await headers();
   const fwd = process.env.JOBFLOW_TRUST_PROXY === "1" ? h.get("x-forwarded-host") : null;
   const r = await resolveAuth(repo, {
     mode: authMode(),
@@ -79,7 +79,7 @@ export async function pageAuth(nextPath = "/"): Promise<AuthContext> {
     url: nextPath,
     host: fwd ?? h.get("host"),
     origin: null,
-    cookie: cookies().toString(),
+    cookie: (await cookies()).toString(),
     authorization: null,
     trustNetwork: process.env.JOBFLOW_TRUST_NETWORK === "1",
   });

@@ -1,6 +1,6 @@
 # Working on the web UI
 
-The web app (`apps/web`) is a Next.js 14 app router project. It is the same product as the
+The web app (`apps/web`) is a Next.js 15 app router project. It is the same product as the
 CLI: both call `@jobflow/service` for everything that isn't presentation. This guide covers
 how pages are built, the design system they share, the UX rules every screen follows, and
 how to review a visual change.

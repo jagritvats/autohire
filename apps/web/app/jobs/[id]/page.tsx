@@ -13,11 +13,12 @@ export const dynamic = "force-dynamic";
  * The Job page — the hub for one role: how you fit, the full description, and the next
  * actions (save, tailor, apply, track) in one place. Every surface links here.
  */
-export default async function JobPage({ params }: { params: { id: string } }) {
-  const auth = await pageAuth(`/jobs/${params.id}`);
+export default async function JobPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const auth = await pageAuth(`/jobs/${id}`);
   let job: JobDetail;
   try {
-    job = await getJob(await getRepo(), getFileStore(), auth.tenantId, params.id);
+    job = await getJob(await getRepo(), getFileStore(), auth.tenantId, id);
   } catch (e) {
     if (e instanceof JobNotFoundError) notFound();
     throw e;

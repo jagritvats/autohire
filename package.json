@@ -45,5 +45,10 @@
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   },
-  "license": "AGPL-3.0-only"
+  "license": "AGPL-3.0-only",
+  "pnpm": {
+    "overrides": {
+      "next>postcss": "8.5.32"
+    }
+  }
 }
