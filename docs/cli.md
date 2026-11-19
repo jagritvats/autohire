@@ -28,7 +28,7 @@ pnpm jobflow init
 ```
 
 That's all: `pnpm jobflow …` runs the TypeScript sources through `tsx` (no build step).
-Node 20+ and pnpm 9 are required.
+Node 20.11+ and pnpm 9 are required.
 
 Want a plain `jobflow` command on your `PATH`? Either of these links your checkout (so
 `git pull` updates it):

@@ -70,6 +70,9 @@ jobs:
       ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
       # optional discovery APIs — each feed is a no-op until its secret exists
       CAREERJET_API_KEY: ${{ secrets.CAREERJET_API_KEY }}
+      # free key (himalayas.app/api): Himalayas answers 429 to keyless traffic from shared
+      # cloud egress like Actions runners; blank → the adapter runs keyless and backs off
+      HIMALAYAS_API_KEY: ${{ secrets.HIMALAYAS_API_KEY }}
       # PAID: every cron run is a fresh process, so JSearch's once-per-JSEARCH_MIN_HOURS
       # guard doesn't carry over — with a key set it's called on every 6-hourly run
       JSEARCH_API_KEY: ${{ secrets.JSEARCH_API_KEY }}

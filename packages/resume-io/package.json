@@ -1,6 +1,6 @@
 {
   "name": "@jobflow/resume-io",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "R\u00e9sum\u00e9 file bytes \u2192 text (PDF, DOCX, LaTeX, Markdown, JSON Resume, LinkedIn export) for the pure parser in @jobflow/core.",

@@ -9,14 +9,15 @@ import { pageAuth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-export default async function CompanyPage({ params }: { params: { id: string } }) {
-  const { tenantId } = await pageAuth(`/company/${params.id}`);
+export default async function CompanyPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const { tenantId } = await pageAuth(`/company/${id}`);
   const repo = await getRepo();
   // pay in the reader's "show pay in" currency / period
   const show = payDisplayOptions((await repo.getProfile(tenantId))?.prefs);
-  const company = await repo.getCompany(params.id);
+  const company = await repo.getCompany(id);
   if (!company) notFound();
-  const postings = await repo.listPostingsByCompany(params.id);
+  const postings = await repo.listPostingsByCompany(id);
 
   return (
     <AppFrame

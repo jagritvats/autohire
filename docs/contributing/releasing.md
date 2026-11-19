@@ -33,9 +33,10 @@ grep -rn 'VERSION = "' apps/cli/src apps/agent/src
 
 [CHANGELOG.md](../../CHANGELOG.md) follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Every pull request with a user-visible change adds a line under `## [Unreleased]` at the top
-(add the heading if it isn't there), in the section that fits: Finding jobs, Honest
-recommendations, Your profile, Applying, Interfaces, LLM providers, Project. Use **Changed**
-and **Removed** for anything breaking, and **Security** for security fixes.
+(add the heading if it isn't there), in the Keep a Changelog section that fits: **Added**,
+**Changed**, **Fixed**, **Removed**, **Security** or **Docs**. Anything breaking goes under
+**Changed** or **Removed** and says so. (The release notes, not the CHANGELOG, regroup the
+highlights by theme: finding jobs, honest recommendations, your profile, applying.)
 
 Write for users: what they can now do, or what behaves differently, in one line. "Search
 results now say how many jobs each filter hid", not "refactor applyView".

@@ -3,7 +3,7 @@
 JobFlow runs on your own machine. Clone it, tell it who you are, and search. No account,
 no server, no API keys needed to start.
 
-**Requirements:** Node 20+ (22 recommended) and pnpm 9 (`corepack enable`).
+**Requirements:** Node 20.11+ (22 recommended) and pnpm 9 (`corepack enable`).
 
 ```bash
 git clone https://github.com/jagritvats/jobflow.git

@@ -328,7 +328,7 @@ function profileOut(p: Awaited<ReturnType<typeof loadProfile>>, evidence: Array<
 
 export function createJobflowMcpServer(ctx: JobflowMcpContext, opts: JobflowMcpOptions = {}): McpServer {
   const server = new McpServer(
-    { name: "jobflow", title: "JobFlow", version: opts.version ?? "0.1.0" },
+    { name: "jobflow", title: "JobFlow", version: opts.version ?? "0.2.0" },
     {
       instructions: [
         "JobFlow is the user's local job-search data layer: ATS-first discovery, freshness and liveness checks, honest fit scores with flags, and résumé/letter drafting grounded in the user's own material.",

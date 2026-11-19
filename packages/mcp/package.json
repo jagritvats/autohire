@@ -1,6 +1,6 @@
 {
   "name": "@jobflow/mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "JobFlow as an MCP server: live search, ranked feed, job detail, tracker, apply plan and grounded drafting for AI agents (Claude Code, Claude Desktop, any MCP client).",

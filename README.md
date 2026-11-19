@@ -11,7 +11,7 @@ your own material, and pre-fills applications. Then it stops, so you can review 
 
 [![CI](https://github.com/jagritvats/jobflow/actions/workflows/ci.yml/badge.svg)](https://github.com/jagritvats/jobflow/actions/workflows/ci.yml)
 [![License: AGPL-3.0-only](https://img.shields.io/badge/license-AGPL--3.0--only-blue.svg)](LICENSE)
-![Node 20+](https://img.shields.io/badge/node-%E2%89%A520-brightgreen)
+![Node 20.11+](https://img.shields.io/badge/node-%E2%89%A520.11-brightgreen)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)
 ![Local-first](https://img.shields.io/badge/data-stays%20on%20your%20machine-informational)
 
@@ -26,7 +26,8 @@ pnpm jobflow init && pnpm jobflow sync    # your résumé, reviewed by you; then
 pnpm jobflow serve                        # the web app at http://localhost:3000 (or stay in the terminal)
 ```
 
-You don't need an account, a server or an API key. Your data stays in `~/.jobflow`. Want to
+You need Node 20.11+ (22 recommended) and pnpm 9 (`corepack enable`). You don't need an
+account, a server or an API key. Your data stays in `~/.jobflow`. Want to
 look around first? `pnpm jobflow init --sample` loads a fictional candidate. The full
 walkthrough is in **[Getting started](docs/getting-started.md)**.
 
@@ -234,6 +235,7 @@ examples are in the [AI agents guide](docs/guides/ai-agents-mcp.md).
 | [LLM providers](docs/guides/llm-providers.md) | Optional models, keys, cost control |
 | [Troubleshooting](docs/guides/troubleshooting.md) | A locked data directory, empty syncs, PDFs that won't parse, Chromium, LaTeX, resetting your data |
 | [Self-hosting for several people](docs/guides/self-hosting.md) | Accounts, API tokens, hardening, licence obligations |
+| [Videos](docs/guides/video-walkthrough.md) | The walkthrough, trailer, video guides and reels (attached to the GitHub release), with transcripts |
 
 Reference: [CLI](docs/cli.md) · [Configuration](docs/configuration.md) ·
 [Architecture](docs/architecture.md) · [Legal & ethics](docs/legal-and-ethics.md) · [All docs](docs/README.md)

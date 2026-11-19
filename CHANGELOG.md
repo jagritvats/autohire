@@ -6,7 +6,25 @@ All notable changes to JobFlow are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-11-19
+
 ### Added
+- **Three appearance styles**: Settings → Appearance switches the whole web app between
+  **Editorial** (the new default: warm paper, serif headings, big score numerals), **Classic**
+  (the earlier neutral design: Inter type, an indigo accent) and **Spark** (bold and
+  colourful, score rings, a "today" summary). Each comes in light and dark, is remembered per
+  browser and applies before the page draws.
+- **Sync progress you can see**: the web header shows when the last sync ran and the next one
+  is due; while a sync runs it opens a panel with the phase, boards done of total, boards in
+  flight, new / updated / gone postings, plain-language errors, time left and a cancel button.
+  Sources shows how each source did on the last run and the recent runs. When a run ends,
+  Jobs offers "N new matches" instead of reshuffling the list. `jobflow sync` draws the same
+  progress in the terminal (Ctrl-C cancels cleanly; `--json` streams progress lines on
+  stderr), the MCP `sync_sources` tool sends progress notifications, and runs are kept in a
+  run history (worker and cron runs included).
+- **Demo mode covers sync and search**: with `JOBFLOW_DEMO_DATA=1` a sync "fetches" the
+  fictional demo boards with real progress, and a search asks them, so the whole app can be
+  shown without touching the network (`JOBFLOW_DEMO_SYNC_PACE` sets the pace).
 - **A logo and app icons**: the mark (a J and a full stop on a tile: JobFlow stops, you act)
   in the header of every style, a favicon (`/favicon.ico` no longer 404s), an SVG icon that
   follows light/dark, an Apple touch icon, a web manifest with PWA icons, extension icons, and
@@ -60,6 +78,11 @@ All notable changes to JobFlow are documented here. The format follows
 - **Liveness checks** for Ashby and Himalayas postings (a definitive 404/410 retires a role).
 
 ### Changed
+- **Fonts are bundled**: the web app's five typefaces (OFL) ship in `apps/web/app/fonts/`
+  instead of being fetched from Google at build time, so the web app builds offline.
+- **CI runs the real-browser never-submits test**: Chromium is installed in CI, and the test
+  fails rather than skips there when no browser can launch. CI also runs the video tests and
+  a Node 20 leg; the minimum Node version is now 20.11.
 - **Company level ladders** read conservatively: "Engineer 5", "Data Scientist II", L8+,
   "E5" / "IC4" beside a role noun, SMTS / LMTS / PMTS. A bare "Member of Technical Staff" no
   longer reads as a staff-level role. A level the source states wins over a code the title
@@ -124,10 +147,11 @@ All notable changes to JobFlow are documented here. The format follows
 - **Stored postings re-parse automatically** once after an upgrade (on the next sync), and
   `jobflow renormalize` runs it by hand.
 - Cutshort's "hiring for a client" marks a posting as from a recruiter.
-- **New design system** ("calm ledger"): neutral Radix-based palette with one action colour
-  and fixed semantic colours, Inter type, light/dark/system themes at WCAG AA, a shared
-  navigation shell, responsive down to 375px with a filter drawer, and accessibility passes
-  (skip link, focus rings, labels, live regions). See `docs/internal/DESIGN.md`.
+- **New design system**: tokens with one action colour and fixed semantic colours,
+  light/dark/system themes at WCAG AA in every style, a shared navigation shell, responsive
+  down to 375px with a filter drawer, and accessibility passes (skip link, focus rings,
+  labels, live regions). Its first look ("calm ledger") is now the Classic style. See
+  `docs/internal/DESIGN.md`.
 - **Journeys rebuilt**: navigation is Jobs · Search · Applications · Profile · Sources ·
   Settings; a new **Job page** per role (fit, description, drafts, an apply checklist with a
   fix for each gap, open / pre-fill / mark applied); a get-started checklist; saved-search
@@ -198,9 +222,25 @@ All notable changes to JobFlow are documented here. The format follows
   hanging.
 - Finishing onboarding during the first background sync no longer leaves the feed unranked.
 - Search before onboarding no longer makes fit claims about an empty profile.
+- `jobflow doctor` reports a reachable job board as "reachable" instead of the bare API
+  root's 404; only a connection error fails the network check.
+- `.env.example` no longer claims `JOBFLOW_PUBLIC_URL` sets links or the cookie scope: it is
+  the share-image base URL, and an `https://` value marks the session cookie Secure.
+
+### Security
+- **Next.js 14.2.21 → 15.5.29** (and React 18 → 19), fixing every critical and high Next.js
+  advisory, including the middleware authorization bypass and the image-optimizer remote code
+  execution. The image optimizer is also switched off (the app never used `next/image`), and
+  Next's bundled PostCSS is overridden to a patched 8.5.x.
 
 ### Docs
 - Rewritten CONTRIBUTING.md and new contributor guides in `docs/contributing/`.
+- Screenshots regenerated in the Editorial style (light is the main set, `*-dark.png` and
+  `styles-*` / `classic-*` the variants), with CLI screenshots from fictional data.
+- Launch videos (a narrated walkthrough, a trailer, two short guides and three vertical
+  reels), all on fictional demo data, built reproducibly by `pnpm video`
+  (`scripts/video/README.md`); transcripts with chapter times are in
+  `docs/guides/video-walkthrough.md`.
 
 ## [0.1.0] — 2026-11-18
 
@@ -272,5 +312,6 @@ tailoring and an autofill that always stops at a human review gate.
 - Docs: getting started, CLI reference, guides, configuration, architecture, legal & ethics.
 - CI: build, typecheck, ~650 offline tests, plus personal-data and tenant-isolation guards.
 
-[Unreleased]: https://github.com/jagritvats/jobflow/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/jagritvats/jobflow/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/jagritvats/jobflow/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/jagritvats/jobflow/releases/tag/v0.1.0

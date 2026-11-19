@@ -262,7 +262,7 @@ export function TailorView({ posting, inputs, initialDrafts }: { posting: Tailor
       }
     });
 
-  const printFrame = (ref: RefObject<HTMLIFrameElement>, scope: string) => {
+  const printFrame = (ref: RefObject<HTMLIFrameElement | null>, scope: string) => {
     const w = ref.current?.contentWindow;
     if (!w) return setMsg(scope, "The preview isn't ready yet.", "err");
     w.focus();

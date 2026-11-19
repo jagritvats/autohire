@@ -25,7 +25,7 @@ import * as status from "./commands/status.js";
 import * as mcp from "./commands/mcp.js";
 import * as renormalize from "./commands/renormalize.js";
 
-export const VERSION = "0.1.0";
+export const VERSION = "0.2.0";
 
 export interface BuildOptions {
   io?: CliIO;

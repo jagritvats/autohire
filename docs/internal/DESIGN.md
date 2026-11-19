@@ -27,7 +27,7 @@ style's own section below keeps its reasoning and tokens.
 - **Persistence.** Per browser, like the theme: `localStorage["jobflow-style"]` (the default is
   stored as "no choice"), every access in try/catch. There's no cookie, because the theme has
   none and the head script makes one unnecessary. It isn't saved to the account.
-- **Fonts.** `app/layout.tsx` loads all five families through `next/font` as CSS variables
+- **Fonts.** `app/layout.tsx` loads all five families through `next/font/local` (variable woff2 files committed in `app/fonts/`, each with its OFL licence) as CSS variables
   (`--font-fraunces`, `--font-schibsted`, `--font-inter`, `--font-jakarta`, `--font-jbmono`).
   Each style's tokens pick theirs (`--font-sans`, `--font-display`, `--font-mono`). Only
   Editorial's faces are preloaded. A browser downloads the others only when a style uses them.
@@ -123,7 +123,7 @@ paper instead of a control panel:
   numerals**, which are the visual anchor of each match. A newsroom grotesk, **Schibsted
   Grotesk** (drawn for a media group's screens), sets everything you read and press.
   **JetBrains Mono** stays for code-like content only. All three are self-hosted by
-  `next/font` at build time. There's no font CDN at runtime.
+  `next/font/local` from `app/fonts/`. A build needs no network and there is no font CDN at runtime.
 - **Rules instead of boxes.** Sections open with a hairline (or, under a page title, an ink
   rule) and a serif head, not a bordered card. Match cards are entries in an index, with
   hairlines between them. Tables are open, with an ink rule on top. The only framed surface is
@@ -293,7 +293,7 @@ The active nav item is a white pill with `#5a2bd6` text.
 
 ### Type — Plus Jakarta Sans (UI) + JetBrains Mono (code-like only)
 
-Both through `next/font/google`, self-hosted at build (Jakarta at 400/500/600/700/800). Jakarta's
+Both through `next/font/local` from `app/fonts/` (variable files: Jakarta 200–800). Jakarta's
 word space is narrow, so `body` adds `word-spacing: 0.05em`. Numbers use tabular figures.
 
 | token | px | use |
@@ -413,7 +413,7 @@ must stay ≥ 4.5 in both themes.
 ### Type
 
 Fonts are Inter (UI, `--font-sans`) and JetBrains Mono (code-ish, `--font-mono`), both through
-`next/font/google` and self-hosted at build.
+`next/font/local` from `app/fonts/` (committed, no network at build).
 
 | token | px | use |
 |---|---|---|

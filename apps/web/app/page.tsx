@@ -8,11 +8,12 @@ import { FeedView } from "@/components/FeedView";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export default async function Page({ searchParams }: { searchParams: { view?: string; search?: string } }) {
+export default async function Page({ searchParams }: { searchParams: Promise<{ view?: string; search?: string }> }) {
   const auth = await pageAuth("/");
   const repo = await getRepo();
   // `?view=<saved search id>` (or the older `?search=`) opens Jobs on that saved-search tab
-  const viewId = searchParams.view ?? searchParams.search ?? null;
+  const sp = await searchParams;
+  const viewId = sp.view ?? sp.search ?? null;
   const searches = (await repo.listSavedSearches(auth.tenantId)).filter((s) => s.asView);
   const view = viewId ? searches.find((s) => s.id === viewId) ?? null : null;
   const data = await getFeed(auth.tenantId);
