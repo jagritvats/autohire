@@ -22,7 +22,8 @@ jobs:
     # the engines floor (>=20.11): it builds the libraries (the web app's TS still typechecks
     # and its tests still run, just not `next build`), then typechecks and tests everything.
     name: build-test (node ${{ matrix.node }})
-    runs-on: ubuntu-latest
+    # pinned: Playwright 1.60 does not support Ubuntu 26.04 (ubuntu-latest) yet
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
