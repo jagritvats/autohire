@@ -8,7 +8,7 @@
       "id": "title",
       "chapter": "Why MCP",
       "lines": [
-        "JobFlow includes an MCP server, so an AI assistant like Claude Code can work with your job search, on your own data.",
+        "[warm] JobFlow includes an MCP server, so an AI assistant like Claude Code can work with your job search, on your own data.",
         "The assistant queries JobFlow's own job data, straight from employers' boards, instead of scraping job sites."
       ]
     },
@@ -39,14 +39,17 @@
       "id": "prepare",
       "chapter": "prepare_application (dry run)",
       "lines": [
-        "prepare_application is a dry run. It shows which of your details would go into which field, and what's missing. Nothing is opened, filled or sent."
+        "[calm] prepare_application is a dry run. It shows which of your details would go into which field, and what's missing. Nothing is opened, filled or sent."
       ]
     },
     {
       "id": "fill",
       "chapter": "You run the form-filler",
       "lines": [
-        { "text": "When you're ready, you run jobflow apply --fill yourself.", "say": "When you're ready, you run jobflow apply, dash dash fill, yourself." },
+        {
+          "text": "When you're ready, you run jobflow apply --fill yourself.",
+          "say": "When you're ready, you run jobflow apply, dash dash fill, yourself."
+        },
         "It pre-fills the form in a browser on your machine, and stops at the review screen. You press submit."
       ]
     },
@@ -54,8 +57,9 @@
       "id": "safety",
       "chapter": "What stays true",
       "lines": [
-        "The server reads your local data, reaches only public job boards, and never fills or submits a form. The full tool list is in the AI agents guide."
+        "[calm] The server reads your local data, reaches only public job boards, and never fills or submits a form. The full tool list is in the AI agents guide."
       ]
     }
-  ]
+  ],
+  "model": "eleven_v4"
 }

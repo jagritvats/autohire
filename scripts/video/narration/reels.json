@@ -2,7 +2,12 @@
   "id": "reels",
   "title": "JobFlow — vertical reels",
   "voice": "cgSgspJ2msm6clMCkdW9",
-  "voiceSettings": { "stability": 0.4, "similarity_boost": 0.75, "style": 0.35, "use_speaker_boost": true },
+  "voiceSettings": {
+    "stability": 0.4,
+    "similarity_boost": 0.75,
+    "style": 0.35,
+    "use_speaker_boost": true
+  },
   "music": "reel",
   "note": "Three 20–40 s vertical reels. Each scene is one or two fast cuts; captions are burned word by word from the TTS timestamps.",
   "reels": [
@@ -10,37 +15,128 @@
       "id": "reel-ranked",
       "title": "Stop scrolling 500 job posts",
       "scenes": [
-        { "id": "hook", "lines": ["Stop scrolling five hundred job posts."] },
-        { "id": "rank", "lines": ["JobFlow ranks every role by how well it fits your résumé."] },
-        { "id": "card", "lines": ["Each card says why it fits, and what the gap is."] },
-        { "id": "pay", "lines": ["Pay is what the employer stated, or clearly marked as an estimate."] },
-        { "id": "filters", "lines": ["Filters only hide, and they tell you what they hid."] },
-        { "id": "end", "lines": ["Free, open source, and it runs on your machine."] }
+        {
+          "id": "hook",
+          "lines": [
+            "[excited] Stop scrolling five hundred job posts."
+          ]
+        },
+        {
+          "id": "rank",
+          "lines": [
+            "JobFlow ranks every role by how well it fits your résumé."
+          ]
+        },
+        {
+          "id": "card",
+          "lines": [
+            "Each card says why it fits, and what the gap is."
+          ]
+        },
+        {
+          "id": "pay",
+          "lines": [
+            "Pay is what the employer stated, or clearly marked as an estimate."
+          ]
+        },
+        {
+          "id": "filters",
+          "lines": [
+            "Filters only hide, and they tell you what they hid."
+          ]
+        },
+        {
+          "id": "end",
+          "lines": [
+            "[confident] Free, open source, and it runs on your machine."
+          ]
+        }
       ]
     },
     {
       "id": "reel-gate",
       "title": "It fills the form. You press submit.",
       "scenes": [
-        { "id": "hook", "lines": ["This tool fills in your job application, and then it stops."] },
-        { "id": "check", "lines": ["First, a checklist: your name, your email, a résumé file."] },
-        { "id": "fill", "lines": ["Then it types what you stored, and attaches your résumé."] },
-        { "id": "gate", "lines": ["And it waits on the review screen. No auto-submit, ever."] },
-        { "id": "you", "lines": ["You read it. You press submit."] },
-        { "id": "end", "lines": ["JobFlow. Open source, and local-first."] }
+        {
+          "id": "hook",
+          "lines": [
+            "[excited] This tool fills in your job application, and then it stops."
+          ]
+        },
+        {
+          "id": "check",
+          "lines": [
+            "First, a checklist: your name, your email, a résumé file."
+          ]
+        },
+        {
+          "id": "fill",
+          "lines": [
+            "Then it types what you stored, and attaches your résumé."
+          ]
+        },
+        {
+          "id": "gate",
+          "lines": [
+            "And it waits on the review screen. No auto-submit, ever."
+          ]
+        },
+        {
+          "id": "you",
+          "lines": [
+            "[confident] You read it. [short pause] You press submit."
+          ]
+        },
+        {
+          "id": "end",
+          "lines": [
+            "JobFlow. Open source, and local-first."
+          ]
+        }
       ]
     },
     {
       "id": "reel-mcp",
       "title": "Your AI assistant + your job search",
       "scenes": [
-        { "id": "hook", "lines": ["Your AI assistant can run your job search."] },
-        { "id": "add", "lines": ["Add JobFlow to Claude Code with one command."] },
-        { "id": "ask", "lines": ["Ask for remote backend roles you'd actually get."] },
-        { "id": "results", "lines": ["It gets ranked jobs, with the honest gaps."] },
-        { "id": "plan", "lines": ["Plus a dry-run apply plan. It never fills or sends a form."] },
-        { "id": "end", "lines": ["Your data stays on your machine. And JobFlow is open source."] }
+        {
+          "id": "hook",
+          "lines": [
+            "[excited] Your AI assistant can run your job search."
+          ]
+        },
+        {
+          "id": "add",
+          "lines": [
+            "Add JobFlow to Claude Code with one command."
+          ]
+        },
+        {
+          "id": "ask",
+          "lines": [
+            "Ask for remote backend roles you'd actually get."
+          ]
+        },
+        {
+          "id": "results",
+          "lines": [
+            "It gets ranked jobs, with the honest gaps."
+          ]
+        },
+        {
+          "id": "plan",
+          "lines": [
+            "Plus a dry-run apply plan. It never fills or sends a form."
+          ]
+        },
+        {
+          "id": "end",
+          "lines": [
+            "[confident] Your data stays on your machine. And JobFlow is open source."
+          ]
+        }
       ]
     }
-  ]
+  ],
+  "model": "eleven_v4"
 }

@@ -4,14 +4,69 @@
   "voice": "JBFqnCBsd6RMkjVDRZzb",
   "music": "trailer",
   "scenes": [
-    { "id": "hook", "chapter": "Ranked by you", "lines": ["Job boards rank by ads and recency. JobFlow ranks by you."] },
-    { "id": "boards", "chapter": "Straight from employers", "lines": ["It reads company job boards directly, and scores every role against your résumé."] },
-    { "id": "cards", "chapter": "Honest match cards", "lines": ["Why it fits. The likely gap. Pay, stated or a labelled estimate."] },
-    { "id": "filters", "chapter": "Filters that report", "lines": ["Filters only hide, and they tell you what they hid."] },
-    { "id": "tailor", "chapter": "Grounded drafts", "lines": ["Drafts come from your own résumé. Rephrased, never invented."] },
-    { "id": "gate", "chapter": "The review gate", "lines": ["It pre-fills the application, then stops at the review screen. You press submit."] },
-    { "id": "anywhere", "chapter": "Terminal, browser, AI assistant", "lines": ["Use it from the terminal, the browser, or your AI assistant."] },
-    { "id": "local", "chapter": "Local-first", "lines": ["It runs on your machine. Your data stays there."] },
-    { "id": "end", "chapter": "Open source", "lines": ["JobFlow. Open source, and local-first."] }
-  ]
+    {
+      "id": "hook",
+      "chapter": "Ranked by you",
+      "lines": [
+        "[confident] Job boards rank by ads and recency. JobFlow ranks by you."
+      ]
+    },
+    {
+      "id": "boards",
+      "chapter": "Straight from employers",
+      "lines": [
+        "It reads company job boards directly, and scores every role against your résumé."
+      ]
+    },
+    {
+      "id": "cards",
+      "chapter": "Honest match cards",
+      "lines": [
+        "Why it fits. The likely gap. Pay, stated or a labelled estimate."
+      ]
+    },
+    {
+      "id": "filters",
+      "chapter": "Filters that report",
+      "lines": [
+        "Filters only hide, and they tell you what they hid."
+      ]
+    },
+    {
+      "id": "tailor",
+      "chapter": "Grounded drafts",
+      "lines": [
+        "Drafts come from your own résumé. Rephrased, never invented."
+      ]
+    },
+    {
+      "id": "gate",
+      "chapter": "The review gate",
+      "lines": [
+        "[confident] It pre-fills the application, then stops at the review screen. You press submit."
+      ]
+    },
+    {
+      "id": "anywhere",
+      "chapter": "Terminal, browser, AI assistant",
+      "lines": [
+        "Use it from the terminal, the browser, or your AI assistant."
+      ]
+    },
+    {
+      "id": "local",
+      "chapter": "Local-first",
+      "lines": [
+        "[warm] It runs on your machine. Your data stays there."
+      ]
+    },
+    {
+      "id": "end",
+      "chapter": "Open source",
+      "lines": [
+        "[excited] JobFlow. Open source, and local-first."
+      ]
+    }
+  ],
+  "model": "eleven_v4"
 }

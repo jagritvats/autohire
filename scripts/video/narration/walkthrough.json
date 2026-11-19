@@ -3,23 +3,29 @@
   "title": "JobFlow — a walkthrough",
   "voice": "JBFqnCBsd6RMkjVDRZzb",
   "music": "calm",
-  "note": "Each line is one TTS call (cached by voice + text). `say` is what the voice reads when it differs from the caption text.",
+  "note": "Each line is one TTS call (cached by model + voice + settings + text). `say` is what the voice reads when it differs from the caption text. Inline audio tags such as [warm] or [short pause] steer Eleven v4 and are never spoken; captions and transcripts drop them.",
   "scenes": [
     {
       "id": "intro",
       "chapter": "What JobFlow is",
       "lines": [
-        "This is JobFlow, a job search engine that runs on your own computer.",
+        "[warm] This is JobFlow, a job search engine that runs on your own computer.",
         "It finds roles on company job boards, ranks them against your résumé, and tells you honestly how well you fit.",
-        "It helps you write your application from your own material, and it fills in the form. Then it stops, so you can check it and press submit."
+        "It helps you write your application from your own material, and it fills in the form. [short pause] Then it stops, so you can check it and press submit."
       ]
     },
     {
       "id": "setup",
       "chapter": "Set up",
       "lines": [
-        { "text": "Setup takes a few minutes. Clone the repository, then run pnpm install and build.", "say": "Setup takes a few minutes. Clone the repository, then run p-n-p-m install, and build." },
-        { "text": "jobflow init reads your résumé — PDF, Word, LaTeX, Markdown or plain text — and asks you to confirm what it found.", "say": "Then, jobflow in-it reads your résumé — PDF, Word, Lay-tek, Markdown or plain text — and asks you to confirm what it found." }
+        {
+          "text": "Setup takes a few minutes. Clone the repository, then run pnpm install and build.",
+          "say": "[calm] Setup takes a few minutes. Clone the repository, then run p-n-p-m install, and build."
+        },
+        {
+          "text": "jobflow init reads your résumé — PDF, Word, LaTeX, Markdown or plain text — and asks you to confirm what it found.",
+          "say": "Then, jobflow in-it reads your résumé — PDF, Word, Lay-tek, Markdown or plain text — and asks you to confirm what it found."
+        }
       ]
     },
     {
@@ -35,7 +41,7 @@
       "id": "sync",
       "chapter": "Sync, with live progress",
       "lines": [
-        "Next, a sync. JobFlow checks company job boards and public feeds. Here, it's a fictional demo set.",
+        "[calm] Next, a sync. JobFlow checks company job boards and public feeds. Here, it's a fictional demo set.",
         "The panel shows each step as it runs, the boards being fetched, the jobs found so far, and roughly how long is left.",
         "A board that doesn't answer is named, in plain words, and tried again next time."
       ]
@@ -44,7 +50,7 @@
       "id": "feed",
       "chapter": "Jobs and honest match cards",
       "lines": [
-        "Your jobs come back ranked for you.",
+        "[warm] Your jobs come back ranked for you.",
         "Each card has a score, why it fits, and the likely gap — a language you haven't used, or more years than you have.",
         "Pay is what the posting states, or an estimate that's labelled as one.",
         "Flags call out the catches, like a post from a staffing agency, or a remote role that's open in one country only."
@@ -55,7 +61,7 @@
       "chapter": "Filters that say what they hid",
       "lines": [
         "Filters only hide. Scores never change, and the page tells you how many jobs a filter hid, and why.",
-        "Only two things are ever left out for you: pay stated below your floor, and a location you can't work from."
+        "Only two things are ever left out for you: [short pause] pay stated below your floor, and a location you can't work from."
       ]
     },
     {
@@ -87,9 +93,12 @@
       "chapter": "Apply: the checklist and the review gate",
       "lines": [
         "The Apply checklist makes sure you have what you need: your name, your email and a résumé file.",
-        { "text": "Then open the form yourself, or pre-fill it in a browser on your machine with jobflow apply --fill.", "say": "Then open the form yourself, or pre-fill it in a browser on your machine, with jobflow apply, dash dash fill." },
+        {
+          "text": "Then open the form yourself, or pre-fill it in a browser on your machine with jobflow apply --fill.",
+          "say": "Then open the form yourself, or pre-fill it in a browser on your machine, with jobflow apply, dash dash fill."
+        },
         "It types only what you stored, attaches your résumé, and stops at the review screen.",
-        "JobFlow never submits. You read it, and you send it."
+        "[calm] JobFlow never submits. [short pause] You read it, and you send it."
       ]
     },
     {
@@ -111,9 +120,13 @@
       "id": "outro",
       "chapter": "Open source, on your machine",
       "lines": [
-        { "text": "JobFlow is open source, under the AGPL. It runs on your machine, and your data stays there.", "say": "JobFlow is open source, under the A-G-P-L. It runs on your machine, and your data stays there." },
+        {
+          "text": "JobFlow is open source, under the AGPL. It runs on your machine, and your data stays there.",
+          "say": "[warm] JobFlow is open source, under the A-G-P-L. It runs on your machine, and your data stays there."
+        },
         "Pick a style, light or dark. Use the terminal or the browser. And give it a try."
       ]
     }
-  ]
+  ],
+  "model": "eleven_v4"
 }
