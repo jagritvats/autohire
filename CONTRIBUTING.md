@@ -80,7 +80,7 @@ issue or a discussion before you write a lot of code.
 
 ## Development setup
 
-You need **Node 22** (Node 20 works; CI uses 22) and **pnpm 9**. Corepack installs the right
+You need **Node 22** (20.11+ works; CI runs 22 and 20) and **pnpm 9**. Corepack installs the right
 pnpm from `package.json`:
 
 ```bash

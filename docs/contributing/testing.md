@@ -70,12 +70,13 @@ form on a local HTTP server, fills it in real Chromium, and proves invariant #2:
 is filled, the résumé is attached, the page never navigates, and the server counts **zero**
 POSTs.
 
-It runs only when Playwright can launch a Chromium, and is skipped otherwise (as on plain CI
-runners). `pnpm install` already links Playwright (an optional dependency); the browser is a
-separate download. To run it:
+It runs when Playwright can launch a Chromium. Locally it is skipped if it can't; in CI (`CI`
+set) or with `JOBFLOW_REQUIRE_BROWSER=1` a missing browser **fails** the suite instead, so the
+proof can't quietly stop running. CI installs Chromium for it. `pnpm install` already links
+Playwright (a root devDependency); the browser is a separate download. To run it:
 
 ```bash
-pnpm --filter @jobflow/autofill exec playwright install chromium   # once; or set JOBFLOW_CHROMIUM to a Chrome/Chromium
+pnpm exec playwright install chromium   # once (add --with-deps on a bare Linux box); or set JOBFLOW_CHROMIUM to a Chrome/Chromium
 pnpm --filter @jobflow/autofill test
 JOBFLOW_E2E_SCREENSHOT=/tmp/review-gate.png pnpm --filter @jobflow/autofill test   # also save a picture of the review gate
 ```
@@ -127,13 +128,15 @@ pnpm jobflow sync && pnpm jobflow feed
 ## What CI runs
 
 `.github/workflows/ci.yml`, on every pull request and on pushes to `main`, with Node 22 and
-`LLM_PROVIDER=echo`:
+`LLM_PROVIDER=echo` (a Node 20 leg builds only the libraries, then typechecks and tests):
 
 ```bash
 pnpm install --frozen-lockfile
+pnpm exec playwright install --with-deps chromium   # for the real-browser autofill test
 pnpm -r build
 pnpm -r typecheck
-pnpm -r test
+pnpm -r test                    # JOBFLOW_REQUIRE_BROWSER=1: the browser test can't skip
+pnpm video:test
 node scripts/check-pii.mjs      # separate "guards" job
 node scripts/check-tenant.mjs
 ```

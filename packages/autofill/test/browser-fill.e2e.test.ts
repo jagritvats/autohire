@@ -11,7 +11,10 @@ import { buildFillPlan, fillPlanOnPage, type AutomationFlags } from "../src/inde
  * prove invariant #2 — every field is filled, the résumé is attached to the HIDDEN file input,
  * and the form is NEVER submitted (the server counts POSTs; the page never navigates away).
  *
- * Runs wherever Playwright + Chromium are installed; skipped otherwise (e.g. plain CI).
+ * Runs wherever Playwright + Chromium are installed. On a laptop without a browser it is
+ * skipped; in CI (CI set, as GitHub Actions does) or with JOBFLOW_REQUIRE_BROWSER=1 a missing
+ * browser FAILS instead, so the guarantee can't silently drop out of the suite
+ * (.github/workflows/ci.yml installs Chromium for it).
  * JOBFLOW_E2E_SCREENSHOT=/path.png saves a picture of the filled form at the review gate.
  */
 const require = createRequire(import.meta.url);
@@ -66,6 +69,21 @@ const FORM = `<!doctype html><html><head><meta charset="utf-8"><title>Apply · B
 </form>
 <script>document.getElementById('resume').addEventListener('change',e=>{document.getElementById('resume-name').textContent=e.target.files[0]?.name||''})</script>
 </body></html>`;
+
+const isTruthy = (v: string | undefined) => !!v && v !== "0" && v.toLowerCase() !== "false";
+const browserRequired = isTruthy(process.env.CI) || isTruthy(process.env.JOBFLOW_REQUIRE_BROWSER);
+
+if (browserRequired && !canLaunch) {
+  describe("autofill in a real browser — required here", () => {
+    it("has Playwright and a Chromium to launch", () => {
+      throw new Error(
+        pw
+          ? "Playwright is installed but no Chromium was found: run `pnpm exec playwright install --with-deps chromium` (or set JOBFLOW_CHROMIUM)."
+          : "Playwright isn't installed: `pnpm install` (it's a root devDependency), then `pnpm exec playwright install --with-deps chromium`.",
+      );
+    });
+  });
+}
 
 describe.skipIf(!canLaunch)("autofill in a real browser (invariant #2: never submits)", () => {
   let server: Server;
