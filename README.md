@@ -93,7 +93,37 @@ walkthrough is in **[Getting started](docs/getting-started.md)**.
   <br><em>Every page works on a phone. The filters open as a sheet.</em>
 </p>
 
-More screenshots, page by page, are in the [web app tour](docs/guides/web-app-tour.md).
+### Three styles, one app
+
+**Settings → Appearance** switches the whole app between **Editorial** (the default, shown
+above), **Classic** (the original clean, neutral design) and **Spark** (bold and colourful).
+Each comes in light and dark, and your choice applies before the page draws.
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/classic-jobs-dark.png"><img src="docs/screenshots/classic-jobs-dark.png" alt="Jobs in the Classic style, dark"></a>
+      <br><b>Classic · Jobs</b>: Inter type, a neutral palette and one indigo accent.
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/classic-job-light.png"><img src="docs/screenshots/classic-job-light.png" alt="A Job page in the Classic style, light"></a>
+      <br><b>Classic · Job page</b>: the same fit notes, pay and apply checklist in compact cards.
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+      <a href="docs/screenshots/classic-search-light.png"><img src="docs/screenshots/classic-search-light.png" alt="Search in the Classic style, light"></a>
+      <br><b>Classic · Search</b>
+    </td>
+    <td valign="top">
+      <a href="docs/screenshots/styles-spark-light.png"><img src="docs/screenshots/styles-spark-light.png" alt="Jobs in the Spark style, light"></a>
+      <br><b>Spark · Jobs</b>: a gradient header, score rings and a "today" summary.
+    </td>
+  </tr>
+</table>
+
+More screenshots, page by page, are in the [web app tour](docs/guides/web-app-tour.md); every
+style in both themes is in `docs/screenshots/styles-*.png` and `classic-*.png`.
 
 ## Why JobFlow
 

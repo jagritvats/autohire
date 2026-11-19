@@ -222,6 +222,33 @@ try {
     }
   }
 
+  // ── a few pages in the Classic style (the earlier design), for the README's style section:
+  // docs/screenshots/classic-<page>-<light|dark>.png ──
+  const classicPages = [
+    ["jobs", "/", CARD],
+    ["job", job, null],
+    ["search", "/search", null],
+    ["sources", "/sources", ".onb-preset"],
+  ];
+  for (const [page, url, wait] of classicPages) {
+    if (!url) continue;
+    for (const scheme of ["light", "dark"]) {
+      const name = `classic-${page}-${scheme}`;
+      if (ONLY && !ONLY.has(name) && !ONLY.has("classic")) continue;
+      const ctx = await context(scheme, { width: 1440, height: 900 }, {}, "classic");
+      const p = await ctx.newPage();
+      await settle(p, `${BASE}${url}`);
+      if (wait) await p.waitForSelector(wait, { timeout: 10_000 }).catch(() => undefined);
+      if (page === "search") await search(p);
+      await p.addStyleTag({ content: "*{animation:none!important;transition:none!important}" });
+      const file = join(OUT, `${name}.png`);
+      await p.screenshot({ path: file });
+      shots.push(file);
+      console.log("✓", name);
+      await ctx.close();
+    }
+  }
+
   // ── guide captures (dark, desktop) — last, because they add a saved search and read a
   // résumé into the in-memory store, which would otherwise show up in the shots above ──
   const g = await (await context("light", { width: 1440, height: 900 })).newPage();

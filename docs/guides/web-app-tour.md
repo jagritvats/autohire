@@ -377,6 +377,24 @@ and nothing is saved until the last one:
 **Finish** takes you to Jobs, where the first sync starts and fills in by itself. "skip for now"
 leaves setup for later.
 
+## Styles
+
+**Settings → Appearance** picks one of three styles for the whole app: **Editorial** (the
+default: warm paper, serif headings, big score numerals), **Classic** (the original neutral
+design with Inter type and an indigo accent) and **Spark** (a bold violet header, score rings
+and a "today" summary). The style and the theme are separate choices, and both apply before the
+page draws.
+
+<p>
+  <img src="../screenshots/styles-editorial-light.png" width="32%" alt="Jobs in the Editorial style">
+  <img src="../screenshots/styles-classic-light.png" width="32%" alt="Jobs in the Classic style">
+  <img src="../screenshots/styles-spark-light.png" width="32%" alt="Jobs in the Spark style">
+</p>
+
+More Classic captures: [Jobs (dark)](../screenshots/classic-jobs-dark.png) ·
+[Job page](../screenshots/classic-job-light.png) · [Search](../screenshots/classic-search-light.png) ·
+[Sources](../screenshots/classic-sources-dark.png).
+
 ## Light and dark themes
 
 The theme follows your system. The button at the right of the header cycles **system → light →
