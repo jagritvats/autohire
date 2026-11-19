@@ -76,6 +76,11 @@ All notable changes to JobFlow are documented here. The format follows
 - **Liveness checks** for Ashby and Himalayas postings (a definitive 404/410 retires a role).
 
 ### Changed
+- **Fonts are bundled**: the web app's five typefaces (OFL) ship in `apps/web/app/fonts/`
+  instead of being fetched from Google at build time, so the web app builds offline.
+- **CI runs the real-browser never-submits test**: Chromium is installed in CI, and the test
+  fails rather than skips there when no browser can launch. CI also runs the video tests and
+  a Node 20 leg; the minimum Node version is now 20.11.
 - **Company level ladders** read conservatively: "Engineer 5", "Data Scientist II", L8+,
   "E5" / "IC4" beside a role noun, SMTS / LMTS / PMTS. A bare "Member of Technical Staff" no
   longer reads as a staff-level role. A level the source states wins over a code the title
@@ -215,6 +220,16 @@ All notable changes to JobFlow are documented here. The format follows
   hanging.
 - Finishing onboarding during the first background sync no longer leaves the feed unranked.
 - Search before onboarding no longer makes fit claims about an empty profile.
+- `jobflow doctor` reports a reachable job board as "reachable" instead of the bare API
+  root's 404; only a connection error fails the network check.
+- `.env.example` no longer claims `JOBFLOW_PUBLIC_URL` sets links or the cookie scope: it is
+  the share-image base URL, and an `https://` value marks the session cookie Secure.
+
+### Security
+- **Next.js 14.2.21 → 15.5.29** (and React 18 → 19), fixing every critical and high Next.js
+  advisory, including the middleware authorization bypass and the image-optimizer remote code
+  execution. The image optimizer is also switched off (the app never used `next/image`), and
+  Next's bundled PostCSS is overridden to a patched 8.5.x.
 
 ### Docs
 - Rewritten CONTRIBUTING.md and new contributor guides in `docs/contributing/`.
