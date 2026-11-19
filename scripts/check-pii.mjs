@@ -3,17 +3,27 @@
 // author's identity, personal projects) — the regression guard for the open-source scrub.
 // Fixtures must use fictional people at example.com.
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-const DENY = [
-  /jagrit/i,
-  /\bvats\d*@/i,
-  /NexusAlgo/,
-  /ZFH ledger/i,
-  /Resume_\d+_/i,
-  /@gmail\.com/i,
-];
-// files allowed to mention the denylist (this script and the publishing guide)
+// Generic markers of a real person's files.
+const DENY = [/Resume_\d+_/i, /@gmail\.com/i];
+// Identifiers of the original author (name, email user, personal projects) are kept only as
+// salted SHA-256 prefixes, so this guard blocks them without publishing them. A line is
+// flagged when any word, any word's first six letters, or any two-word phrase matches.
+// To add one: node -e 'console.log(require("crypto").createHash("sha256").update("jobflow-pii:"+process.argv[1].toLowerCase()).digest("hex").slice(0,16))' "<word or two words>"
+const DENY_HASHES = new Set(["1f24b2c2670fc0d0", "c3c30eeaa292d881", "0aab608df7acbdc8", "97ddd95e20e5ccdc"]);
+const hash = (s) => createHash("sha256").update("jobflow-pii:" + s.toLowerCase()).digest("hex").slice(0, 16);
+function hashedHit(line) {
+  const words = line.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    if (DENY_HASHES.has(hash(w)) || (w.length > 6 && DENY_HASHES.has(hash(w.slice(0, 6))))) return true;
+    if (i > 0 && DENY_HASHES.has(hash(`${words[i - 1]} ${w}`))) return true;
+  }
+  return false;
+}
+// files allowed to mention the generic patterns (this script and the publishing guide)
 const ALLOW = new Set(["scripts/check-pii.mjs", "docs/internal/PUBLISHING.md"]);
 // the canonical repo URL (incl. raw/CDN forms) is not personal data
 const REPO_URL = /(?:raw\.githubusercontent\.com|github\.com)\/jagritvats\/(?:jobflow|autohire)/g;
@@ -34,7 +44,7 @@ for (const f of files) {
     continue;
   }
   text.split("\n").forEach((line, i) => {
-    for (const re of DENY) if (re.test(line)) hits.push(`${f}:${i + 1}: ${line.trim().slice(0, 120)}`);
+    if (DENY.some((re) => re.test(line)) || hashedHit(line)) hits.push(`${f}:${i + 1}: ${line.trim().slice(0, 120)}`);
   });
 }
 if (hits.length) {
