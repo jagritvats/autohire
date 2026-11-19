@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, Inter, JetBrains_Mono, Plus_Jakarta_Sans, Schibsted_Grotesk } from "next/font/google";
+import localFont from "next/font/local";
 import { AppShell } from "@/components/ui/AppShell";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import { DEFAULT_STYLE, STYLE_INIT_SCRIPT } from "@/lib/style";
@@ -9,25 +9,31 @@ import "./styles/classic.css";
 import "./styles/spark.css";
 
 // Three styles, one tree (lib/style.ts, docs/internal/DESIGN.md "Styles"). Each style picks
-// its faces from these variables; all are self-hosted at build by next/font — no font CDN at
-// runtime — and only the default style's faces are preloaded (a browser fetches the others
-// only once a style uses them).
-// Editorial: Fraunces — a soft, optical-size display serif — for titles and the score
-// numerals; Schibsted Grotesk, a grotesk drawn for a newsroom's screens, for everything else.
-const display = Fraunces({
-  subsets: ["latin"],
-  axes: ["opsz", "SOFT"],
-  style: ["normal", "italic"],
+// its faces from these variables. The faces are committed in ./fonts — variable woff2, latin
+// subset, from @fontsource-variable/* 5.3.0 (the versions brand/scripts/fetch-fonts.sh pins),
+// each family's SIL OFL 1.1 beside it — so a build needs no network and no font CDN is hit at
+// runtime. Only the default style's faces are preloaded (a browser fetches the others only
+// once a style uses them). Each file declares its whole weight range, so bold is the real
+// wght axis, never synthesized.
+// Editorial: Fraunces — a soft, optical-size display serif (opsz, wght, SOFT; WONK left at
+// its default, as Google served it) — for titles, the score numerals and the italic "Flow";
+// Schibsted Grotesk, a grotesk drawn for a newsroom's screens, for everything else.
+const display = localFont({
+  src: [
+    { path: "./fonts/Fraunces-VF.woff2", weight: "100 900", style: "normal" },
+    { path: "./fonts/Fraunces-Italic-VF.woff2", weight: "100 900", style: "italic" },
+  ],
   variable: "--font-fraunces",
   display: "swap",
+  adjustFontFallback: "Times New Roman",
 });
-const grotesk = Schibsted_Grotesk({ subsets: ["latin"], variable: "--font-schibsted", display: "swap" });
+const grotesk = localFont({ src: "./fonts/SchibstedGrotesk-VF.woff2", weight: "400 900", variable: "--font-schibsted", display: "swap" });
 // Classic: Inter (tabular figures for scores and counts).
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap", preload: false });
+const inter = localFont({ src: "./fonts/Inter-VF.woff2", weight: "100 900", variable: "--font-inter", display: "swap", preload: false });
 // Spark: Plus Jakarta Sans, a rounded geometric sans.
-const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700", "800"], variable: "--font-jakarta", display: "swap", preload: false });
+const jakarta = localFont({ src: "./fonts/PlusJakartaSans-VF.woff2", weight: "200 800", variable: "--font-jakarta", display: "swap", preload: false });
 // All: JetBrains Mono, only for code-ish bits (the search DSL, résumé/LaTeX sources).
-const mono = JetBrains_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-jbmono", display: "swap" });
+const mono = localFont({ src: "./fonts/JetBrainsMono-VF.woff2", weight: "100 800", variable: "--font-jbmono", display: "swap" });
 
 const DESCRIPTION =
   "A local-first job search engine: jobs from company boards, ranked against your résumé with honest match cards. It pre-fills applications and stops for you to review and submit.";
