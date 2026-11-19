@@ -21,8 +21,11 @@ not keep in a file (your LLM key, preferences, sources) are set with `jobflow co
 | `JOBFLOW_SIGNUP` | `closed` | Hosted mode: `open` lets anyone create an account (the first account is always allowed and becomes admin). |
 | `JOBFLOW_OPERATOR_LLM` | `shared` single-user / `off` hosted | Whether users without their own key may use the operator's `LLM_PROVIDER` key. |
 | `JOBFLOW_TRUST_NETWORK` | _(off)_ | `1` lets single-user mode answer on non-localhost hosts (only behind your own authenticating proxy). |
+| `JOBFLOW_TRUST_PROXY` | _(off)_ | `1` reads the client address and host from `X-Forwarded-For` / `X-Forwarded-Host` (rate limits, same-origin checks). Set it only behind a reverse proxy that sets those headers. |
+| `JOBFLOW_PUBLIC_URL` | `http://localhost:3000` | The public base URL a hosted instance is served at; the share (Open Graph) image links are built from it. |
 | `JOBFLOW_SOURCE_URL` | the upstream repo | The "source" link in the web app's footer (AGPL-3.0 §13). Set it to your fork if you serve a modified version to others. |
 | `JOBFLOW_AGENT_TOKEN` | _(blank)_ | Hosted mode: the local agent's API token (scope `agent`). |
+| `JOBFLOW_WEB_BIND` | `127.0.0.1` | Docker Compose only: the host address the web container is published on. `0.0.0.0` exposes it on your network; use it only with `JOBFLOW_AUTH=password` behind TLS. |
 
 ## Environment variables (full reference)
 
@@ -37,6 +40,7 @@ Grouped by what they unlock. Storage and accounts are covered above.
 | `ANTHROPIC_API_KEY` | if provider=anthropic | console.anthropic.com. |
 | `XAI_API_KEY` | if provider=grok | console.x.ai. |
 | `OPENAI_API_KEY` | if provider=openai | platform.openai.com (also enables real embeddings). |
+| `JOBFLOW_RERANK_TOP` | optional | How many top matches get an LLM re-rank write-up per rank run (default `15`, cached per posting, never with `echo`). `0` = off. |
 
 ### Enrichment (Tier 1, free)
 | Var | Required? | What it does |
@@ -86,6 +90,7 @@ Some sources sit behind Cloudflare, which turns away anything but a real browser
 | Var | Default | What it does |
 |---|---|---|
 | `JOBFLOW_POLL_EVERY_HOURS` | `6` | The worker `runner` self-enqueues discover → poll → rank when the last full poll is older than this. `0` disables (use an external cron instead). A local/Docker DB has no other scheduler — the GitHub cron can't reach it. On the default local store, `jobflow serve` runs the same schedule itself. |
+| `JOBFLOW_LIVENESS_EVERY_HOURS` | `2` | The worker `runner`, between polls: re-checks the top cards' own job pages and retires a posting only on a definitive "gone" (404/410 or the board's closed flag). `0` = off. |
 | `JOBFLOW_SYNC_MAX_BOARDS` | `auto` | Boards one sync (`jobflow sync`, the web app's background sync, the worker's poll) may poll. `auto` = every board that is due (daily-cadence boards about once a day, weekly ones once a week, new ones right away), most overdue first, so the budget grows with your registry. A fixed number caps each run instead; a registry's very first sync is capped at 25 boards either way so the first jobs come fast. `jobflow sync --max-boards N` sets it for one run; `--full` ignores it. |
 | `JOBFLOW_SYNC_MINUTES` | `5` (`10` in the worker) | Time budget for a sync's board fetches: after it, no new board is started (the ones in flight finish) and the boards it didn't reach lead the next sync. Keeps a big backlog (a fresh 240-board registry, a weekly cohort coming due together) from turning into one long sync. The very first sync uses at most 90 s; `--full` has no limit. |
 | `JOBFLOW_POLL_COUNTRY` | `IN` | ISO country the big-employer boards (Workday, Eightfold, SmartRecruiters, Amazon) are polled for — they filter server-side and otherwise return thousands of global roles. Shapes what is polled; ranking still scores location. |
@@ -95,6 +100,8 @@ Some sources sit behind Cloudflare, which turns away anything but a real browser
 | Var | Default | What it does |
 |---|---|---|
 | `NODE_ENV` | `development` | standard. |
+| `JOBFLOW_DEBUG` | _(off)_ | `1` adds the stack trace to a CLI error. |
+| `JOBFLOW_ALLOW_HTTP_FEEDS` | _(off)_ | `1` lets user-supplied URLs (custom feeds, careers URLs) use plain `http://`. The SSRF guard still blocks private and loopback hosts. |
 
 ---
 
