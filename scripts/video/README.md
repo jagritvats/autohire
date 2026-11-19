@@ -27,7 +27,8 @@ Every video also gets an `.srt` caption file and a `.poster.png`.
 - `ELEVENLABS_API_KEY` in the environment, only for narration or music that isn't cached
   yet. **Never** put the key in a file in this repo, in a script, or on the command line where
   it is logged; the scripts read it from the environment only. Narration is cached per line
-  (by voice + text), so changing one line costs one call.
+  (by model + voice + settings + text), so changing one line costs one call, and changing the
+  model or a voice setting regenerates every line it touches.
 - Network for Google Fonts (title cards and captions) and the xterm.js CDN (terminal scenes).
 
 ## Regenerate
@@ -65,10 +66,21 @@ the run ends. `--draft` suffixes the outputs with `.draft`.
 
 ## How it works
 
-- **Narration first.** `lib/timeline.mjs` turns each scene's lines into TTS clips (ElevenLabs,
-  `eleven_multilingual_v2`, with character timestamps) and lays them out: a lead-in, the lines
+- **Narration first.** `lib/timeline.mjs` turns each scene's lines into TTS clips (ElevenLabs
+  **Eleven v4**, `eleven_v4`, with character timestamps) and lays them out: a lead-in, the lines
   with gaps, a tail. Scene lengths come from the voice, so picture and sound stay in sync.
   A line can have `say` (what the voice reads, e.g. "p-n-p-m") apart from `text` (the caption).
+  The model is set per narration file (`"model"`) or per spec (`model`); the default is
+  `eleven_v4`. Voices: George (`JBFqnCBsd6RMkjVDRZzb`) for the walkthrough, trailer and guides,
+  Jessica (`cgSgspJ2msm6clMCkdW9`) for the reels.
+- **Audio tags.** v4 follows inline tags such as `[warm]`, `[calm]`, `[confident]`,
+  `[excited]` and `[short pause]`; they steer delivery and are not spoken. Use them lightly (at
+  most one or two per line). The timestamp alignment still lists a tag's characters, so
+  `lib/tts.mjs` drops them: captions, the `.srt`, the reels' word-by-word captions and the
+  transcripts never show tag text, and each word keeps its own spoken times
+  (`node --test scripts/video/test/*.test.mjs`). `qa-tts.mjs` checks the cached narration
+  without calling the API: speaking rate per line, and that each tag's span in the alignment
+  is short or silent (a long `[short pause]` span should be a real, quiet pause).
 - **Live scenes** (`lib/live.mjs`, `lib/record.mjs`): the built web app in demo mode, driven
   by Playwright at 1536×864 CSS px × 1.25 (1920×1080 output; reels: 360×640 × 3 = 1080×1920),
   captured with a CDP screencast, with a visible cursor, click ripples, eased pointer moves
@@ -104,4 +116,5 @@ the run ends. `--draft` suffixes the outputs with `.draft`.
 
 Change words in `narration/*.json` (keep them plain and honest: JobFlow never submits, never
 auto-applies, and only the optional local agent reads logged-in sites). Change what's on
-screen in `specs/*.mjs`. Re-run `make.mjs` for the videos you touched, then `transcript.mjs`.
+screen in `specs/*.mjs`. Re-run `make.mjs` for the videos you touched, then `qa-tts.mjs` and
+`transcript.mjs`.

@@ -3,7 +3,7 @@
 // recorders key their actions to these line start times, so picture and voice stay in sync.
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { lineSay, lineText, speak } from "./tts.mjs";
+import { DEFAULT_MODEL, lineSay, lineText, speak } from "./tts.mjs";
 import { VIDEO_DIR } from "./util.mjs";
 
 export function loadNarration(id) {
@@ -12,7 +12,7 @@ export function loadNarration(id) {
     const doc = JSON.parse(readFileSync(join(dir, f), "utf8"));
     if (doc.id === id) return doc;
     for (const r of doc.reels ?? []) {
-      if (r.id === id) return { ...r, voice: r.voice ?? doc.voice, voiceSettings: r.voiceSettings ?? doc.voiceSettings, music: r.music ?? doc.music };
+      if (r.id === id) return { ...r, voice: r.voice ?? doc.voice, model: r.model ?? doc.model, voiceSettings: r.voiceSettings ?? doc.voiceSettings, music: r.music ?? doc.music };
     }
   }
   throw new Error(`no narration "${id}"`);
@@ -34,14 +34,15 @@ export async function buildTimeline(narr, spec, { dryRun = false } = {}) {
     let local = pre;
     const lines = [];
     for (const [i, l] of sc.lines.entries()) {
-      const a = await speak(l, { voice: narr.voice, settings: narr.voiceSettings, dryRun });
+      // the model: the spec's, else the narration file's, else Eleven v4
+      const a = await speak(l, { voice: narr.voice, settings: narr.voiceSettings, model: spec.model ?? narr.model ?? DEFAULT_MODEL, dryRun });
       chars += a.chars;
-      lines.push({ text: lineText(l), say: lineSay(l), start: local, dur: a.duration, mp3: a.mp3, words: a.words });
+      lines.push({ text: lineText(l), say: lineSay(l), start: local, dur: a.duration, mp3: a.mp3, words: a.words, tags: a.tags });
       local += a.duration + (i < sc.lines.length - 1 ? opt.gaps?.[i] ?? gap : 0);
     }
     const dur = Math.max(local + post, opt.min ?? 0);
     scenes.push({ id: sc.id, chapter: sc.chapter ?? null, start: t, dur, lines });
     t += dur;
   }
-  return { id: narr.id, title: narr.title, voice: narr.voice, total: t, scenes, ttsChars: chars };
+  return { id: narr.id, title: narr.title, voice: narr.voice, model: spec.model ?? narr.model ?? DEFAULT_MODEL, total: t, scenes, ttsChars: chars };
 }
