@@ -4,6 +4,12 @@
   "private": true,
   "description": "JobFlow — all-in-one job discovery, prep, and assisted-application platform (full TypeScript).",
   "type": "module",
+  "homepage": "https://github.com/jagritvats/jobflow#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jagritvats/jobflow.git"
+  },
+  "bugs": "https://github.com/jagritvats/jobflow/issues",
   "engines": {
     "node": ">=20"
   },
