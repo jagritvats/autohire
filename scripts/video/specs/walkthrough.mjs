@@ -12,7 +12,7 @@ export default {
   output: "jobflow-walkthrough",
   chapters: true,
   posterAt: 2.6,
-  defaults: { pre: 0.5, gap: 0.45, post: 0.7 },
+  defaults: { pre: 0.45, gap: 0.38, post: 0.6 },
   scenes: {
     intro: { pre: 0.9 },
     sync: { post: 1.2 },

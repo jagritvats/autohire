@@ -7,13 +7,18 @@
     {
       "id": "title",
       "chapter": "Get started in 5 minutes",
-      "lines": ["Here's how to get JobFlow running in about five minutes, from the terminal."]
+      "lines": [
+        "[warm] Here's how to get JobFlow running in about five minutes, from the terminal."
+      ]
     },
     {
       "id": "install",
       "chapter": "Clone, install, build",
       "lines": [
-        { "text": "You need Node 20 or newer, and pnpm.", "say": "You need Node twenty or newer, and p-n-p-m." },
+        {
+          "text": "You need Node 20 or newer, and pnpm.",
+          "say": "You need Node twenty or newer, and p-n-p-m."
+        },
         "Clone the repository, install the dependencies, and build. No account, no server, and no API key."
       ]
     },
@@ -21,8 +26,14 @@
       "id": "init",
       "chapter": "jobflow init",
       "lines": [
-        { "text": "Next, your profile. jobflow init reads your résumé and asks you to confirm what it found.", "say": "Next, your profile. jobflow in-it reads your résumé, and asks you to confirm what it found." },
-        { "text": "To look around first, init --sample loads a fictional candidate. That's what we'll use here.", "say": "To look around first, in-it, dash dash sample, loads a fictional candidate. That's what we'll use here." }
+        {
+          "text": "Next, your profile. jobflow init reads your résumé and asks you to confirm what it found.",
+          "say": "Next, your profile. jobflow in-it reads your résumé, and asks you to confirm what it found."
+        },
+        {
+          "text": "To look around first, init --sample loads a fictional candidate. That's what we'll use here.",
+          "say": "To look around first, in-it, dash dash sample, loads a fictional candidate. That's what we'll use here."
+        }
       ]
     },
     {
@@ -30,7 +41,7 @@
       "chapter": "jobflow sync",
       "lines": [
         "jobflow sync checks the job boards in your discovery preset, with live progress: the step it's on, boards checked, jobs fetched, and time left.",
-        "This is demo mode, so the boards are fictional. When one doesn't answer, the summary says so, and it's tried again next sync."
+        "[calm] This is demo mode, so the boards are fictional. When one doesn't answer, the summary says so, and it's tried again next sync."
       ]
     },
     {
@@ -59,8 +70,9 @@
       "id": "next",
       "chapter": "Next steps",
       "lines": [
-        "From here, try jobflow search, tailor a résumé, and read the applying guide. Everything is in the docs folder."
+        "[warm] From here, try jobflow search, tailor a résumé, and read the applying guide. Everything is in the docs folder."
       ]
     }
-  ]
+  ],
+  "model": "eleven_v4"
 }

@@ -3,21 +3,27 @@
 // trailer, word-by-word highlight for the vertical reels.
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { stripTags } from "./tts.mjs";
 import { CACHE, ensureDir } from "./util.mjs";
 
-/** words of a line with absolute times; when the spoken text differs from the caption text,
- *  caption words are spread over the line by character position */
+/**
+ * Words of a line with absolute times. `line.words` are the spoken words (audio tags already
+ * dropped by `wordsFromAlignment`); when the spoken text matches the caption text they map one
+ * to one, else (a `say` respelling, "p-n-p-m") caption words are spread over the spoken span
+ * by character position.
+ */
 export function captionWords(line, offset) {
-  const textWords = line.text.split(/\s+/).filter(Boolean);
-  if (line.say === line.text && line.words.length === textWords.length) {
+  const text = stripTags(line.text);
+  const textWords = text.split(/\s+/).filter(Boolean);
+  if (stripTags(line.say) === text && line.words.length === textWords.length) {
     return line.words.map((w, i) => ({ w: textWords[i], start: offset + w.start, end: offset + w.end }));
   }
-  const total = line.text.length;
+  const total = text.length;
   const span = Math.max(0.2, (line.words.at(-1)?.end ?? line.dur) - (line.words[0]?.start ?? 0));
   const t0 = offset + (line.words[0]?.start ?? 0);
   let pos = 0;
   return textWords.map((w) => {
-    const i = line.text.indexOf(w, pos);
+    const i = text.indexOf(w, pos);
     pos = i + w.length;
     return { w, start: t0 + (i / total) * span, end: t0 + (pos / total) * span };
   });
