@@ -22,7 +22,7 @@ not keep in a file (your LLM key, preferences, sources) are set with `jobflow co
 | `JOBFLOW_OPERATOR_LLM` | `shared` single-user / `off` hosted | Whether users without their own key may use the operator's `LLM_PROVIDER` key. |
 | `JOBFLOW_TRUST_NETWORK` | _(off)_ | `1` lets single-user mode answer on non-localhost hosts (only behind your own authenticating proxy). |
 | `JOBFLOW_TRUST_PROXY` | _(off)_ | `1` reads the client address and host from `X-Forwarded-For` / `X-Forwarded-Host` (rate limits, same-origin checks). Set it only behind a reverse proxy that sets those headers. |
-| `JOBFLOW_PUBLIC_URL` | `http://localhost:3000` | The public base URL a hosted instance is served at; the share (Open Graph) image links are built from it. |
+| `JOBFLOW_PUBLIC_URL` | `http://localhost:3000` | The public base URL a hosted instance is served at. The share (Open Graph) image URL is built from it, and an `https://` value marks the session cookie `Secure`. It does not rewrite links or set the cookie domain. |
 | `JOBFLOW_SOURCE_URL` | the upstream repo | The "source" link in the web app's footer (AGPL-3.0 §13). Set it to your fork if you serve a modified version to others. |
 | `JOBFLOW_AGENT_TOKEN` | _(blank)_ | Hosted mode: the local agent's API token (scope `agent`). |
 | `JOBFLOW_WEB_BIND` | `127.0.0.1` | Docker Compose only: the host address the web container is published on. `0.0.0.0` exposes it on your network; use it only with `JOBFLOW_AUTH=password` behind TLS. |

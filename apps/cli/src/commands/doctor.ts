@@ -9,8 +9,8 @@ import type { Ctx } from "../context.js";
 import { CliError, SET_MODEL_HINT } from "../errors.js";
 import { browserCheck, playwrightStatus } from "../browser.js";
 
-type Status = "ok" | "warn" | "fail" | "skip";
-interface Check {
+export type Status = "ok" | "warn" | "fail" | "skip";
+export interface Check {
   name: string;
   status: Status;
   detail: string;
@@ -29,8 +29,10 @@ export function register(program: Command, ctx: Ctx): void {
       const checks: Check[] = [];
       const add = (c: Check) => checks.push(c);
 
-      const major = Number(process.versions.node.split(".")[0]);
-      add({ name: "node", status: major >= 20 ? "ok" : "fail", detail: `v${process.versions.node}`, fix: major >= 20 ? undefined : "Install Node 20 or newer." });
+      // the engines floor in package.json (>=20.11)
+      const [major = 0, minor = 0] = process.versions.node.split(".").map(Number);
+      const nodeOk = major > 20 || (major === 20 && minor >= 11);
+      add({ name: "node", status: nodeOk ? "ok" : "fail", detail: `v${process.versions.node}`, fix: nodeOk ? undefined : "Install Node 20.11 or newer (22 recommended)." });
 
       // ── storage ──
       ctx.loadEnv();
@@ -110,14 +112,7 @@ export function register(program: Command, ctx: Ctx): void {
       // ── network ──
       if (o.offline) add({ name: "network", status: "skip", detail: "--offline" });
       else {
-        const results = await Promise.all(PROBES.map(probe));
-        const okN = results.filter((x) => x.ok).length;
-        add({
-          name: "network",
-          status: okN === PROBES.length ? "ok" : okN ? "warn" : "fail",
-          detail: results.map((x) => `${new URL(x.url).host} ${x.ok ? `${x.status}` : `✗ ${x.error}`}`).join(" · "),
-          fix: okN === PROBES.length ? undefined : "job sources are fetched live — check your connection / proxy",
-        });
+        add(networkCheck(await Promise.all(PROBES.map(probe))));
       }
 
       // ── the never-submit lock (invariant #2) ──
@@ -143,7 +138,31 @@ export function register(program: Command, ctx: Ctx): void {
     });
 }
 
-async function probe(url: string): Promise<{ url: string; ok: boolean; status?: number; error?: string }> {
+export interface ProbeResult {
+  url: string;
+  /** an HTTP response came back (ANY status): the host is reachable */
+  ok: boolean;
+  status?: number;
+  error?: string;
+}
+
+/**
+ * The network row. The probes hit bare API roots, which answer 404 — any HTTP response at
+ * all means the board is reachable, so it reads "reachable", never a raw status that looks
+ * like a failure. Only a connection error (DNS, refused, TLS, timeout) fails a host.
+ */
+export function networkCheck(results: ProbeResult[]): Check {
+  const okN = results.filter((x) => x.ok).length;
+  const all = okN === results.length;
+  return {
+    name: "network",
+    status: all ? "ok" : okN ? "warn" : "fail",
+    detail: results.map((x) => `${new URL(x.url).host} ${x.ok ? "reachable" : `✗ ${x.error ?? "unreachable"}`}`).join(" · "),
+    fix: all ? undefined : "job sources are fetched live — check your connection / proxy",
+  };
+}
+
+async function probe(url: string): Promise<ProbeResult> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 6000);
   try {
