@@ -19,7 +19,7 @@ loadRootEnv();
  *   pnpm --filter @jobflow/agent start
  */
 
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), "[agent]", ...a);
 
 /** a job left `running` this long was claimed by an agent that died mid-job */

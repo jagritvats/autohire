@@ -6,6 +6,8 @@ All notable changes to JobFlow are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-11-19
+
 ### Added
 - **Three appearance styles**: Settings → Appearance switches the whole web app between
   **Editorial** (the new default: warm paper, serif headings, big score numerals), **Classic**
@@ -310,5 +312,6 @@ tailoring and an autofill that always stops at a human review gate.
 - Docs: getting started, CLI reference, guides, configuration, architecture, legal & ethics.
 - CI: build, typecheck, ~650 offline tests, plus personal-data and tenant-isolation guards.
 
-[Unreleased]: https://github.com/jagritvats/jobflow/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/jagritvats/jobflow/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/jagritvats/jobflow/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/jagritvats/jobflow/releases/tag/v0.1.0

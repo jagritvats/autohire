@@ -1,6 +1,6 @@
 {
   "name": "jobflow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "JobFlow — all-in-one job discovery, prep, and assisted-application platform (full TypeScript).",
   "type": "module",

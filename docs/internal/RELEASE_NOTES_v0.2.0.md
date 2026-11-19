@@ -1,14 +1,3 @@
-<!--
-DRAFT, not yet released. Before publishing:
-- Decide on v0.1.0 first: no v0.1.0 tag exists yet, so the CHANGELOG's compare links and
-  RELEASE_NOTES_v0.1.0.md's image (feed.png at the v0.1.0 tag) don't resolve. Either tag
-  7f550ff ("Prepare v0.1.0") as v0.1.0, or make this the first public release and drop the
-  "Upgrading from 0.1" section.
-- Bump the version everywhere listed in docs/contributing/releasing.md, rename
-  "## [Unreleased]" in CHANGELOG.md to "## [0.2.0] — <date>", and add the [0.2.0] link.
-- Attach the assets listed at the end of this file to the GitHub release.
-- Delete this comment.
--->
 # JobFlow v0.2.0
 
 **A local-first job search engine.** JobFlow finds roles across hundreds of company boards,
