@@ -7,6 +7,22 @@ All notable changes to JobFlow are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Three appearance styles**: Settings → Appearance switches the whole web app between
+  **Editorial** (the new default: warm paper, serif headings, big score numerals), **Classic**
+  (the earlier neutral design: Inter type, an indigo accent) and **Spark** (bold and
+  colourful, score rings, a "today" summary). Each comes in light and dark, is remembered per
+  browser and applies before the page draws.
+- **Sync progress you can see**: the web header shows when the last sync ran and the next one
+  is due; while a sync runs it opens a panel with the phase, boards done of total, boards in
+  flight, new / updated / gone postings, plain-language errors, time left and a cancel button.
+  Sources shows how each source did on the last run and the recent runs. When a run ends,
+  Jobs offers "N new matches" instead of reshuffling the list. `jobflow sync` draws the same
+  progress in the terminal (Ctrl-C cancels cleanly; `--json` streams progress lines on
+  stderr), the MCP `sync_sources` tool sends progress notifications, and runs are kept in a
+  run history (worker and cron runs included).
+- **Demo mode covers sync and search**: with `JOBFLOW_DEMO_DATA=1` a sync "fetches" the
+  fictional demo boards with real progress, and a search asks them, so the whole app can be
+  shown without touching the network (`JOBFLOW_DEMO_SYNC_PACE` sets the pace).
 - **A logo and app icons**: the mark (a J and a full stop on a tile: JobFlow stops, you act)
   in the header of every style, a favicon (`/favicon.ico` no longer 404s), an SVG icon that
   follows light/dark, an Apple touch icon, a web manifest with PWA icons, extension icons, and
@@ -124,10 +140,11 @@ All notable changes to JobFlow are documented here. The format follows
 - **Stored postings re-parse automatically** once after an upgrade (on the next sync), and
   `jobflow renormalize` runs it by hand.
 - Cutshort's "hiring for a client" marks a posting as from a recruiter.
-- **New design system** ("calm ledger"): neutral Radix-based palette with one action colour
-  and fixed semantic colours, Inter type, light/dark/system themes at WCAG AA, a shared
-  navigation shell, responsive down to 375px with a filter drawer, and accessibility passes
-  (skip link, focus rings, labels, live regions). See `docs/internal/DESIGN.md`.
+- **New design system**: tokens with one action colour and fixed semantic colours,
+  light/dark/system themes at WCAG AA in every style, a shared navigation shell, responsive
+  down to 375px with a filter drawer, and accessibility passes (skip link, focus rings,
+  labels, live regions). Its first look ("calm ledger") is now the Classic style. See
+  `docs/internal/DESIGN.md`.
 - **Journeys rebuilt**: navigation is Jobs · Search · Applications · Profile · Sources ·
   Settings; a new **Job page** per role (fit, description, drafts, an apply checklist with a
   fix for each gap, open / pre-fill / mark applied); a get-started checklist; saved-search
@@ -201,6 +218,12 @@ All notable changes to JobFlow are documented here. The format follows
 
 ### Docs
 - Rewritten CONTRIBUTING.md and new contributor guides in `docs/contributing/`.
+- Screenshots regenerated in the Editorial style (light is the main set, `*-dark.png` and
+  `styles-*` / `classic-*` the variants), with CLI screenshots from fictional data.
+- Launch videos (a narrated walkthrough, a trailer, two short guides and three vertical
+  reels), all on fictional demo data, built reproducibly by `pnpm video`
+  (`scripts/video/README.md`); transcripts with chapter times are in
+  `docs/guides/video-walkthrough.md`.
 
 ## [0.1.0] — 2026-11-18
 
